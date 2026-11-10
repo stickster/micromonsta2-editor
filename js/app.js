@@ -1490,7 +1490,7 @@ class App {
         modLeftCol.className = 'mod-left-column';
 
         // LFOs Group Card (with group-level Copy/Paste/Reset/Randomize in ⋯ menu)
-        const lfoGroupCard = createSectionCard('Low Frequency Oscillators (1–3)', 'lfo_group', 1, timbre, onChange);
+        const lfoGroupCard = createSectionCard('Low Frequency Oscillators', 'lfo_group', 1, timbre, onChange);
         const lfoGrid = document.createElement('div');
         lfoGrid.className = 'lfo-multi-grid';
 
@@ -1692,7 +1692,7 @@ class App {
         modRightCol.appendChild(knobsSec.card);
 
         // Right Column: Modulation Matrix (12 single-row slots)
-        const mtxSec = createSectionCard('Modulation Matrix (12 Slots)', 'mtx_group', 1, timbre, onChange);
+        const mtxSec = createSectionCard('Modulation Matrix', 'mtx_group', 1, timbre, onChange);
         const mtxList = document.createElement('div');
         mtxList.className = 'matrix-slots-list';
 
