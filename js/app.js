@@ -1841,13 +1841,9 @@ class App {
         vceKnobs1.appendChild(createKnob('VCE_DETUNE', timbre, onChange));
         vceKnobs1.appendChild(createKnob('VCE_DETUNE_OSC', timbre, onChange));
         vceKnobs1.appendChild(createKnob('VCE_GLIDE', timbre, onChange));
+        vceKnobs1.appendChild(createKnob('VCE_PBRANGE_DOWN', timbre, onChange));
+        vceKnobs1.appendChild(createKnob('VCE_PBRANGE_UP', timbre, onChange));
         vceCard.body.appendChild(vceKnobs1);
-
-        const vceKnobs2 = document.createElement('div');
-        vceKnobs2.className = 'knob-row';
-        vceKnobs2.appendChild(createKnob('VCE_PBRANGE_DOWN', timbre, onChange));
-        vceKnobs2.appendChild(createKnob('VCE_PBRANGE_UP', timbre, onChange));
-        vceCard.body.appendChild(vceKnobs2);
         row3.appendChild(vceCard.card);
 
         // EFFECTS (Horizontal 2-row layout: Top = Delay & Reverb; Bottom = Chorus/EQ/Morph & Pan)
