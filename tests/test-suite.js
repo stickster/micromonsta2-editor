@@ -293,18 +293,20 @@ async function runAllTests(logger = console.log) {
         assertEqual(nrpn14[10], 38, 'NRPN14 Data LSB Controller is CC 38');
         assertEqual(nrpn14[11], 72, 'NRPN14 Data LSB is 72 (200 = 128 + 72)');
 
-        // Test Hardware Safe Mode Protection Gate
+        // Test Hardware SysEx Transmit
         const midi = new MidiManager();
-        midi.safeMode = true;
-
-        let safeModeBlocked = false;
+        let noPortThrown = false;
         try {
-            // Attempting to send program with safeMode active and forceConfirm=false MUST throw
-            midi.sendProgram(new MM2Program(), 0, false);
+            midi.sendProgram(new MM2Program(), 0);
         } catch (err) {
-            safeModeBlocked = true;
+            noPortThrown = true;
         }
-        assert(safeModeBlocked, 'Safe Mode strictly blocks unconfirmed hardware SysEx write');
+        assert(noPortThrown, 'sendProgram requires valid output port');
+
+        const testPackets = [];
+        midi.outPort = { send: (bytes) => testPackets.push(bytes) };
+        const sentOk = midi.sendProgram(new MM2Program(), 0);
+        assert(sentOk, 'sendProgram successfully transmits SysEx directly without safe mode gate');
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }
@@ -344,14 +346,12 @@ async function runAllTests(logger = console.log) {
     logger('\n--- [8] Timbral Mode Display-Only Indicator & Hardware State Tests ---');
     try {
         const app = new App();
-        app.midi.safeMode = true;
         app.synthTimbralMode = 'monotimbral';
 
         // 1. User selection attempts via onModeSelectChange are blocked (display-only)
         const changeResult = app.onModeSelectChange('bitimbral');
         assertEqual(changeResult, false, 'onModeSelectChange returns false because mode indicator is display-only');
         assertEqual(app.synthTimbralMode, 'monotimbral', 'Synth mode remains monotimbral when user attempts manual change');
-        assert(app.midi.safeMode === true, 'Safe Mode is unaffected by blocked mode change attempt');
 
         // 2. Programmatic hardware state updates via setTimbralMode work as expected
         app.setTimbralMode('bitimbral');
@@ -634,12 +634,11 @@ async function runAllTests(logger = console.log) {
         assertEqual(enc4Msg[5], 16, 'NRPN param number is 16 (LAY_ENC4_ASSIGN)');
         assertEqual(enc4Msg[8], 59, 'NRPN value is 59');
 
-        // 4b. Live Sync transmits NRPN directly even with Safe Mode active (non-destructive RAM tweak)
-        app.midi.safeMode = true;
+        // 4b. Live Sync transmits NRPN directly (non-destructive RAM tweak)
         app.midi.liveSync = true;
         const countBefore = sentMidiMessages.length;
         app.onParameterChanged('OSC1_SHAPE', 42);
-        assertEqual(sentMidiMessages.length, countBefore + 1, 'sendParameter sends NRPN even when safeMode is true');
+        assertEqual(sentMidiMessages.length, countBefore + 1, 'sendParameter sends NRPN when liveSync is true');
 
         // 4c. When Live Sync is disabled, parameter edits do not transmit NRPN
         app.midi.liveSync = false;

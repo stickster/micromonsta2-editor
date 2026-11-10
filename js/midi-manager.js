@@ -4,7 +4,6 @@
  * handles incoming program capture, and builds NRPN/SysEx messages.
  */
 
-
 const MIDI_STATUS_CC = 0xB0;
 const CC_NRPN_MSB = 99;     // 0x63
 const CC_NRPN_LSB = 98;     // 0x62
@@ -22,7 +21,6 @@ class MidiManager {
         this.savedBaseChannel = undefined;
         this.activeSlot = 0;  // 0 for Part A, 1 for Part B
         this.liveSync = false; // Configurable: Live Sync vs Staged Commit
-        this.safeMode = true;  // Hardware Protection: blocks outbound packets until confirmed
         this.autoCapture = true; // Automatically loads incoming SysEx dumps
         this.lastFetchedSlot = 0; // Tracks most recently requested slot (0=Part A, 1=Part B)
 
@@ -200,7 +198,32 @@ class MidiManager {
         const port = event.port;
         console.log(`[MIDI State Change] ${port.name} (${port.type}) -> ${port.state}`);
         this.emit('state-change', event);
-        this.autoSelectPorts();
+
+        if (port.state === 'disconnected') {
+            if (port.type === 'input' && this.inPort && (this.inPort.id === port.id || this.inPort === port)) {
+                try {
+                    this.inPort.removeEventListener('midimessage', this.onMidiMessage);
+                } catch (e) {}
+                this.inPort = null;
+                this.emit('connection-lost', { port, type: 'input' });
+                this.emit('port-change', { type: 'input', port: null });
+            }
+            if (port.type === 'output' && this.outPort && (this.outPort.id === port.id || this.outPort === port)) {
+                this.outPort = null;
+                this.emit('connection-lost', { port, type: 'output' });
+                this.emit('port-change', { type: 'output', port: null });
+            }
+        } else if (port.state === 'connected') {
+            const hadIn = !!this.inPort;
+            const hadOut = !!this.outPort;
+            this.autoSelectPorts();
+            if (!hadIn && this.inPort) {
+                this.emit('connection-restored', { port: this.inPort, type: 'input' });
+            }
+            if (!hadOut && this.outPort) {
+                this.emit('connection-restored', { port: this.outPort, type: 'output' });
+            }
+        }
     }
 
     onMidiMessage(event) {
@@ -397,15 +420,10 @@ class MidiManager {
      * Sends a complete program to the synth via SysEx
      * @param {MM2Program} program 
      * @param {number} targetSlot 0 for A, 1 for B, -1 for active
-     * @param {boolean} forceConfirm If true, bypasses safe mode check (after user prompt)
      */
-    sendProgram(program, targetSlot = -1, forceConfirm = false) {
+    sendProgram(program, targetSlot = -1) {
         if (!this.outPort) {
             throw new Error('No MIDI Output port selected');
-        }
-
-        if (this.safeMode && !forceConfirm) {
-            throw new Error('Safe Mode is active. Please confirm before modifying MM2 hardware memory.');
         }
 
         const sysex = program.toSysEx(targetSlot);
@@ -461,7 +479,6 @@ class MidiManager {
                 this.savedBaseChannel = s.baseChannel;
                 this.baseChannel = s.baseChannel !== undefined ? s.baseChannel : 14;
                 this.liveSync = s.liveSync ?? false;
-                this.safeMode = s.safeMode ?? true;
                 this.autoCapture = s.autoCapture ?? true;
             }
         } catch (e) {
@@ -480,7 +497,6 @@ class MidiManager {
                 savedOutPortName: this.savedOutPortName,
                 baseChannel: this.baseChannel,
                 liveSync: this.liveSync,
-                safeMode: this.safeMode,
                 autoCapture: this.autoCapture
             };
             window.localStorage.setItem(MidiManager.SETTINGS_KEY, JSON.stringify(s));

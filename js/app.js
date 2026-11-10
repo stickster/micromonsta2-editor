@@ -202,8 +202,18 @@ class App {
             }
         });
 
-        this.midi.on('safe-mode-block', ({ paramKey }) => {
-            this.showNotification(`Safe Mode blocked real-time send for ${paramKey}. Enable Live Sync in Settings to stream tweaks.`, 'info');
+        this.midi.on('connection-lost', ({ port, type }) => {
+            const name = (port && port.name) ? port.name : 'MicroMonsta 2';
+            this.showNotification(`⚠️ MIDI Connection Lost: ${name} (${type}) disconnected. Reconnecting automatically when plugged back in...`, 'warning');
+            this.updateConnectionStatus();
+            this.updateSettingsPortLists();
+        });
+
+        this.midi.on('connection-restored', ({ port, type }) => {
+            const name = (port && port.name) ? port.name : 'MicroMonsta 2';
+            this.showNotification(`✓ MIDI Connection Restored: ${name} (${type})`, 'success');
+            this.updateConnectionStatus();
+            this.updateSettingsPortLists();
         });
 
         this.midi.on('error', (err) => {
@@ -305,35 +315,6 @@ class App {
 
         if (viewName === 'librarian') {
             this.renderLibrarianBank();
-        }
-    }
-
-    setSafeMode(locked) {
-        this.midi.safeMode = locked;
-        this.midi.saveSettings();
-
-        if (typeof document !== 'undefined') {
-            const chkSafe = document.getElementById('settings-safe-mode');
-            if (chkSafe) chkSafe.checked = locked;
-            this.updateSafeModeBanner();
-            this.updateTimbralModeUI();
-        }
-        this.showNotification(
-            `Hardware Safe Mode: ${locked ? 'LOCKED (Write Protection Active)' : 'UNLOCKED (Hardware Transmit Allowed)'}`,
-            locked ? 'info' : 'warning'
-        );
-    }
-
-    toggleSafeMode() {
-        if (this.midi.safeMode) {
-            const confirmUnlock = typeof confirm !== 'undefined' ? confirm(
-                'Disable Hardware Safe Mode?\n\nWARNING: Disabling safe mode allows live parameter tweaks and unconfirmed SysEx messages to be transmitted directly to MM2 hardware memory.'
-            ) : true;
-            if (confirmUnlock) {
-                this.setSafeMode(false);
-            }
-        } else {
-            this.setSafeMode(true);
         }
     }
 
@@ -1394,10 +1375,45 @@ class App {
         if (chkLiveSync) {
             chkLiveSync.checked = this.midi.liveSync;
             chkLiveSync.onchange = () => {
-                this.midi.liveSync = chkLiveSync.checked;
-                this.midi.saveSettings();
-                this.updateSyncStatus(chkLiveSync.checked ? 'synced' : 'modified');
-                this.showNotification(`Live Parameter Sync ${chkLiveSync.checked ? 'ENABLED' : 'DISABLED (Staged Commit)'}`, 'info');
+                if (chkLiveSync.checked) {
+                    const dialog = document.getElementById('live-sync-dialog');
+                    if (dialog && typeof dialog.showModal === 'function') {
+                        chkLiveSync.checked = false; // Stay unchecked until choice confirmed
+                        const onClose = () => {
+                            dialog.removeEventListener('close', onClose);
+                            const choice = dialog.returnValue;
+                            if (choice === 'fetch') {
+                                this.midi.liveSync = true;
+                                chkLiveSync.checked = true;
+                                this.midi.saveSettings();
+                                this.fetchActiveProgram();
+                                this.showNotification('Live Sync ENABLED (Fetched MM2 hardware settings)', 'success');
+                            } else if (choice === 'push') {
+                                this.midi.liveSync = true;
+                                chkLiveSync.checked = true;
+                                this.midi.saveSettings();
+                                this.confirmAndSendProgram();
+                                this.showNotification('Live Sync ENABLED (Pushed patch to MM2)', 'success');
+                            } else {
+                                this.midi.liveSync = false;
+                                chkLiveSync.checked = false;
+                                this.midi.saveSettings();
+                            }
+                        };
+                        dialog.addEventListener('close', onClose);
+                        dialog.showModal();
+                    } else {
+                        // Fallback if dialog.showModal not supported
+                        this.midi.liveSync = true;
+                        this.midi.saveSettings();
+                        this.updateSyncStatus('synced');
+                    }
+                } else {
+                    this.midi.liveSync = false;
+                    this.midi.saveSettings();
+                    this.updateSyncStatus('modified');
+                    this.showNotification('Live Parameter Sync DISABLED (Staged Commit)', 'info');
+                }
             };
         }
 
@@ -1944,23 +1960,6 @@ class App {
                 this.midi.saveSettings();
             };
         }
-        if (chkSafe) {
-            chkSafe.checked = this.midi.safeMode;
-            chkSafe.onchange = () => {
-                if (!chkSafe.checked) {
-                    const confirmUnlock = confirm(
-                        'Disable Hardware Safe Mode?\n\nWARNING: Disabling safe mode allows live parameter tweaks and unconfirmed SysEx messages to be transmitted directly to MM2 hardware memory.'
-                    );
-                    if (!confirmUnlock) {
-                        chkSafe.checked = true;
-                        return;
-                    }
-                }
-                this.setSafeMode(chkSafe.checked);
-            };
-        }
-
-        this.updateSafeModeBanner();
     }
 
     updateSettingsPortLists() {
@@ -1986,18 +1985,6 @@ class App {
             if (this.midi.outPort && this.midi.outPort.id === port.id) opt.selected = true;
             selOut.appendChild(opt);
         });
-    }
-
-    updateSafeModeBanner() {
-        const banner = document.getElementById('safe-mode-indicator');
-        if (!banner) return;
-        if (this.midi.safeMode) {
-            banner.className = 'safe-mode-badge locked';
-            banner.innerHTML = '🛡️ Safe Mode: Locked (Read-Only MM2 Protection)';
-        } else {
-            banner.className = 'safe-mode-badge unlocked';
-            banner.innerHTML = '⚠️ Safe Mode: Unlocked (Live Hardware Transmit)';
-        }
     }
 
     buildAuditionUI() {
