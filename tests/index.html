@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MicroMonsta 2 Test Suite</title>
+    <style>
+        body {
+            background: #14161a;
+            color: #e6edf3;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, monospace;
+            padding: 24px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        h1 { color: #00d2ff; font-size: 18px; margin-bottom: 12px; }
+        #console-output {
+            background: #1a1c22;
+            border: 1px solid #2e333d;
+            border-radius: 6px;
+            padding: 16px;
+            white-space: pre-wrap;
+            min-height: 400px;
+        }
+        .pass { color: #2ecc71; }
+        .fail { color: #ee5253; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>MicroMonsta 2 Automated Test Runner</h1>
+    <div id="console-output">Running tests...</div>
+
+    <script type="module">
+        import { runAllTests } from './test-suite.js';
+
+        const out = document.getElementById('console-output');
+        out.textContent = '';
+
+        function log(msg) {
+            out.textContent += msg + '\n';
+        }
+
+        runAllTests(log).then(({ passed, failed }) => {
+            if (failed === 0) {
+                out.innerHTML += `<div class="pass" style="margin-top: 10px; font-size: 15px;">✓ ALL ${passed} TESTS PASSED!</div>`;
+            } else {
+                out.innerHTML += `<div class="fail" style="margin-top: 10px; font-size: 15px;">✗ ${failed} TESTS FAILED.</div>`;
+            }
+        });
+    </script>
+</body>
+</html>
