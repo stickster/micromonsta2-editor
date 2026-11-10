@@ -2505,6 +2505,11 @@ footer.audition-footer {
     box-shadow: 0 0 10px var(--accent-cyan-glow) !important;
 }
 
+.key.chord-note {
+    background: var(--accent-orange) !important;
+    color: #000 !important;
+    box-shadow: 0 0 10px rgba(255, 159, 67, 0.45) !important;
+}
 
 #kbd-latch.active {
     background: var(--accent-cyan);

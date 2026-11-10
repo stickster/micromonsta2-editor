@@ -2532,7 +2532,7 @@ class App {
         const container = document.getElementById('audition-toolbar-container');
         if (!container) return;
         container.innerHTML = '';
-        container.appendChild(createKeyboard(this.midi));
+        container.appendChild(createKeyboard(this.midi, () => this.activeTimbre));
     }
 
     showNotification(msg, type = 'info') {

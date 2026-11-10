@@ -64,10 +64,15 @@ if (typeof document === 'undefined') {
         }
         querySelector(sel) {
             for (const ch of this.children) {
+                if (sel.startsWith('#') && ch.attributes.get('id') === sel.slice(1)) return ch;
+                if (sel.startsWith('.') && ch.classList.contains(sel.slice(1))) return ch;
+                if (sel.startsWith('[data-offset="') && ch.attributes.get('data-offset') === sel.slice(14, -2)) return ch;
+                if (sel.startsWith('[data-param="') && ch.attributes.get('data-param') === sel.slice(13, -2)) return ch;
                 if (sel === 'button' && ch.tagName === 'BUTTON') return ch;
                 if (sel === 'input[type="range"]' && ch.tagName === 'INPUT' && ch.type === 'range') return ch;
                 if (sel === '.bipolar-val' && ch.classList.contains('bipolar-val')) return ch;
                 if (sel === 'button.btn-param-toggle' && ch.tagName === 'BUTTON' && ch.classList.contains('btn-param-toggle')) return ch;
+                if (ch.tagName && sel.toUpperCase() === ch.tagName) return ch;
                 if (ch.querySelector) {
                     const sub = ch.querySelector(sel);
                     if (sub) return sub;
@@ -78,6 +83,8 @@ if (typeof document === 'undefined') {
         querySelectorAll(sel) {
             const res = [];
             for (const ch of this.children) {
+                if (sel.startsWith('[data-offset="') && ch.attributes.get('data-offset') === sel.slice(14, -2)) res.push(ch);
+                if (sel === '.key' && ch.classList.contains('key')) res.push(ch);
                 if (sel === '[data-param]' && ch.hasAttribute('data-param')) res.push(ch);
                 if (ch.querySelectorAll) res.push(...ch.querySelectorAll(sel));
             }
@@ -967,6 +974,125 @@ async function runAllTests(logger = console.log) {
 
         assert(midi.inPort !== null, 'inPort automatically re-bound on reconnection');
         assert(reconnectEventFired, 'connection-restored event emitted on port reconnection');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+    }
+
+    logger('\n--- [19] Phase 2: Vector SVGs, Group Actions, Exact Key Offsets & Chorder Highlighting Tests ---');
+    try {
+        // 1. Vector line-drawing SVG constants
+        assert(typeof ICON_COPY_SVG === 'string' && ICON_COPY_SVG.includes('stroke="currentColor"'), 'ICON_COPY_SVG is vector line art');
+        assert(typeof ICON_PASTE_SVG === 'string' && ICON_PASTE_SVG.includes('stroke="currentColor"'), 'ICON_PASTE_SVG is vector line art');
+        assert(typeof ICON_RANDOM_SVG === 'string' && ICON_RANDOM_SVG.includes('stroke="currentColor"'), 'ICON_RANDOM_SVG is vector line art');
+        assert(typeof ICON_RESET_SVG === 'string' && ICON_RESET_SVG.includes('stroke="currentColor"'), 'ICON_RESET_SVG is vector line art');
+
+        // 2. lfo_group and mtx_group registered in SECTION_DEFINITIONS
+        assert(SECTION_DEFINITIONS.lfo_group !== undefined, 'lfo_group registered in SECTION_DEFINITIONS');
+        assertEqual(SECTION_DEFINITIONS.lfo_group.count, 1, 'lfo_group count is 1');
+        const lfoParams = SECTION_DEFINITIONS.lfo_group.getParams();
+        assertEqual(lfoParams.wave1, 'LFO1_WAVE', 'lfo_group includes LFO1_WAVE');
+        assertEqual(lfoParams.speed3, 'LFO3_SPEED', 'lfo_group includes LFO3_SPEED');
+
+        assert(SECTION_DEFINITIONS.mtx_group !== undefined, 'mtx_group registered in SECTION_DEFINITIONS');
+        assertEqual(SECTION_DEFINITIONS.mtx_group.count, 1, 'mtx_group count is 1');
+        const mtxParams = SECTION_DEFINITIONS.mtx_group.getParams();
+        assertEqual(mtxParams.src1, 'MTX1_SRC', 'mtx_group includes MTX1_SRC');
+        assertEqual(mtxParams.amt12, 'MTX12_AMT', 'mtx_group includes MTX12_AMT');
+
+        // 3. Group clipboard operations
+        const srcProg = new MM2Program();
+        const dstProg = new MM2Program();
+        srcProg.setValue('LFO1_SPEED', 88);
+        srcProg.setValue('LFO2_WAVE', 12);
+        srcProg.setValue('LFO3_MODE', 2);
+        copySectionToClipboard('lfo_group', 1, srcProg);
+        pasteSectionFromClipboard('lfo_group', 1, dstProg);
+        assertEqual(dstProg.getValue('LFO1_SPEED'), 88, 'dstProg received LFO1_SPEED from lfo_group');
+        assertEqual(dstProg.getValue('LFO2_WAVE'), 12, 'dstProg received LFO2_WAVE from lfo_group');
+        assertEqual(dstProg.getValue('LFO3_MODE'), 2, 'dstProg received LFO3_MODE from lfo_group');
+
+        // 4. computeChorderNotes verification
+        const chorderProg = new MM2Program();
+        chorderProg.setValue('KBD_KEY', 0); // Root: C
+        chorderProg.setValue('KBD_SCALE', 0); // Scale: Ionian (Major)
+
+        // With CHORD_TYPE1 = 0 ('Off')
+        chorderProg.setValue('CHORD_TYPE1', 0);
+        let chordRes = computeChorderNotes(60, chorderProg);
+        assertEqual(chordRes.pressed, 60, 'computeChorderNotes retains pressed note 60');
+        assertEqual(chordRes.chordNotes.length, 0, 'Off chord produces 0 additional chord notes');
+
+        // With CHORD_TYPE1 = 1 ('TRIAD 1 3 5')
+        chorderProg.setValue('CHORD_TYPE1', 1);
+        chordRes = computeChorderNotes(60, chorderProg); // C4 -> E4 (64), G4 (67)
+        assertEqual(chordRes.chordNotes.length, 2, 'Triad chord produces 2 additional chord notes');
+        assert(chordRes.chordNotes.includes(64), 'Triad on C4 includes E4 (64)');
+        assert(chordRes.chordNotes.includes(67), 'Triad on C4 includes G4 (67)');
+
+        // Diatonic test on D4 (62) -> Minor triad D, F (65), A (69)
+        chordRes = computeChorderNotes(62, chorderProg);
+        assert(chordRes.chordNotes.includes(65), 'Triad on D4 includes F4 (65)');
+        assert(chordRes.chordNotes.includes(69), 'Triad on D4 includes A4 (69)');
+
+        // Inversion test: TRI1I (3 5 1(+1))
+        chorderProg.setValue('CHORD_TYPE1', 2);
+        chordRes = computeChorderNotes(60, chorderProg);
+        assert(chordRes.chordNotes.includes(64), 'TRI1I includes E4 (64)');
+        assert(chordRes.chordNotes.includes(67), 'TRI1I includes G4 (67)');
+        assert(chordRes.chordNotes.includes(72), 'TRI1I includes C5 (72)');
+
+        // 5. createKeyboard exact offset and dual lighting verification
+        const mockMidi = {
+            sentNotes: [],
+            sendNote(note, vel, on) { this.sentNotes.push({ note, vel, on }); },
+            outPort: null,
+            targetChannel: 14
+        };
+
+        const kbd = createKeyboard(mockMidi, () => chorderProg);
+        kbd.setOctave(3); // Octave 3 base is (3+1)*12 = 48. Offsets 0..24 span notes 48..72
+
+        const key0 = kbd.querySelector('[data-offset="0"]');
+        const key12 = kbd.querySelector('[data-offset="12"]');
+        const key16 = kbd.querySelector('[data-offset="16"]');
+        const key19 = kbd.querySelector('[data-offset="19"]');
+        const key24 = kbd.querySelector('[data-offset="24"]');
+
+        // Test rightmost C key (note 72): offset = 72 - 48 = 24
+        chorderProg.setValue('CHORD_TYPE1', 0); // No chord for single key test
+        kbd.noteOn(72);
+        assert(key24.classList.contains('pressed'), 'Rightmost C key (offset 24) receives .pressed');
+        assert(!key0.classList.contains('pressed'), 'Leftmost C key (offset 0) is NOT pressed when note 72 played');
+        kbd.noteOff(72);
+        assert(!key24.classList.contains('pressed'), 'Key 24 unpressed on noteOff');
+
+        // Test even octave setting: Octave 4 base is 60. Note 60 is offset 0
+        kbd.setOctave(4);
+        kbd.noteOn(60);
+        assert(key0.classList.contains('pressed'), 'Even octave (Oct 4) maps note 60 cleanly to offset 0');
+        kbd.noteOff(60);
+        assert(!key0.classList.contains('pressed'), 'Key 0 unpressed on noteOff in Oct 4');
+
+        // Test Chorder blue (pressed) and orange (chord-note) dual highlighting
+        kbd.setOctave(3);
+        chorderProg.setValue('CHORD_TYPE1', 1); // Triad on C
+        mockMidi.sentNotes = [];
+        kbd.noteOn(60); // C4 (offset 12) + chord notes E4 (64, offset 16) & G4 (67, offset 19)
+
+        assertEqual(mockMidi.sentNotes.length, 3, 'Transmitted 3 MIDI noteOn events for triad chord');
+        assert(key12.classList.contains('pressed'), 'Physically pressed key 12 has .pressed');
+        assert(!key12.classList.contains('chord-note'), 'Pressed key 12 does not have .chord-note (pressed takes precedence)');
+        assert(key16.classList.contains('chord-note'), 'Sounding chord note E4 has .chord-note');
+        assert(!key16.classList.contains('pressed'), 'Chord note E4 is not marked .pressed');
+        assert(key19.classList.contains('chord-note'), 'Sounding chord note G4 has .chord-note');
+
+        // Release note 60
+        mockMidi.sentNotes = [];
+        kbd.noteOff(60);
+        assertEqual(mockMidi.sentNotes.length, 3, 'Transmitted 3 MIDI noteOff events for triad chord');
+        assert(!key12.classList.contains('pressed'), 'Key 12 cleared on noteOff');
+        assert(!key16.classList.contains('chord-note'), 'Key 16 cleared on noteOff');
+        assert(!key19.classList.contains('chord-note'), 'Key 19 cleared on noteOff');
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }

@@ -1686,10 +1686,89 @@ function createArpSequencer(program, onChangeCallback) {
     return container;
 }
 
+const SCALE_INTERVALS = [
+    [0, 2, 4, 5, 7, 9, 11], // 0: Ionian (major)
+    [0, 2, 3, 5, 7, 9, 10], // 1: Dorian
+    [0, 1, 3, 5, 7, 8, 10], // 2: Phrygian
+    [0, 2, 4, 6, 7, 9, 11], // 3: Lydian
+    [0, 2, 4, 5, 7, 9, 10], // 4: Mixolydian
+    [0, 2, 3, 5, 7, 8, 10], // 5: Aeolian (minor)
+    [0, 1, 3, 5, 6, 8, 10], // 6: Locrian
+    [0, 2, 3, 5, 7, 9, 11], // 7: Melodic minor
+    [0, 1, 3, 5, 7, 9, 10], // 8: Dorian flat 2
+    [0, 2, 4, 6, 8, 9, 11], // 9: Lydian augmented
+    [0, 2, 4, 6, 7, 9, 10], // 10: Lydian dominant
+    [0, 2, 4, 5, 7, 8, 10], // 11: Mixolydian flat 6
+    [0, 2, 3, 5, 6, 8, 10], // 12: Locrian sharp 2
+    [0, 1, 3, 4, 6, 8, 10], // 13: Altered
+    [0, 2, 3, 5, 7, 8, 11], // 14: Harmonic minor
+    [0, 1, 3, 5, 6, 9, 10], // 15: Locrian natural 6
+    [0, 2, 4, 5, 8, 9, 11], // 16: Ionian sharp 5
+    [0, 2, 3, 6, 7, 9, 10], // 17: Dorian sharp 4
+    [0, 1, 4, 5, 7, 8, 10], // 18: Phrygian dominant
+    [0, 3, 4, 6, 7, 9, 11], // 19: Lydian sharp 2
+    [0, 1, 3, 4, 6, 8, 9]   // 20: Super Locrian
+];
+
+function computeChorderNotes(noteNumber, program) {
+    program = resolveProgram(program);
+    if (!program) return { pressed: noteNumber, chordNotes: [] };
+
+    const chordType1 = program.getValue('CHORD_TYPE1') || 0;
+    const isExpand = program.getValue('KBD_CHORD_EXPAND') === 1;
+
+    const root = program.getValue('KBD_KEY') || 0;
+    const scaleIdx = program.getValue('KBD_SCALE') || 0;
+    const intervals = SCALE_INTERVALS[scaleIdx] || SCALE_INTERVALS[0];
+
+    const semi = ((noteNumber - root) % 12 + 12) % 12;
+    const oct = Math.floor((noteNumber - root) / 12);
+
+    let degree = 0;
+    let minDiff = 999;
+    for (let i = 0; i < intervals.length; i++) {
+        const diff = Math.abs(intervals[i] - semi);
+        if (diff < minDiff || (diff === minDiff && intervals[i] <= semi)) {
+            minDiff = diff;
+            degree = i;
+        }
+    }
+
+    const chordIdx = isExpand ? (program.getValue(`CHORD_TYPE${degree + 1}`) || chordType1) : chordType1;
+    if (!chordIdx || typeof LOOKUPS === 'undefined' || !LOOKUPS.chords || !LOOKUPS.chords[chordIdx]) {
+        return { pressed: noteNumber, chordNotes: [] };
+    }
+
+    const chordStr = LOOKUPS.chords[chordIdx];
+    if (!chordStr || chordStr === 'Off') {
+        return { pressed: noteNumber, chordNotes: [] };
+    }
+
+    const tokens = chordStr.trim().split(/\s+/).slice(1);
+    const chordNotes = [];
+
+    for (const tok of tokens) {
+        const m = tok.match(/^(\d+)(?:\(([+-]?\d+)\))?$/);
+        if (!m) continue;
+        const tone = parseInt(m[1], 10);
+        const octShift = m[2] ? parseInt(m[2], 10) : 0;
+        const toneOffset = tone - 1;
+        const targetDegreeIndex = degree + toneOffset;
+        const targetOct = oct + Math.floor(targetDegreeIndex / 7) + octShift;
+        const normalizedDegree = ((targetDegreeIndex % 7) + 7) % 7;
+        const generatedNote = targetOct * 12 + root + intervals[normalizedDegree];
+        if (generatedNote !== noteNumber && !chordNotes.includes(generatedNote)) {
+            chordNotes.push(generatedNote);
+        }
+    }
+
+    return { pressed: noteNumber, chordNotes };
+}
+
 /**
  * Creates an interactive audition keyboard (Mouse, Touch, and Computer Keyboard QWERTY input)
  */
-function createKeyboard(midiManager) {
+function createKeyboard(midiManager, getActiveProgram) {
     const container = document.createElement('div');
     container.className = 'audition-bar';
 
@@ -1722,7 +1801,7 @@ function createKeyboard(midiManager) {
     const kbdWrapper = document.createElement('div');
     kbdWrapper.className = 'keyboard-wrapper';
 
-    // 25 keys: 2 octaves from C to C
+    // 25 keys: 2 octaves from C to C (offsets 0 to 24)
     const whiteKeys = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24];
     const blackKeys = [
         { note: 1, pos: 0 },
@@ -1737,32 +1816,88 @@ function createKeyboard(midiManager) {
         { note: 22, pos: 12 }
     ];
 
-    const activeNotes = new Set();
+    const activePressedNotes = new Set();
+    const activeSoundingChordNotes = new Map(); // pressedNote -> [chordNotes]
     const keyElements = new Map();
 
+    function updateKeyboardHighlights() {
+        keyElements.forEach(el => {
+            el.classList.remove('pressed');
+            el.classList.remove('chord-note');
+        });
+
+        // Highlight chord voicing notes in orange
+        for (const cNotes of activeSoundingChordNotes.values()) {
+            for (const cNote of cNotes) {
+                const offset = cNote - (currentOctave + 1) * 12;
+                if (offset >= 0 && offset <= 24) {
+                    const el = keyElements.get(offset);
+                    if (el) el.classList.add('chord-note');
+                }
+            }
+        }
+
+        // Highlight physically pressed notes in cyan/blue (takes precedence)
+        for (const pNote of activePressedNotes) {
+            const offset = pNote - (currentOctave + 1) * 12;
+            if (offset >= 0 && offset <= 24) {
+                const el = keyElements.get(offset);
+                if (el) {
+                    el.classList.remove('chord-note');
+                    el.classList.add('pressed');
+                }
+            }
+        }
+    }
+
     function noteOn(noteNumber) {
-        if (activeNotes.has(noteNumber)) return;
-        activeNotes.add(noteNumber);
+        if (activePressedNotes.has(noteNumber)) return;
+        activePressedNotes.add(noteNumber);
+
         midiManager.sendNote(noteNumber, velocity, true);
-        const el = keyElements.get(noteNumber % 24);
-        if (el) el.classList.add('pressed');
+
+        const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
+        if (prog) {
+            const { chordNotes } = computeChorderNotes(noteNumber, prog);
+            activeSoundingChordNotes.set(noteNumber, chordNotes);
+            for (const cNote of chordNotes) {
+                midiManager.sendNote(cNote, velocity, true);
+            }
+        } else {
+            activeSoundingChordNotes.set(noteNumber, []);
+        }
+
+        updateKeyboardHighlights();
     }
 
     function noteOff(noteNumber) {
-        if (!activeNotes.has(noteNumber)) return;
-        if (latchActive) return; // Keep sounding if latched
-        activeNotes.delete(noteNumber);
+        if (!activePressedNotes.has(noteNumber)) return;
+        if (latchActive) return;
+
+        activePressedNotes.delete(noteNumber);
         midiManager.sendNote(noteNumber, 0, false);
-        const el = keyElements.get(noteNumber % 24);
-        if (el) el.classList.remove('pressed');
+
+        const chordNotes = activeSoundingChordNotes.get(noteNumber) || [];
+        for (const cNote of chordNotes) {
+            midiManager.sendNote(cNote, 0, false);
+        }
+        activeSoundingChordNotes.delete(noteNumber);
+
+        updateKeyboardHighlights();
     }
 
     function releaseAllNotes() {
-        for (const note of Array.from(activeNotes)) {
+        for (const note of Array.from(activePressedNotes)) {
             midiManager.sendNote(note, 0, false);
-            activeNotes.delete(note);
         }
-        keyElements.forEach(el => el.classList.remove('pressed'));
+        for (const cNotes of activeSoundingChordNotes.values()) {
+            for (const cNote of cNotes) {
+                midiManager.sendNote(cNote, 0, false);
+            }
+        }
+        activePressedNotes.clear();
+        activeSoundingChordNotes.clear();
+        updateKeyboardHighlights();
     }
 
     // Render white keys
@@ -1779,15 +1914,22 @@ function createKeyboard(midiManager) {
         key.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             const note = (currentOctave + 1) * 12 + offset;
+            key.setAttribute('data-active-note', String(note));
             noteOn(note);
         });
         key.addEventListener('pointerup', () => {
-            const note = (currentOctave + 1) * 12 + offset;
+            const noteAttr = key.getAttribute('data-active-note');
+            const note = noteAttr !== null ? parseInt(noteAttr, 10) : ((currentOctave + 1) * 12 + offset);
+            key.removeAttribute('data-active-note');
             noteOff(note);
         });
         key.addEventListener('pointerleave', () => {
-            const note = (currentOctave + 1) * 12 + offset;
-            noteOff(note);
+            const noteAttr = key.getAttribute('data-active-note');
+            if (noteAttr !== null) {
+                const note = parseInt(noteAttr, 10);
+                key.removeAttribute('data-active-note');
+                noteOff(note);
+            }
         });
     });
 
@@ -1807,15 +1949,22 @@ function createKeyboard(midiManager) {
             e.preventDefault();
             e.stopPropagation();
             const note = (currentOctave + 1) * 12 + offset;
+            key.setAttribute('data-active-note', String(note));
             noteOn(note);
         });
         key.addEventListener('pointerup', () => {
-            const note = (currentOctave + 1) * 12 + offset;
+            const noteAttr = key.getAttribute('data-active-note');
+            const note = noteAttr !== null ? parseInt(noteAttr, 10) : ((currentOctave + 1) * 12 + offset);
+            key.removeAttribute('data-active-note');
             noteOff(note);
         });
         key.addEventListener('pointerleave', () => {
-            const note = (currentOctave + 1) * 12 + offset;
-            noteOff(note);
+            const noteAttr = key.getAttribute('data-active-note');
+            if (noteAttr !== null) {
+                const note = parseInt(noteAttr, 10);
+                key.removeAttribute('data-active-note');
+                noteOff(note);
+            }
         });
     });
 
@@ -1827,55 +1976,70 @@ function createKeyboard(midiManager) {
 
     // Octave controls
     const octDisplay = controls.querySelector('#oct-display');
-    controls.querySelector('#oct-down').addEventListener('click', () => {
-        if (currentOctave > 0) {
-            currentOctave--;
-            octDisplay.textContent = `Oct ${currentOctave}`;
-        }
-    });
-    controls.querySelector('#oct-up').addEventListener('click', () => {
-        if (currentOctave < 7) {
-            currentOctave++;
-            octDisplay.textContent = `Oct ${currentOctave}`;
-        }
-    });
+    const octDown = controls.querySelector('#oct-down');
+    if (octDown) {
+        octDown.addEventListener('click', () => {
+            if (currentOctave > 0) {
+                currentOctave--;
+                if (octDisplay) octDisplay.textContent = `Oct ${currentOctave}`;
+                updateKeyboardHighlights();
+            }
+        });
+    }
+
+    const octUp = controls.querySelector('#oct-up');
+    if (octUp) {
+        octUp.addEventListener('click', () => {
+            if (currentOctave < 7) {
+                currentOctave++;
+                if (octDisplay) octDisplay.textContent = `Oct ${currentOctave}`;
+                updateKeyboardHighlights();
+            }
+        });
+    }
 
     // Latch toggle
     const latchBtn = controls.querySelector('#kbd-latch');
-    latchBtn.addEventListener('click', () => {
-        latchActive = !latchActive;
-        latchBtn.classList.toggle('active', latchActive);
-        if (!latchActive) {
-            releaseAllNotes();
-        }
-    });
+    if (latchBtn) {
+        latchBtn.addEventListener('click', () => {
+            latchActive = !latchActive;
+            latchBtn.classList.toggle('active', latchActive);
+            if (!latchActive) {
+                releaseAllNotes();
+            }
+        });
+    }
 
     // Pitch wheel (snaps to center on release)
     const pitchSlider = controls.querySelector('#pitch-wheel');
-    pitchSlider.addEventListener('input', () => {
-        const val = parseInt(pitchSlider.value, 10);
-        if (midiManager.outPort) {
-            const ch = midiManager.targetChannel;
-            midiManager.outPort.send(new Uint8Array([0xE0 | ch, val & 127, (val >> 7) & 127]));
-        }
-    });
-    pitchSlider.addEventListener('pointerup', () => {
-        pitchSlider.value = 8192;
-        if (midiManager.outPort) {
-            const ch = midiManager.targetChannel;
-            midiManager.outPort.send(new Uint8Array([0xE0 | ch, 0, 64]));
-        }
-    });
+    if (pitchSlider) {
+        pitchSlider.addEventListener('input', () => {
+            const val = parseInt(pitchSlider.value, 10);
+            if (midiManager.outPort) {
+                const ch = midiManager.targetChannel;
+                midiManager.outPort.send(new Uint8Array([0xE0 | ch, val & 127, (val >> 7) & 127]));
+            }
+        });
+        pitchSlider.addEventListener('pointerup', () => {
+            pitchSlider.value = 8192;
+            if (midiManager.outPort) {
+                const ch = midiManager.targetChannel;
+                midiManager.outPort.send(new Uint8Array([0xE0 | ch, 0, 64]));
+            }
+        });
+    }
 
     // Modulation wheel
     const modSlider = controls.querySelector('#mod-wheel');
-    modSlider.addEventListener('input', () => {
-        const val = parseInt(modSlider.value, 10);
-        if (midiManager.outPort) {
-            const ch = midiManager.targetChannel;
-            midiManager.outPort.send(new Uint8Array([0xB0 | ch, 1, val & 127]));
-        }
-    });
+    if (modSlider) {
+        modSlider.addEventListener('input', () => {
+            const val = parseInt(modSlider.value, 10);
+            if (midiManager.outPort) {
+                const ch = midiManager.targetChannel;
+                midiManager.outPort.send(new Uint8Array([0xB0 | ch, 1, val & 127]));
+            }
+        });
+    }
 
     // QWERTY Keyboard Note Mapping
     const KEY_NOTE_MAP = {
@@ -1896,6 +2060,8 @@ function createKeyboard(midiManager) {
         'KeyL': 14  // D (+1)
     };
 
+    const activeQwertyNotes = new Map(); // e.code -> noteNumber
+
     if (typeof window !== 'undefined') {
         window.addEventListener('keydown', (e) => {
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
@@ -1905,18 +2071,21 @@ function createKeyboard(midiManager) {
                 if (currentOctave > 0) {
                     currentOctave--;
                     octDisplay.textContent = `Oct ${currentOctave}`;
+                    updateKeyboardHighlights();
                 }
             } else if (e.code === 'KeyX') {
                 if (currentOctave < 7) {
                     currentOctave++;
                     octDisplay.textContent = `Oct ${currentOctave}`;
+                    updateKeyboardHighlights();
                 }
             } else if (e.code === 'Space') {
                 e.preventDefault();
                 latchBtn.click();
-            } else if (KEY_NOTE_MAP[e.code] !== undefined) {
+            } else if (KEY_NOTE_MAP[e.code] !== undefined && !activeQwertyNotes.has(e.code)) {
                 e.preventDefault();
                 const note = (currentOctave + 1) * 12 + KEY_NOTE_MAP[e.code];
+                activeQwertyNotes.set(e.code, note);
                 noteOn(note);
             }
         });
@@ -1925,21 +2094,34 @@ function createKeyboard(midiManager) {
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
             if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
 
-            if (KEY_NOTE_MAP[e.code] !== undefined) {
+            if (activeQwertyNotes.has(e.code)) {
                 e.preventDefault();
-                const note = (currentOctave + 1) * 12 + KEY_NOTE_MAP[e.code];
+                const note = activeQwertyNotes.get(e.code);
+                activeQwertyNotes.delete(e.code);
                 noteOff(note);
             }
         });
     }
 
+    container.getCurrentOctave = () => currentOctave;
+    container.setOctave = (oct) => {
+        currentOctave = Math.max(0, Math.min(7, oct));
+        if (octDisplay) octDisplay.textContent = `Oct ${currentOctave}`;
+        updateKeyboardHighlights();
+    };
+    container.noteOn = noteOn;
+    container.noteOff = noteOff;
+    container.updateKeyboardHighlights = updateKeyboardHighlights;
+
     return container;
 }
-
 
 if (typeof globalThis !== 'undefined') {
     globalThis.ICON_COPY_SVG = ICON_COPY_SVG;
     globalThis.ICON_PASTE_SVG = ICON_PASTE_SVG;
     globalThis.ICON_RANDOM_SVG = ICON_RANDOM_SVG;
     globalThis.ICON_RESET_SVG = ICON_RESET_SVG;
+    globalThis.computeChorderNotes = computeChorderNotes;
+    globalThis.SCALE_INTERVALS = SCALE_INTERVALS;
 }
+
