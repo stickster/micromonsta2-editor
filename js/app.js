@@ -805,10 +805,10 @@ class App {
             const clip = getSectionClipboard();
             const canPaste = clip && clip.sectionType === 'osc';
             dropdown.innerHTML = `
-                <div class="menu-item" data-action="copy">📋 Copy Osc ${card.getAttribute('data-section-index')}</div>
-                <div class="menu-item ${canPaste ? '' : 'disabled'}" data-action="paste">📥 Paste Section</div>
-                <div class="menu-item" data-action="reset">↺ Reset to Defaults</div>
-                <div class="menu-item" data-action="randomize">🎲 Smart Randomize</div>
+                <div class="menu-item" data-action="copy">${ICON_COPY_SVG} <span>Copy Osc ${card.getAttribute('data-section-index')}</span></div>
+                <div class="menu-item ${canPaste ? '' : 'disabled'}" data-action="paste">${ICON_PASTE_SVG} <span>Paste Section</span></div>
+                <div class="menu-item" data-action="reset">${ICON_RESET_SVG} <span>Reset to Defaults</span></div>
+                <div class="menu-item" data-action="randomize">${ICON_RANDOM_SVG} <span>Smart Randomize</span></div>
             `;
 
             dropdown.querySelector('[data-action="copy"]').onclick = (e) => {
@@ -1054,10 +1054,10 @@ class App {
             const clip = getSectionClipboard();
             const canPaste = clip && clip.sectionType === 'env';
             dropdown.innerHTML = `
-                <div class="menu-item" data-action="copy">📋 Copy Env ${card.getAttribute('data-section-index')}</div>
-                <div class="menu-item ${canPaste ? '' : 'disabled'}" data-action="paste">📥 Paste Section</div>
-                <div class="menu-item" data-action="reset">↺ Reset to Defaults</div>
-                <div class="menu-item" data-action="randomize">🎲 Smart Randomize</div>
+                <div class="menu-item" data-action="copy">${ICON_COPY_SVG} <span>Copy Env ${card.getAttribute('data-section-index')}</span></div>
+                <div class="menu-item ${canPaste ? '' : 'disabled'}" data-action="paste">${ICON_PASTE_SVG} <span>Paste Section</span></div>
+                <div class="menu-item" data-action="reset">${ICON_RESET_SVG} <span>Reset to Defaults</span></div>
+                <div class="menu-item" data-action="randomize">${ICON_RANDOM_SVG} <span>Smart Randomize</span></div>
             `;
 
             dropdown.querySelector('[data-action="copy"]').onclick = (e) => {
@@ -1317,27 +1317,140 @@ class App {
         const modLeftCol = document.createElement('div');
         modLeftCol.className = 'mod-left-column';
 
-        // LFOs Group Card
-        const lfoGroupCard = makeSection('Low Frequency Oscillators (1–3)');
+        // LFOs Group Card (with group-level Copy/Paste/Reset/Randomize in ⋯ menu)
+        const lfoGroupCard = createSectionCard('Low Frequency Oscillators (1–3)', 'lfo_group', 1, timbre, onChange);
         const lfoGrid = document.createElement('div');
         lfoGrid.className = 'lfo-multi-grid';
 
         for (let l = 1; l <= 3; l++) {
-            const subLfo = createSectionCard(`LFO ${l}`, 'lfo', l, timbre, onChange, { className: 'lfo-sub-card' });
-            subLfo.body.appendChild(createLFOWaveformPreview(l, timbre));
+            const subLfo = document.createElement('div');
+            subLfo.className = 'lfo-sub-card';
+            subLfo.setAttribute('data-lfo', l);
+
+            // Sub-header with draggable badge and inline action buttons
+            const subHeader = document.createElement('div');
+            subHeader.className = 'lfo-sub-header';
+
+            const badge = document.createElement('div');
+            badge.className = 'lfo-badge';
+            badge.setAttribute('draggable', 'true');
+            badge.textContent = `LFO ${l}`;
+            badge.title = `LFO ${l} • Drag to copy to another LFO`;
+
+            badge.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', JSON.stringify({
+                    kind: 'section',
+                    sectionType: 'lfo',
+                    sectionIndex: l
+                }));
+                subLfo.classList.add('is-dragging');
+            });
+            badge.addEventListener('dragend', () => {
+                subLfo.classList.remove('is-dragging');
+            });
+
+            subLfo.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                subLfo.classList.add('slot-drop-hover');
+            });
+            subLfo.addEventListener('dragleave', () => {
+                subLfo.classList.remove('slot-drop-hover');
+            });
+            subLfo.addEventListener('drop', (e) => {
+                e.preventDefault();
+                subLfo.classList.remove('slot-drop-hover');
+                try {
+                    const raw = e.dataTransfer.getData('text/plain');
+                    const data = JSON.parse(raw);
+                    if (data && data.kind === 'section' && data.sectionType === 'lfo' && data.sectionIndex !== l) {
+                        copySection('lfo', data.sectionIndex, 'lfo', l, timbre(), onChange);
+                        subLfo.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                        const viz = subLfo.querySelector('.lfo-visualizer');
+                        if (viz && viz.refresh) viz.refresh();
+                        this.showNotification(`Copied LFO ${data.sectionIndex} to LFO ${l}`, 'success');
+                    }
+                } catch (err) {}
+            });
+
+            const actions = document.createElement('div');
+            actions.className = 'matrix-slot-actions';
+
+            const btnCopy = document.createElement('button');
+            btnCopy.type = 'button';
+            btnCopy.className = 'btn-slot-icon';
+            btnCopy.title = `Copy LFO ${l} to clipboard`;
+            btnCopy.innerHTML = ICON_COPY_SVG;
+            btnCopy.onclick = () => {
+                copySectionToClipboard('lfo', l, timbre());
+                this.showNotification(`Copied LFO ${l} to clipboard`, 'info');
+            };
+
+            const btnPaste = document.createElement('button');
+            btnPaste.type = 'button';
+            btnPaste.className = 'btn-slot-icon';
+            btnPaste.title = `Paste into LFO ${l}`;
+            btnPaste.innerHTML = ICON_PASTE_SVG;
+            btnPaste.onclick = () => {
+                const res = pasteSectionFromClipboard('lfo', l, timbre(), onChange);
+                if (res) {
+                    subLfo.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                    const viz = subLfo.querySelector('.lfo-visualizer');
+                    if (viz && viz.refresh) viz.refresh();
+                    this.showNotification(`Pasted into LFO ${l}`, 'success');
+                } else {
+                    this.showNotification('Clipboard is empty or contains non-LFO data', 'warning');
+                }
+            };
+
+            const btnRandom = document.createElement('button');
+            btnRandom.type = 'button';
+            btnRandom.className = 'btn-slot-icon';
+            btnRandom.title = `Smart randomize LFO ${l}`;
+            btnRandom.innerHTML = ICON_RANDOM_SVG;
+            btnRandom.onclick = () => {
+                randomizeSection('lfo', l, timbre(), onChange);
+                subLfo.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                const viz = subLfo.querySelector('.lfo-visualizer');
+                if (viz && viz.refresh) viz.refresh();
+                this.showNotification(`Randomized LFO ${l}`, 'info');
+            };
+
+            const btnClear = document.createElement('button');
+            btnClear.type = 'button';
+            btnClear.className = 'btn-slot-icon btn-slot-clear';
+            btnClear.title = `Reset LFO ${l} to init defaults`;
+            btnClear.textContent = '✕';
+            btnClear.onclick = () => {
+                resetSectionToInit('lfo', l, timbre(), onChange);
+                subLfo.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                const viz = subLfo.querySelector('.lfo-visualizer');
+                if (viz && viz.refresh) viz.refresh();
+                this.showNotification(`Reset LFO ${l} to defaults`, 'info');
+            };
+
+            actions.appendChild(btnCopy);
+            actions.appendChild(btnPaste);
+            actions.appendChild(btnRandom);
+            actions.appendChild(btnClear);
+
+            subHeader.appendChild(badge);
+            subHeader.appendChild(actions);
+            subLfo.appendChild(subHeader);
+
+            subLfo.appendChild(createLFOWaveformPreview(l, timbre));
 
             const lfoSels = document.createElement('div');
             lfoSels.className = 'select-row';
             lfoSels.appendChild(createSelect(`LFO${l}_WAVE`, timbre, onChange));
             lfoSels.appendChild(createSelect(`LFO${l}_MODE`, timbre, onChange));
-            subLfo.body.appendChild(lfoSels);
+            subLfo.appendChild(lfoSels);
 
             const lfoKnobs = document.createElement('div');
             lfoKnobs.className = 'knob-row';
             lfoKnobs.appendChild(createKnob(`LFO${l}_SPEED`, timbre, onChange));
-            subLfo.body.appendChild(lfoKnobs);
+            subLfo.appendChild(lfoKnobs);
 
-            lfoGrid.appendChild(subLfo.card);
+            lfoGrid.appendChild(subLfo);
         }
         lfoGroupCard.body.appendChild(lfoGrid);
         modLeftCol.appendChild(lfoGroupCard.card);
@@ -1460,7 +1573,7 @@ class App {
 
             const amtSlider = createBipolarSlider(`MTX${m}_AMT`, timbre, onChange, { label: 'Amt' });
 
-            // Action buttons: Copy, Paste, Clear
+            // Action buttons: Copy, Paste, Randomize, Clear
             const actions = document.createElement('div');
             actions.className = 'matrix-slot-actions';
 
@@ -1468,7 +1581,7 @@ class App {
             btnCopy.type = 'button';
             btnCopy.className = 'btn-slot-icon';
             btnCopy.title = `Copy Slot ${m} routing to clipboard`;
-            btnCopy.textContent = '📋';
+            btnCopy.innerHTML = ICON_COPY_SVG;
             btnCopy.onclick = () => {
                 copySectionToClipboard('mtx', m, timbre());
                 this.showNotification(`Copied Matrix Slot ${m} to clipboard`, 'info');
@@ -1478,7 +1591,7 @@ class App {
             btnPaste.type = 'button';
             btnPaste.className = 'btn-slot-icon';
             btnPaste.title = `Paste into Slot ${m}`;
-            btnPaste.textContent = '📥';
+            btnPaste.innerHTML = ICON_PASTE_SVG;
             btnPaste.onclick = () => {
                 const res = pasteSectionFromClipboard('mtx', m, timbre(), onChange);
                 if (res) {
@@ -1487,6 +1600,17 @@ class App {
                 } else {
                     this.showNotification('Clipboard is empty or contains non-matrix data', 'warning');
                 }
+            };
+
+            const btnRandom = document.createElement('button');
+            btnRandom.type = 'button';
+            btnRandom.className = 'btn-slot-icon';
+            btnRandom.title = `Smart randomize Slot ${m}`;
+            btnRandom.innerHTML = ICON_RANDOM_SVG;
+            btnRandom.onclick = () => {
+                randomizeSection('mtx', m, timbre(), onChange);
+                slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                this.showNotification(`Randomized Matrix Slot ${m}`, 'info');
             };
 
             const btnClear = document.createElement('button');
@@ -1501,6 +1625,7 @@ class App {
 
             actions.appendChild(btnCopy);
             actions.appendChild(btnPaste);
+            actions.appendChild(btnRandom);
             actions.appendChild(btnClear);
 
             slotRow.appendChild(badge);

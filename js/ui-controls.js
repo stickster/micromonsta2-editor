@@ -11,6 +11,12 @@
  * - Interactive Audition Keyboard (Mouse, Touch, and Computer Keyboard QWERTY playback)
  */
 
+// Single-Color Line-Drawing SVG Icons for UI Actions
+const ICON_COPY_SVG = `<svg class="icon-line" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"></rect><path d="M11 2.5H3.5A1.5 1.5 0 0 0 2 4v7.5"></path></svg>`;
+const ICON_PASTE_SVG = `<svg class="icon-line" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 3H4a1.5 1.5 0 0 0-1.5 1.5v9A1.5 1.5 0 0 0 4 15h8a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 12 3h-1.5"></path><rect x="5.5" y="1" width="5" height="3" rx="1"></rect><path d="M8 7v5M5.5 9.5 8 12l2.5-2.5"></path></svg>`;
+const ICON_RANDOM_SVG = `<svg class="icon-line" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13h3.5l5-10H14M11.5 3H14v2.5M2 3h3.5l1.5 3M9 10l1.5 3H14M11.5 13H14v-2.5"></path></svg>`;
+const ICON_RESET_SVG = `<svg class="icon-line" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.5A5.5 5.5 0 1 1 4 11.5"></path><path d="M2.5 3.5v4h4"></path></svg>`;
+
 /**
  * Resolves a program reference which can be either an MM2Program instance or a dynamic provider function
  */
@@ -144,6 +150,46 @@ const SECTION_DEFINITIONS = {
             IFX_CHORUS: Math.floor(Math.random() * 4),
             IFX_EQ: 128 + Math.floor(Math.random() * 40) - 20
         })
+    },
+    lfo_group: {
+        title: 'Low Frequency Oscillators (1–3)',
+        count: 1,
+        getParams: () => ({
+            wave1: 'LFO1_WAVE', speed1: 'LFO1_SPEED', mode1: 'LFO1_MODE',
+            wave2: 'LFO2_WAVE', speed2: 'LFO2_SPEED', mode2: 'LFO2_MODE',
+            wave3: 'LFO3_WAVE', speed3: 'LFO3_SPEED', mode3: 'LFO3_MODE'
+        }),
+        randomize: () => {
+            const res = {};
+            for (let l = 1; l <= 3; l++) {
+                res[`LFO${l}_WAVE`] = Math.floor(Math.random() * 19);
+                res[`LFO${l}_SPEED`] = Math.floor(Math.random() * 80) + 20;
+                res[`LFO${l}_MODE`] = Math.floor(Math.random() * 4);
+            }
+            return res;
+        }
+    },
+    mtx_group: {
+        title: 'Modulation Matrix (12 Slots)',
+        count: 1,
+        getParams: () => {
+            const p = {};
+            for (let m = 1; m <= 12; m++) {
+                p[`src${m}`] = `MTX${m}_SRC`;
+                p[`dst${m}`] = `MTX${m}_DST`;
+                p[`amt${m}`] = `MTX${m}_AMT`;
+            }
+            return p;
+        },
+        randomize: () => {
+            const res = {};
+            for (let m = 1; m <= 12; m++) {
+                res[`MTX${m}_SRC`] = Math.floor(Math.random() * 44) + 1;
+                res[`MTX${m}_DST`] = Math.floor(Math.random() * 44) + 1;
+                res[`MTX${m}_AMT`] = 128 + (Math.floor(Math.random() * 140) - 70);
+            }
+            return res;
+        }
     }
 };
 
@@ -1326,10 +1372,10 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
         const clip = getSectionClipboard();
         const canPaste = clip && clip.sectionType === sectionType;
         dropdown.innerHTML = `
-            <div class="menu-item" data-action="copy">📋 Copy Section</div>
-            <div class="menu-item ${canPaste ? '' : 'disabled'}" data-action="paste">📥 Paste Section</div>
-            <div class="menu-item" data-action="reset">↺ Reset to Defaults</div>
-            <div class="menu-item" data-action="randomize">🎲 Smart Randomize</div>
+            <div class="menu-item" data-action="copy">${ICON_COPY_SVG} <span>Copy Section</span></div>
+            <div class="menu-item ${canPaste ? '' : 'disabled'}" data-action="paste">${ICON_PASTE_SVG} <span>Paste Section</span></div>
+            <div class="menu-item" data-action="reset">${ICON_RESET_SVG} <span>Reset to Defaults</span></div>
+            <div class="menu-item" data-action="randomize">${ICON_RANDOM_SVG} <span>Smart Randomize</span></div>
         `;
 
         dropdown.querySelector('[data-action="copy"]').onclick = (e) => {
@@ -1890,3 +1936,10 @@ function createKeyboard(midiManager) {
     return container;
 }
 
+
+if (typeof globalThis !== 'undefined') {
+    globalThis.ICON_COPY_SVG = ICON_COPY_SVG;
+    globalThis.ICON_PASTE_SVG = ICON_PASTE_SVG;
+    globalThis.ICON_RANDOM_SVG = ICON_RANDOM_SVG;
+    globalThis.ICON_RESET_SVG = ICON_RESET_SVG;
+}
