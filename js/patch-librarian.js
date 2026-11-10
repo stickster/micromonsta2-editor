@@ -4,13 +4,11 @@
  * program swapping, duplicate alerting/flagging, and bank condensation.
  */
 
-import { MM2Program, MM2Bank } from './sysex-parser.js';
-
 const DB_NAME = 'MM2_Editor_Librarian_DB';
 const DB_VERSION = 1;
 const STORE_BANKS = 'banks';
 
-export class PatchLibrarian {
+class PatchLibrarian {
     constructor() {
         this.banks = [];
         this.activeBankIndex = 0;
@@ -58,21 +56,26 @@ export class PatchLibrarian {
                 return;
             }
 
-            const req = indexedDB.open(DB_NAME, DB_VERSION);
-            req.onupgradeneeded = (e) => {
-                const db = e.target.result;
-                if (!db.objectStoreNames.contains(STORE_BANKS)) {
-                    db.createObjectStore(STORE_BANKS, { keyPath: 'id' });
-                }
-            };
-            req.onsuccess = (e) => {
-                this.db = e.target.result;
-                resolve(this.db);
-            };
-            req.onerror = (e) => {
-                console.warn('IndexedDB failed to open:', e);
+            try {
+                const req = indexedDB.open(DB_NAME, DB_VERSION);
+                req.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_BANKS)) {
+                        db.createObjectStore(STORE_BANKS, { keyPath: 'id' });
+                    }
+                };
+                req.onsuccess = (e) => {
+                    this.db = e.target.result;
+                    resolve(this.db);
+                };
+                req.onerror = (e) => {
+                    console.warn('IndexedDB failed to open:', e);
+                    resolve(null);
+                };
+            } catch (e) {
+                console.warn('IndexedDB unavailable in this context, falling back to localStorage:', e);
                 resolve(null);
-            };
+            }
         });
     }
 
@@ -89,9 +92,9 @@ export class PatchLibrarian {
     async loadAllBanks() {
         if (!this.db) {
             // LocalStorage fallback
-            if (typeof localStorage !== 'undefined') {
+            if (typeof window !== 'undefined') {
                 try {
-                    const raw = localStorage.getItem('mm2_librarian_banks');
+                    const raw = window.localStorage.getItem('mm2_librarian_banks');
                     if (raw) {
                         const parsed = JSON.parse(raw);
                         this.banks = parsed.map((bData, idx) => {
@@ -145,14 +148,14 @@ export class PatchLibrarian {
 
         if (!this.db) {
             // LocalStorage fallback
-            if (typeof localStorage !== 'undefined') {
+            if (typeof window !== 'undefined') {
                 try {
                     const serializable = this.banks.map(b => ({
                         name: b.name,
                         index: b.index,
                         programs: b.programs.map(p => Array.from(p.rawData))
                     }));
-                    localStorage.setItem('mm2_librarian_banks', JSON.stringify(serializable));
+                    window.localStorage.setItem('mm2_librarian_banks', JSON.stringify(serializable));
                 } catch (e) {
                     console.warn('Failed to save to localStorage:', e);
                 }

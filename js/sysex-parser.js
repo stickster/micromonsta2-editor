@@ -2,32 +2,11 @@
  * MicroMonsta 2 SysEx Parser, Program Model, and Bank Librarian Engine
  */
 
-import {
-    SYSEX_HEADER,
-    SYSEX_START,
-    SYSEX_END,
-    SYSEX_V3_LEN,
-    SYSEX_V2_LEN,
-    SYSEX_V3_FW_ID,
-    CMD_LOAD_A,
-    CMD_LOAD_B,
-    CMD_LOAD_ACTIVE,
-    OFFSET_CMD,
-    OFFSET_FW,
-    OFFSET_NAME,
-    OFFSET_CAT,
-    INIT_PROGRAM_BYTES,
-    MM2_PARAMETERS,
-    PARAM_MAP,
-    V2_V3_MAP,
-    V3_NEW_PARAMS
-} from './mm2-specs.js';
-
 /**
  * Validates whether a byte array is a valid MM2 SysEx program dump.
  * Returns 3 if v3, 2 if v2, or 0 if invalid.
  */
-export function validateSysEx(bytes) {
+function validateSysEx(bytes) {
     if (!bytes || !(bytes instanceof Uint8Array)) return 0;
     const len = bytes.length;
     if (len !== SYSEX_V3_LEN && len !== SYSEX_V2_LEN) return 0;
@@ -51,7 +30,7 @@ export function validateSysEx(bytes) {
 /**
  * Reads a 1-byte or 2-byte (14-bit MIDI) value from buffer
  */
-export function readBytes(buf, offset, size) {
+function readBytes(buf, offset, size) {
     if (size === 2) {
         return (buf[offset] << 7) + buf[offset + 1];
     }
@@ -61,7 +40,7 @@ export function readBytes(buf, offset, size) {
 /**
  * Writes a 1-byte or 2-byte (14-bit MIDI) value to buffer
  */
-export function writeBytes(buf, offset, size, val) {
+function writeBytes(buf, offset, size, val) {
     if (size === 2) {
         buf[offset] = (val >> 7) & 127;
         buf[offset + 1] = val & 127;
@@ -73,14 +52,14 @@ export function writeBytes(buf, offset, size, val) {
 /**
  * Clamps a number between min and max
  */
-export function clamp(v, min, max) {
+function clamp(v, min, max) {
     return Math.min(Math.max(v, min), max);
 }
 
 /**
  * Converts a v2 program dump (176 bytes) to a v3 program dump (216 bytes)
  */
-export function convertV2toV3(v2Bytes) {
+function convertV2toV3(v2Bytes) {
     if (validateSysEx(v2Bytes) !== 2) {
         throw new Error('Provided buffer is not a valid MicroMonsta 2 firmware v2 program dump');
     }
@@ -132,7 +111,7 @@ export function convertV2toV3(v2Bytes) {
 /**
  * Normalizes any program buffer (v2 or v3) to v3 Uint8Array
  */
-export function normalizeProgram(bytes) {
+function normalizeProgram(bytes) {
     const version = validateSysEx(bytes);
     if (version === 3) {
         return new Uint8Array(bytes);
@@ -145,7 +124,7 @@ export function normalizeProgram(bytes) {
 /**
  * Extracts all valid MM2 SysEx messages from an arbitrary byte array (e.g. .syx file containing a full bank)
  */
-export function extractSysExMessages(rawBytes) {
+function extractSysExMessages(rawBytes) {
     const messages = [];
     let startIdx = -1;
     for (let i = 0; i < rawBytes.length; i++) {
@@ -165,7 +144,7 @@ export function extractSysExMessages(rawBytes) {
 /**
  * Represents a single MicroMonsta 2 sound program (Firmware v3, 216 bytes)
  */
-export class MM2Program {
+class MM2Program {
     constructor(sourceData = null) {
         this._data = new Uint8Array(SYSEX_V3_LEN);
         if (sourceData) {
@@ -304,7 +283,7 @@ export class MM2Program {
  * - Duplicate removal
  * - Bank condensation
  */
-export class MM2Bank {
+class MM2Bank {
     constructor(name = 'Bank 1', index = 0) {
         this.name = name;
         this.index = index;

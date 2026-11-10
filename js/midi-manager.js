@@ -4,16 +4,14 @@
  * handles incoming program capture, and builds NRPN/SysEx messages.
  */
 
-import { validateSysEx, normalizeProgram, MM2Program } from './sysex-parser.js';
-import { PARAM_MAP, NRPN_TO_PARAM, MM2_CC_MAP, SYSEX_FETCH_A, SYSEX_FETCH_B } from './mm2-specs.js';
 
-export const MIDI_STATUS_CC = 0xB0;
-export const CC_NRPN_MSB = 99;     // 0x63
-export const CC_NRPN_LSB = 98;     // 0x62
-export const CC_DATA_MSB = 6;      // 0x06
-export const CC_DATA_LSB = 38;     // 0x26
+const MIDI_STATUS_CC = 0xB0;
+const CC_NRPN_MSB = 99;     // 0x63
+const CC_NRPN_LSB = 98;     // 0x62
+const CC_DATA_MSB = 6;      // 0x06
+const CC_DATA_LSB = 38;     // 0x26
 
-export class MidiManager {
+class MidiManager {
     static SETTINGS_KEY = 'mm2_editor_midi_settings';
 
     constructor() {
@@ -451,9 +449,9 @@ export class MidiManager {
     }
 
     loadSettings() {
-        if (typeof localStorage === 'undefined') return;
+        if (typeof window === 'undefined') return;
         try {
-            const raw = localStorage.getItem(MidiManager.SETTINGS_KEY);
+            const raw = window.localStorage.getItem(MidiManager.SETTINGS_KEY);
             if (raw) {
                 const s = JSON.parse(raw);
                 this.savedInPortId = s.savedInPortId || '';
@@ -472,7 +470,7 @@ export class MidiManager {
     }
 
     saveSettings() {
-        if (typeof localStorage === 'undefined') return;
+        if (typeof window === 'undefined') return;
         try {
             this.savedBaseChannel = this.baseChannel;
             const s = {
@@ -485,7 +483,7 @@ export class MidiManager {
                 safeMode: this.safeMode,
                 autoCapture: this.autoCapture
             };
-            localStorage.setItem(MidiManager.SETTINGS_KEY, JSON.stringify(s));
+            window.localStorage.setItem(MidiManager.SETTINGS_KEY, JSON.stringify(s));
         } catch (e) {
             console.warn('Failed to save MIDI settings to localStorage', e);
         }

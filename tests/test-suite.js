@@ -2,35 +2,102 @@
  * Comprehensive Automated Test Suite for MicroMonsta 2 Editor & Patch Librarian
  */
 
-import {
-    validateSysEx,
-    convertV2toV3,
-    normalizeProgram,
-    extractSysExMessages,
-    MM2Program,
-    MM2Bank
-} from '../js/sysex-parser.js';
-import { MidiManager } from '../js/midi-manager.js';
-import { App } from '../js/app.js';
-import {
-    INIT_PROGRAM_BYTES,
-    SYSEX_V3_LEN,
-    SYSEX_V2_LEN,
-    PARAM_MAP,
-    SYSEX_FETCH_A,
-    SYSEX_FETCH_B
-} from '../js/mm2-specs.js';
-import {
-    copySection,
-    copySectionToClipboard,
-    pasteSectionFromClipboard,
-    resetSectionToInit,
-    randomizeSection,
-    resolveProgram,
-    SECTION_DEFINITIONS
-} from '../js/ui-controls.js';
+// Headless Node mock DOM support for control unit tests
+if (typeof document === 'undefined') {
+    class MockElement {
+        constructor(tag) {
+            this.tagName = (tag || 'div').toUpperCase();
+            this.children = [];
+            this.attributes = new Map();
+            const classes = new Set();
+            this.classList = {
+                _classes: classes,
+                add: (c) => classes.add(c),
+                remove: (c) => classes.delete(c),
+                toggle: (c, force) => {
+                    if (force !== undefined) {
+                        if (force) classes.add(c);
+                        else classes.delete(c);
+                    } else {
+                        if (classes.has(c)) classes.delete(c);
+                        else classes.add(c);
+                    }
+                },
+                contains: (c) => classes.has(c)
+            };
+            this.style = {};
+            this._listeners = new Map();
+            this.value = '';
+            this.textContent = '';
+        }
+        get className() {
+            return Array.from(this.classList._classes).join(' ');
+        }
+        set className(str) {
+            this.classList._classes.clear();
+            if (str) {
+                str.trim().split(/\s+/).forEach(c => this.classList._classes.add(c));
+            }
+        }
+        appendChild(child) {
+            this.children.push(child);
+            return child;
+        }
+        setAttribute(k, v) { this.attributes.set(k, String(v)); }
+        getAttribute(k) { return this.attributes.get(k) ?? null; }
+        hasAttribute(k) { return this.attributes.has(k); }
+        addEventListener(ev, fn) {
+            if (!this._listeners.has(ev)) this._listeners.set(ev, []);
+            this._listeners.get(ev).push(fn);
+        }
+        removeEventListener(ev, fn) {
+            if (this._listeners.has(ev)) {
+                this._listeners.set(ev, this._listeners.get(ev).filter(f => f !== fn));
+            }
+        }
+        dispatchEvent(event) {
+            const list = this._listeners.get(event.type) || [];
+            for (const fn of list) fn(event);
+        }
+        click() {
+            this.dispatchEvent({ type: 'click', preventDefault: () => {}, stopPropagation: () => {} });
+        }
+        querySelector(sel) {
+            for (const ch of this.children) {
+                if (sel === 'button' && ch.tagName === 'BUTTON') return ch;
+                if (sel === 'input[type="range"]' && ch.tagName === 'INPUT' && ch.type === 'range') return ch;
+                if (sel === '.bipolar-val' && ch.classList.contains('bipolar-val')) return ch;
+                if (sel === 'button.btn-param-toggle' && ch.tagName === 'BUTTON' && ch.classList.contains('btn-param-toggle')) return ch;
+                if (ch.querySelector) {
+                    const sub = ch.querySelector(sel);
+                    if (sub) return sub;
+                }
+            }
+            return null;
+        }
+        querySelectorAll(sel) {
+            const res = [];
+            for (const ch of this.children) {
+                if (sel === '[data-param]' && ch.hasAttribute('data-param')) res.push(ch);
+                if (ch.querySelectorAll) res.push(...ch.querySelectorAll(sel));
+            }
+            return res;
+        }
+    }
+    globalThis.document = {
+        createElement: (tag) => new MockElement(tag),
+        getElementById: (id) => null,
+        querySelector: () => null,
+        querySelectorAll: () => []
+    };
+    if (typeof Event === 'undefined') {
+        globalThis.Event = class {
+            constructor(type) { this.type = type; }
+        };
+    }
+}
 
-export async function runAllTests(logger = console.log) {
+async function runAllTests(logger = console.log) {
     let passed = 0;
     let failed = 0;
 

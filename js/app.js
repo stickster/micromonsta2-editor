@@ -2,29 +2,7 @@
  * Main Application Controller for MicroMonsta 2 HTML Editor and Patch Librarian
  */
 
-import { MidiManager } from './midi-manager.js';
-import { PatchLibrarian } from './patch-librarian.js';
-import { MM2Program, MM2Bank, extractSysExMessages } from './sysex-parser.js';
-import { LOOKUPS, PARAM_MAP } from './mm2-specs.js';
-import {
-    createKnob,
-    createSelect,
-    createSectionCard,
-    createADSRVisualizer,
-    createFilterCurveVisualizer,
-    createLFOWaveformPreview,
-    createArpSequencer,
-    createKeyboard,
-    formatParamDisplay,
-    copySection,
-    copySectionToClipboard,
-    pasteSectionFromClipboard,
-    resetSectionToInit,
-    randomizeSection,
-    getSectionClipboard
-} from './ui-controls.js';
-
-export class App {
+class App {
     constructor() {
         this.midi = new MidiManager();
         this.librarian = new PatchLibrarian();
@@ -36,7 +14,12 @@ export class App {
         this.currentView = 'editor'; // 'editor' | 'librarian' | 'settings'
         this.activeCategoryFilter = 'all';
         this.searchQuery = '';
-        this.synthTimbralMode = (typeof localStorage !== 'undefined' && localStorage.getItem('mm2_timbral_mode')) || 'monotimbral';
+        this.synthTimbralMode = 'monotimbral';
+        if (typeof window !== 'undefined') {
+            try {
+                this.synthTimbralMode = window.localStorage.getItem('mm2_timbral_mode') || 'monotimbral';
+            } catch (e) {}
+        }
 
         // Live Editing, History & Compare State
         this.undoStack = [];
@@ -364,8 +347,10 @@ export class App {
         const validModes = ['monotimbral', 'bitimbral', 'combi'];
         if (!validModes.includes(mode)) return;
         this.synthTimbralMode = mode;
-        if (typeof localStorage !== 'undefined') {
-            localStorage.setItem('mm2_timbral_mode', mode);
+        if (typeof window !== 'undefined') {
+            try {
+                window.localStorage.setItem('mm2_timbral_mode', mode);
+            } catch (e) {}
         }
         if (mode === 'monotimbral' && this.activeSlot !== 0) {
             this.selectPart(0);

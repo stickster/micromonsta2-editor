@@ -29,9 +29,14 @@
     <h1>MicroMonsta 2 Automated Test Runner</h1>
     <div id="console-output">Running tests...</div>
 
-    <script type="module">
-        import { runAllTests } from './test-suite.js';
-
+    <script src="../js/mm2-specs.js"></script>
+    <script src="../js/sysex-parser.js"></script>
+    <script src="../js/patch-librarian.js"></script>
+    <script src="../js/midi-manager.js"></script>
+    <script src="../js/ui-controls.js"></script>
+    <script src="../js/app.js"></script>
+    <script src="test-suite.js"></script>
+    <script>
         const out = document.getElementById('console-output');
         out.textContent = '';
 

@@ -11,17 +11,16 @@
  * - Interactive Audition Keyboard (Mouse, Touch, and Computer Keyboard QWERTY playback)
  */
 
-import { PARAM_MAP, LOOKUPS } from './mm2-specs.js';
 
 /**
  * Resolves a program reference which can be either an MM2Program instance or a dynamic provider function
  */
-export function resolveProgram(program) {
+function resolveProgram(program) {
     return typeof program === 'function' ? program() : program;
 }
 
 // Section definitions for modular copying, clipboard, and smart randomization
-export const SECTION_DEFINITIONS = {
+const SECTION_DEFINITIONS = {
     osc: {
         title: 'Oscillator',
         count: 3,
@@ -151,11 +150,11 @@ export const SECTION_DEFINITIONS = {
 
 let currentSectionClipboard = null;
 
-export function getSectionClipboard() {
+function getSectionClipboard() {
     return currentSectionClipboard;
 }
 
-export function copySectionToClipboard(sectionType, sectionIndex, program) {
+function copySectionToClipboard(sectionType, sectionIndex, program) {
     program = resolveProgram(program);
     const def = SECTION_DEFINITIONS[sectionType];
     if (!def || !program) return null;
@@ -173,7 +172,7 @@ export function copySectionToClipboard(sectionType, sectionIndex, program) {
     return currentSectionClipboard;
 }
 
-export function pasteSectionFromClipboard(targetType, targetIndex, program, onChangeCallback) {
+function pasteSectionFromClipboard(targetType, targetIndex, program, onChangeCallback) {
     program = resolveProgram(program);
     if (!program || !currentSectionClipboard || currentSectionClipboard.sectionType !== targetType) return false;
     const def = SECTION_DEFINITIONS[targetType];
@@ -194,7 +193,7 @@ export function pasteSectionFromClipboard(targetType, targetIndex, program, onCh
     return true;
 }
 
-export function copySection(sourceType, sourceIndex, targetType, targetIndex, program, onChangeCallback) {
+function copySection(sourceType, sourceIndex, targetType, targetIndex, program, onChangeCallback) {
     program = resolveProgram(program);
     if (!program || sourceType !== targetType) return false;
     const def = SECTION_DEFINITIONS[sourceType];
@@ -217,7 +216,7 @@ export function copySection(sourceType, sourceIndex, targetType, targetIndex, pr
     return true;
 }
 
-export function resetSectionToInit(sectionType, sectionIndex, program, onChangeCallback) {
+function resetSectionToInit(sectionType, sectionIndex, program, onChangeCallback) {
     program = resolveProgram(program);
     const def = SECTION_DEFINITIONS[sectionType];
     if (!def || !program) return;
@@ -232,7 +231,7 @@ export function resetSectionToInit(sectionType, sectionIndex, program, onChangeC
     }
 }
 
-export function randomizeSection(sectionType, sectionIndex, program, onChangeCallback) {
+function randomizeSection(sectionType, sectionIndex, program, onChangeCallback) {
     program = resolveProgram(program);
     const def = SECTION_DEFINITIONS[sectionType];
     if (!def || !def.randomize || !program) return;
@@ -246,7 +245,7 @@ export function randomizeSection(sectionType, sectionIndex, program, onChangeCal
 /**
  * Creates an interactive rotary knob element
  */
-export function createKnob(paramKey, program, onChangeCallback, opts = {}) {
+function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     const def = PARAM_MAP.get(paramKey);
     if (!def) {
         console.warn(`Cannot create knob for unknown parameter: ${paramKey}`);
@@ -582,7 +581,7 @@ export function createKnob(paramKey, program, onChangeCallback, opts = {}) {
 /**
  * Creates a select dropdown bound to a parameter
  */
-export function createSelect(paramKey, program, onChangeCallback) {
+function createSelect(paramKey, program, onChangeCallback) {
     const def = PARAM_MAP.get(paramKey);
     if (!def) return document.createElement('div');
 
@@ -646,7 +645,7 @@ export function createSelect(paramKey, program, onChangeCallback) {
 /**
  * Formats parameter value for display
  */
-export function formatParamDisplay(def, val) {
+function formatParamDisplay(def, val) {
     if (!def) return `${val}`;
     if (def.values && def.values[val] !== undefined) {
         return def.values[val];
@@ -662,7 +661,7 @@ export function formatParamDisplay(def, val) {
 /**
  * Creates an interactive SVG ADSR curve visualizer for Envelope 1, 2, or 3
  */
-export function createADSRVisualizer(envNumber, program) {
+function createADSRVisualizer(envNumber, program) {
     const container = document.createElement('div');
     container.className = 'visualizer-box adsr-visualizer';
     container.title = `Envelope ${envNumber} ADSR Curve`;
@@ -765,7 +764,7 @@ export function createADSRVisualizer(envNumber, program) {
 /**
  * Creates an interactive SVG Filter frequency response curve
  */
-export function createFilterCurveVisualizer(program) {
+function createFilterCurveVisualizer(program) {
     const container = document.createElement('div');
     container.className = 'visualizer-box filter-visualizer';
     container.title = 'Filter Magnitude Response (20 Hz–20 kHz, log; +24 to −48 dB)';
@@ -889,7 +888,7 @@ export function createFilterCurveVisualizer(program) {
 /**
  * Creates an interactive SVG LFO Waveform Preview
  */
-export function createLFOWaveformPreview(lfoNumber, program) {
+function createLFOWaveformPreview(lfoNumber, program) {
     const container = document.createElement('div');
     container.className = 'visualizer-box lfo-visualizer';
     container.title = `LFO ${lfoNumber} Waveform Preview`;
@@ -1037,7 +1036,7 @@ export function createLFOWaveformPreview(lfoNumber, program) {
 /**
  * Creates a synthesizer card with Drag-and-Drop section copying and Action Menu (Copy, Paste, Reset, Randomize)
  */
-export function createSectionCard(title, sectionType, sectionIndex, program, onChangeCallback, opts = {}) {
+function createSectionCard(title, sectionType, sectionIndex, program, onChangeCallback, opts = {}) {
     const card = document.createElement('div');
     card.className = `synth-card ${opts.className || ''}`;
     card.setAttribute('data-section-type', sectionType);
@@ -1244,7 +1243,7 @@ export function createSectionCard(title, sectionType, sectionIndex, program, onC
 /**
  * Creates a 16-step Arpeggiator pattern sequencer control
  */
-export function createArpSequencer(program, onChangeCallback) {
+function createArpSequencer(program, onChangeCallback) {
     const container = document.createElement('div');
     container.className = 'arp-sequencer-card';
 
@@ -1426,7 +1425,7 @@ export function createArpSequencer(program, onChangeCallback) {
 /**
  * Creates an interactive audition keyboard (Mouse, Touch, and Computer Keyboard QWERTY input)
  */
-export function createKeyboard(midiManager) {
+function createKeyboard(midiManager) {
     const container = document.createElement('div');
     container.className = 'audition-bar';
 

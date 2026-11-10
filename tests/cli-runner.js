@@ -1,8 +1,28 @@
 /**
  * CLI Test Runner for MicroMonsta 2 Test Suite
+ * Executes scripts in the exact same global order as index.html / tests/index.html
  */
 
-import { runAllTests } from './test-suite.js';
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const rootDir = path.resolve(__dirname, '..');
+const scriptFiles = [
+    'js/mm2-specs.js',
+    'js/sysex-parser.js',
+    'js/patch-librarian.js',
+    'js/midi-manager.js',
+    'js/ui-controls.js',
+    'js/app.js',
+    'tests/test-suite.js'
+];
+
+for (const relPath of scriptFiles) {
+    const fullPath = path.join(rootDir, relPath);
+    const code = fs.readFileSync(fullPath, 'utf8');
+    vm.runInThisContext(code, { filename: fullPath });
+}
 
 runAllTests(console.log).then(({ passed, failed }) => {
     if (failed > 0) {
