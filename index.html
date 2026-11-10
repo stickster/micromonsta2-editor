@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MicroMonsta 2 Editor & Patch Librarian</title>
-    <meta name="description" content="Hardware editor, patch librarian, and duplicate manager for Audiothingies MicroMonsta 2.">
+    <meta name="description"
+        content="Hardware editor, patch librarian, and duplicate manager for Audiothingies MicroMonsta 2.">
     <link rel="stylesheet" href="css/style.css">
 </head>
+
 <body>
     <!-- Top Header -->
     <header class="app-header">
@@ -17,23 +20,29 @@
 
         <div class="header-center">
             <div class="part-selector">
-                <button class="part-btn active" id="btn-part-a" data-slot="0" onclick="window.app.selectPart(0)" title="Edit Part A (Layer A)">Part A</button>
-                <button class="part-btn" id="btn-part-b" data-slot="1" onclick="window.app.selectPart(1)" title="Edit Part B (Layer B)">Part B</button>
+                <button class="part-btn active" id="btn-part-a" data-slot="0" onclick="window.app.selectPart(0)"
+                    title="Edit Part A (Layer A)">Part A</button>
+                <button class="part-btn" id="btn-part-b" data-slot="1" onclick="window.app.selectPart(1)"
+                    title="Edit Part B (Layer B)">Part B</button>
             </div>
 
             <div class="mode-box" id="mode-selector-box">
-                <span id="synth-mode-indicator" class="mode-indicator-badge" role="status" title="Synth Timbral Mode (Display Only — must be adjusted on MM2 hardware)">Monotimbral (12V)</span>
+                <span id="synth-mode-indicator" class="mode-indicator-badge" role="status"
+                    title="Synth Timbral Mode (Display Only — must be adjusted on MM2 hardware)">Monotimbral
+                    (12V)</span>
             </div>
 
             <nav class="nav-tabs">
                 <button class="nav-tab active" id="tab-editor" onclick="window.app.switchView('editor')">Editor</button>
-                <button class="nav-tab" id="tab-librarian" onclick="window.app.switchView('librarian')">Librarian</button>
+                <button class="nav-tab" id="tab-librarian"
+                    onclick="window.app.switchView('librarian')">Librarian</button>
                 <button class="nav-tab" id="tab-settings" onclick="window.app.switchView('settings')">Settings</button>
             </nav>
         </div>
 
         <div class="header-right">
-            <div class="midi-status-box" id="midi-status-box" onclick="window.app.handleMidiStatusClick()" title="Click to connect or configure MIDI">
+            <div class="midi-status-box" id="midi-status-box" onclick="window.app.handleMidiStatusClick()"
+                title="Click to connect or configure MIDI">
                 <div class="status-dot disconnected" id="midi-status-dot"></div>
                 <span id="midi-status-text">Disconnected</span>
             </div>
@@ -47,18 +56,24 @@
             <!-- Program Header Bar -->
             <div class="program-bar">
                 <div class="program-name-group">
-                    <div id="active-part-indicator" class="active-part-badge part-a" title="Active Sound Layer">PART A</div>
-                    <input type="text" id="prog-name-input" class="input-name" maxlength="8" placeholder="Patch" title="Patch Name (up to 8 characters)">
+                    <div id="active-part-indicator" class="active-part-badge part-a" title="Active Sound Layer">PART A
+                    </div>
+                    <input type="text" id="prog-name-input" class="input-name" maxlength="8" placeholder="Patch"
+                        title="Patch Name (up to 8 characters)">
                     <select id="prog-category-select" class="program-cat-select" title="Patch Category"></select>
-                    <div id="prog-tempo-container" class="prog-tempo-container" title="Program Tempo (40-295 BPM)"></div>
-                    <button class="btn btn-sm btn-subtle btn-compare" id="btn-prog-compare" title="Compare with original loaded patch (A/B testing)">Compare: Off</button>
+                    <div id="prog-tempo-container" class="prog-tempo-container" title="Program Tempo (40-295 BPM)">
+                    </div>
+                    <button class="btn btn-sm btn-subtle btn-compare" id="btn-prog-compare"
+                        title="Compare with original loaded patch (A/B testing)">Compare: Off</button>
                     <div id="editor-sync-badge" class="sync-badge synced" title="Live sync status with MM2">Synced</div>
                 </div>
 
                 <div class="program-actions">
                     <div class="undo-redo-group">
-                        <button class="btn btn-sm btn-subtle" id="btn-prog-undo" title="Undo change (Ctrl+Z)" disabled>↶</button>
-                        <button class="btn btn-sm btn-subtle" id="btn-prog-redo" title="Redo change (Ctrl+Y)" disabled>↷</button>
+                        <button class="btn btn-sm btn-subtle" id="btn-prog-undo" title="Undo change (Ctrl+Z)"
+                            disabled>↶</button>
+                        <button class="btn btn-sm btn-subtle" id="btn-prog-redo" title="Redo change (Ctrl+Y)"
+                            disabled>↷</button>
                     </div>
 
                     <label class="live-sync-switch" title="Real-time NRPN parameter streaming to MM2 hardware">
@@ -66,14 +81,19 @@
                         <span class="live-sync-label">Live Sync</span>
                     </label>
 
-                    <button class="btn btn-fetch" id="btn-prog-fetch" title="Fetch current sound patch directly from MM2 hardware">Fetch from MM2</button>
+                    <button class="btn btn-fetch" id="btn-prog-fetch"
+                        title="Fetch current sound patch directly from MM2 hardware">Fetch from MM2</button>
                     <input type="file" id="prog-file-picker" accept=".syx" style="display: none;">
                     <button class="btn" id="btn-prog-load" title="Load patch from .syx file">Load .syx</button>
                     <button class="btn" id="btn-prog-save" title="Save patch to .syx file">Save .syx</button>
-                    <button class="btn btn-subtle" id="btn-prog-add-to-lib" title="Store copy of current patch into active Librarian bank">Store in Bank</button>
-                    <button class="btn btn-subtle" id="btn-prog-init" title="Reset patch to default INIT settings">Init</button>
-                    <button class="btn btn-subtle" id="btn-prog-copy-other" title="Copy active sound to the other Part">Copy A ↔ B</button>
-                    <button class="btn btn-primary" id="btn-prog-push" title="Send patch to MicroMonsta 2 hardware">Push to MM2</button>
+                    <button class="btn btn-subtle" id="btn-prog-add-to-lib"
+                        title="Store copy of current patch into active Librarian bank">Store in Bank</button>
+                    <button class="btn btn-subtle" id="btn-prog-init"
+                        title="Reset patch to default INIT settings">Init</button>
+                    <button class="btn btn-subtle" id="btn-prog-copy-other"
+                        title="Copy active sound to the other Part">Copy A ↔ B</button>
+                    <button class="btn btn-primary" id="btn-prog-push" title="Send patch to MicroMonsta 2 hardware">Push
+                        to MM2</button>
                 </div>
             </div>
 
@@ -89,22 +109,28 @@
                 <!-- Bank Selector Tabs -->
                 <div class="bank-tabs-bar">
                     <div id="bank-tabs" style="display: flex; gap: 6px;"></div>
-                    <button class="btn btn-sm btn-subtle" id="btn-add-bank" title="Create a new patch bank">+ New Bank</button>
+                    <button class="btn btn-sm btn-subtle" id="btn-add-bank" title="Create a new patch bank">+ New
+                        Bank</button>
                 </div>
 
                 <!-- Bank Actions & Search Toolbar -->
                 <div class="bank-toolbar">
                     <div class="bank-tools-left">
                         <input type="file" id="bank-file-picker" accept=".syx" style="display: none;">
-                        <button class="btn btn-sm" id="btn-import-bank" title="Import .syx file (single patch or whole bank)">Import .syx</button>
-                        <button class="btn btn-sm" id="btn-export-bank" title="Export entire bank as a .syx file">Export Bank .syx</button>
-                        <button class="btn btn-sm btn-warning" id="btn-detect-duplicates" title="Scan bank for duplicate patches">Manage Duplicates</button>
-                        <button class="btn btn-sm btn-subtle" id="btn-condense-bank" title="Remove empty/duplicate slots and pack sequentially">Condense Bank</button>
+                        <button class="btn btn-sm" id="btn-import-bank"
+                            title="Import .syx file (single patch or whole bank)">Import .syx</button>
+                        <button class="btn btn-sm" id="btn-export-bank" title="Export entire bank as a .syx file">Export
+                            Bank .syx</button>
+                        <button class="btn btn-sm btn-warning" id="btn-detect-duplicates"
+                            title="Scan bank for duplicate patches">Manage Duplicates</button>
+                        <button class="btn btn-sm btn-subtle" id="btn-condense-bank"
+                            title="Remove empty/duplicate slots and pack sequentially">Condense Bank</button>
                         <span id="bank-duplicates-badge" class="badge badge-warning" style="display: none;"></span>
                     </div>
 
                     <div class="bank-tools-right">
-                        <label class="setting-checkbox-label" style="font-size: 11px;" title="Incoming SysEx dumps from MM2 will automatically append into this bank">
+                        <label class="setting-checkbox-label" style="font-size: 11px;"
+                            title="Incoming SysEx dumps from MM2 will automatically append into this bank">
                             <input type="checkbox" id="chk-bank-capture-target">
                             Auto-Capture MM2 Target
                         </label>
@@ -126,8 +152,10 @@
                 <div class="synth-card-header">Hardware & MIDI Settings</div>
                 <div class="synth-card-body" style="padding: 10px;">
                     <div id="midi-permission-banner" class="midi-permission-banner" style="display: none;"></div>
-                    <div class="midi-reconnect-bar" style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;">
-                        <button class="btn btn-sm btn-primary" id="btn-reconnect-midi" title="Scan and reconnect Web MIDI devices">🔄 Scan / Reconnect MIDI Devices</button>
+                    <div class="midi-reconnect-bar"
+                        style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;">
+                        <button class="btn btn-sm btn-primary" id="btn-reconnect-midi"
+                            title="Scan and reconnect Web MIDI devices">🔄 Scan / Reconnect MIDI Devices</button>
                         <span id="midi-permission-text" class="setting-desc" style="margin: 0;"></span>
                     </div>
 
@@ -167,8 +195,11 @@
                     <div class="setting-item">
                         <label class="setting-label" for="settings-undo-levels">Levels of Undo</label>
                         <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="number" id="settings-undo-levels" class="control-input" min="1" max="100" value="20" style="width: 80px; padding: 4px 8px; background: var(--bg-card-inner); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
-                            <span class="setting-desc" style="margin: 0;">Number of undo steps to remember (1–100, default: 20).</span>
+                            <input type="number" id="settings-undo-levels" class="control-input" min="1" max="100"
+                                value="20"
+                                style="width: 80px; padding: 4px 8px; background: var(--bg-card-inner); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 4px;">
+                            <span class="setting-desc" style="margin: 0;">Number of undo steps to remember (1–100,
+                                default: 20).</span>
                         </div>
                     </div>
                 </div>
@@ -188,7 +219,8 @@
         <div class="modal-dialog">
             <div class="modal-header">
                 <div class="modal-title">Duplicate Patch Manager</div>
-                <button class="modal-close-btn" onclick="document.getElementById('duplicate-modal').classList.remove('open')">✕</button>
+                <button class="modal-close-btn"
+                    onclick="document.getElementById('duplicate-modal').classList.remove('open')">✕</button>
             </div>
             <div class="modal-body" id="duplicate-modal-body"></div>
         </div>
@@ -207,10 +239,12 @@
             </p>
             <div class="dialog-options-list">
                 <div class="dialog-option-item">
-                    <strong>Fetch from MM2:</strong> Pulls current hardware settings from your MicroMonsta 2 into this editor before enabling live sync.
+                    <strong>Fetch from MM2:</strong> Pulls current hardware settings from your MicroMonsta 2 into this
+                    editor before enabling live sync.
                 </div>
                 <div class="dialog-option-item">
-                    <strong>Push to MM2:</strong> Transmits this editor's current patch settings into the active hardware layer.
+                    <strong>Push to MM2:</strong> Transmits this editor's current patch settings into the active
+                    hardware layer (A or B).
                 </div>
             </div>
             <form method="dialog" class="dialog-button-bar">
@@ -229,4 +263,5 @@
     <script src="js/ui-controls.js"></script>
     <script src="js/app.js"></script>
 </body>
+
 </html>
