@@ -24,7 +24,20 @@ class App {
         // Live Editing, History & Compare State
         this.undoStack = [];
         this.redoStack = [];
-        this.maxHistory = 50;
+        let savedUndoLevels = 20;
+        if (typeof window !== 'undefined' && window.localStorage) {
+            try {
+                const stored = window.localStorage.getItem('mm2_undo_levels');
+                if (stored !== null) {
+                    const parsed = parseInt(stored, 10);
+                    if (!isNaN(parsed) && parsed >= 1 && parsed <= 100) {
+                        savedUndoLevels = parsed;
+                    }
+                }
+            } catch (e) {}
+        }
+        this.maxHistory = savedUndoLevels;
+        this._activeUndoGroup = null;
         this.originalSnapshotA = this.timbreA.clone();
         this.originalSnapshotB = this.timbreB.clone();
         this.isComparing = false;
@@ -417,16 +430,68 @@ class App {
         this.updateActivePartIndicator();
     }
 
-    onParameterChanged(key, val, recordUndo = true) {
+    setUndoLevels(levels) {
+        let parsed = parseInt(levels, 10);
+        if (isNaN(parsed)) parsed = 20;
+        parsed = Math.min(100, Math.max(1, parsed));
+        this.maxHistory = parsed;
+        if (this.undoStack.length > this.maxHistory) {
+            this.undoStack.splice(0, this.undoStack.length - this.maxHistory);
+        }
+        if (typeof window !== 'undefined' && window.localStorage) {
+            try {
+                window.localStorage.setItem('mm2_undo_levels', this.maxHistory.toString());
+            } catch (e) {}
+        }
+        this.updateUndoRedoUI();
+        const input = typeof document !== 'undefined' ? document.getElementById('settings-undo-levels') : null;
+        if (input && typeof document !== 'undefined' && document.activeElement !== input) {
+            input.value = this.maxHistory;
+        }
+    }
+
+    beginUndoGroup(label = '') {
+        this._activeUndoGroup = {
+            type: 'batch',
+            label,
+            slot: this.activeSlot,
+            changes: []
+        };
+    }
+
+    endUndoGroup() {
+        if (!this._activeUndoGroup) return;
+        const group = this._activeUndoGroup;
+        this._activeUndoGroup = null;
+        if (group.changes.length === 0) return;
+
+        const first = group.changes[0];
+        group.key = first.key;
+        group.prevVal = first.prevVal;
+        group.newVal = first.newVal;
+
+        this.undoStack.push(group);
+        if (this.undoStack.length > this.maxHistory) {
+            this.undoStack.shift();
+        }
+        this.redoStack = [];
+        this.updateUndoRedoUI();
+    }
+
+    onParameterChanged(key, val, meta = {}) {
         if (this.isComparing) {
             this.toggleCompare(false);
         }
 
-        if (recordUndo) {
-            const prevVal = this.activeTimbre.getValue(key);
-            if (prevVal !== val) {
-                this.recordUndo(key, prevVal, val);
-            }
+        const isLegacyBool = typeof meta === 'boolean';
+        const isInterim = !isLegacyBool && !!meta.isInterim;
+        const isFinal = isLegacyBool ? meta : (meta.isFinal ?? !isInterim);
+        const prevVal = (!isLegacyBool && meta.prevVal !== undefined)
+            ? meta.prevVal
+            : this.activeTimbre.getValue(key);
+
+        if (isFinal && prevVal !== val) {
+            this.recordUndo(key, prevVal, val, meta.label);
         }
         this.activeTimbre.setValue(key, val);
         this.refreshVisualizerFor(key);
@@ -459,9 +524,29 @@ class App {
         if (viz && viz.refresh) viz.refresh();
     }
 
-    recordUndo(key, prevVal, newVal) {
+    recordUndo(key, prevVal, newVal, label = '') {
         if (prevVal === newVal) return;
-        this.undoStack.push({ key, prevVal, newVal, slot: this.activeSlot });
+        const actionLabel = label || (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get(key)?.label) || key;
+        const action = {
+            type: 'param',
+            key,
+            prevVal,
+            newVal,
+            slot: this.activeSlot,
+            label: actionLabel
+        };
+
+        if (this._activeUndoGroup) {
+            const existing = this._activeUndoGroup.changes.find(c => c.key === key);
+            if (existing) {
+                existing.newVal = newVal;
+            } else {
+                this._activeUndoGroup.changes.push({ key, prevVal, newVal });
+            }
+            return;
+        }
+
+        this.undoStack.push(action);
         if (this.undoStack.length > this.maxHistory) {
             this.undoStack.shift();
         }
@@ -469,22 +554,57 @@ class App {
         this.updateUndoRedoUI();
     }
 
+    _autoSwitchTabFor(key) {
+        if (!key) return;
+        const oscMatch = key.match(/^OSC(\d)_/);
+        if (oscMatch) {
+            const oscNum = parseInt(oscMatch[1], 10);
+            if (oscNum >= 1 && oscNum <= 3 && this.selectedOsc !== oscNum) {
+                this.selectedOsc = oscNum;
+            }
+        }
+        const envMatch = key.match(/^ENV(\d)_/);
+        if (envMatch) {
+            const envNum = parseInt(envMatch[1], 10);
+            if (envNum >= 1 && envNum <= 3 && this.selectedEnv !== envNum) {
+                this.selectedEnv = envNum;
+            }
+        }
+    }
+
     undo() {
         if (this.undoStack.length === 0) return;
         const action = this.undoStack.pop();
         this.redoStack.push(action);
 
-        if (this.activeSlot !== action.slot) {
+        if (action.slot !== undefined && this.activeSlot !== action.slot) {
             this.selectPart(action.slot);
         }
 
-        this.activeTimbre.setValue(action.key, action.prevVal);
-        if (this.midi.liveSync) {
-            this.midi.sendParameter(action.key, action.prevVal);
+        if (action.changes && Array.isArray(action.changes)) {
+            for (const ch of action.changes) {
+                this.activeTimbre.setValue(ch.key, ch.prevVal);
+                if (this.midi.liveSync) {
+                    this.midi.sendParameter(ch.key, ch.prevVal);
+                }
+                this.refreshVisualizerFor(ch.key);
+            }
+            if (action.changes.length > 0) {
+                this._autoSwitchTabFor(action.changes[0].key);
+            }
+        } else {
+            this.activeTimbre.setValue(action.key, action.prevVal);
+            if (this.midi.liveSync) {
+                this.midi.sendParameter(action.key, action.prevVal);
+            }
+            this.refreshVisualizerFor(action.key);
+            this._autoSwitchTabFor(action.key);
         }
+
         this.refreshEditorControls();
         this.updateUndoRedoUI();
-        this.showNotification(`Undo: ${action.key}`, 'info');
+        const label = action.label || (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get(action.key)?.label) || action.key;
+        this.showNotification(`Undo: ${label}`, 'info');
     }
 
     redo() {
@@ -492,17 +612,34 @@ class App {
         const action = this.redoStack.pop();
         this.undoStack.push(action);
 
-        if (this.activeSlot !== action.slot) {
+        if (action.slot !== undefined && this.activeSlot !== action.slot) {
             this.selectPart(action.slot);
         }
 
-        this.activeTimbre.setValue(action.key, action.newVal);
-        if (this.midi.liveSync) {
-            this.midi.sendParameter(action.key, action.newVal);
+        if (action.changes && Array.isArray(action.changes)) {
+            for (const ch of action.changes) {
+                this.activeTimbre.setValue(ch.key, ch.newVal);
+                if (this.midi.liveSync) {
+                    this.midi.sendParameter(ch.key, ch.newVal);
+                }
+                this.refreshVisualizerFor(ch.key);
+            }
+            if (action.changes.length > 0) {
+                this._autoSwitchTabFor(action.changes[0].key);
+            }
+        } else {
+            this.activeTimbre.setValue(action.key, action.newVal);
+            if (this.midi.liveSync) {
+                this.midi.sendParameter(action.key, action.newVal);
+            }
+            this.refreshVisualizerFor(action.key);
+            this._autoSwitchTabFor(action.key);
         }
+
         this.refreshEditorControls();
         this.updateUndoRedoUI();
-        this.showNotification(`Redo: ${action.key}`, 'info');
+        const label = action.label || (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get(action.key)?.label) || action.key;
+        this.showNotification(`Redo: ${label}`, 'info');
     }
 
     updateUndoRedoUI() {
@@ -1267,6 +1404,13 @@ class App {
         return card;
     }
 
+    createOnChange() {
+        const fn = (key, val, meta) => this.onParameterChanged(key, val, meta);
+        fn.beginGroup = (label) => this.beginUndoGroup(label);
+        fn.endGroup = () => this.endUndoGroup();
+        return fn;
+    }
+
     buildEditorUI() {
         if (typeof document === 'undefined') return;
         const grid = document.getElementById('editor-grid');
@@ -1274,7 +1418,7 @@ class App {
         grid.innerHTML = '';
 
         const timbre = () => this.activeTimbre;
-        const onChange = (key, val) => this.onParameterChanged(key, val);
+        const onChange = this.createOnChange();
 
         // Helper to make a rack row container
         const makeRow = (rowClass = '') => {
@@ -1909,7 +2053,7 @@ class App {
         const tempoContainer = document.getElementById('prog-tempo-container');
         if (tempoContainer) {
             tempoContainer.innerHTML = '';
-            const tempoKnob = createKnob('LAY_TEMPO', () => this.activeTimbre, (k, v) => this.onParameterChanged(k, v), { small: true });
+            const tempoKnob = createKnob('LAY_TEMPO', () => this.activeTimbre, (k, v, m) => this.onParameterChanged(k, v, m), { small: true });
             tempoContainer.appendChild(tempoKnob);
         }
 
@@ -2501,6 +2645,18 @@ class App {
             selChan.onchange = () => {
                 this.midi.baseChannel = parseInt(selChan.value, 10);
                 this.midi.saveSettings();
+            };
+        }
+
+        const undoInput = document.getElementById('settings-undo-levels');
+        if (undoInput) {
+            undoInput.value = this.maxHistory;
+            undoInput.onchange = () => this.setUndoLevels(undoInput.value);
+            undoInput.oninput = () => {
+                const val = parseInt(undoInput.value, 10);
+                if (!isNaN(val) && val >= 1 && val <= 100) {
+                    this.setUndoLevels(val);
+                }
             };
         }
     }

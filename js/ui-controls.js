@@ -224,6 +224,9 @@ function pasteSectionFromClipboard(targetType, targetIndex, program, onChangeCal
     if (!def) return false;
     const dstParams = def.getParams(targetIndex);
 
+    if (onChangeCallback && onChangeCallback.beginGroup) {
+        onChangeCallback.beginGroup(`Paste ${targetType.toUpperCase()} ${targetIndex}`);
+    }
     for (const [role, val] of Object.entries(currentSectionClipboard.data)) {
         const dstKey = dstParams[role];
         if (dstKey) {
@@ -231,9 +234,13 @@ function pasteSectionFromClipboard(targetType, targetIndex, program, onChangeCal
             if (targetType === 'osc' && role === 'algo' && targetIndex === 1 && clampedVal > 15) {
                 clampedVal = 15;
             }
+            const prevVal = program.getValue(dstKey);
             program.setValue(dstKey, clampedVal);
-            if (onChangeCallback) onChangeCallback(dstKey, clampedVal);
+            if (onChangeCallback) onChangeCallback(dstKey, clampedVal, { isFinal: true, prevVal });
         }
+    }
+    if (onChangeCallback && onChangeCallback.endGroup) {
+        onChangeCallback.endGroup();
     }
     return true;
 }
@@ -247,6 +254,9 @@ function copySection(sourceType, sourceIndex, targetType, targetIndex, program, 
     const srcParams = def.getParams(sourceIndex);
     const dstParams = def.getParams(targetIndex);
 
+    if (onChangeCallback && onChangeCallback.beginGroup) {
+        onChangeCallback.beginGroup(`Copy ${sourceType.toUpperCase()} ${sourceIndex}->${targetIndex}`);
+    }
     for (const [role, srcKey] of Object.entries(srcParams)) {
         const dstKey = dstParams[role];
         if (dstKey && srcKey) {
@@ -254,9 +264,13 @@ function copySection(sourceType, sourceIndex, targetType, targetIndex, program, 
             if (sourceType === 'osc' && role === 'algo' && targetIndex === 1 && val > 15) {
                 val = 15;
             }
+            const prevVal = program.getValue(dstKey);
             program.setValue(dstKey, val);
-            if (onChangeCallback) onChangeCallback(dstKey, val);
+            if (onChangeCallback) onChangeCallback(dstKey, val, { isFinal: true, prevVal });
         }
+    }
+    if (onChangeCallback && onChangeCallback.endGroup) {
+        onChangeCallback.endGroup();
     }
     return true;
 }
@@ -266,13 +280,21 @@ function resetSectionToInit(sectionType, sectionIndex, program, onChangeCallback
     const def = SECTION_DEFINITIONS[sectionType];
     if (!def || !program) return;
     const params = def.getParams(sectionIndex);
+
+    if (onChangeCallback && onChangeCallback.beginGroup) {
+        onChangeCallback.beginGroup(`Reset ${sectionType.toUpperCase()} ${sectionIndex}`);
+    }
     for (const paramKey of Object.values(params)) {
         const pDef = PARAM_MAP.get(paramKey);
         if (pDef) {
             const defVal = pDef.default ?? 0;
+            const prevVal = program.getValue(paramKey);
             program.setValue(paramKey, defVal);
-            if (onChangeCallback) onChangeCallback(paramKey, defVal);
+            if (onChangeCallback) onChangeCallback(paramKey, defVal, { isFinal: true, prevVal });
         }
+    }
+    if (onChangeCallback && onChangeCallback.endGroup) {
+        onChangeCallback.endGroup();
     }
 }
 
@@ -281,9 +303,17 @@ function randomizeSection(sectionType, sectionIndex, program, onChangeCallback) 
     const def = SECTION_DEFINITIONS[sectionType];
     if (!def || !def.randomize || !program) return;
     const randomized = def.randomize(program, sectionIndex);
+
+    if (onChangeCallback && onChangeCallback.beginGroup) {
+        onChangeCallback.beginGroup(`Randomize ${sectionType.toUpperCase()} ${sectionIndex}`);
+    }
     for (const [paramKey, val] of Object.entries(randomized)) {
+        const prevVal = program.getValue(paramKey);
         program.setValue(paramKey, val);
-        if (onChangeCallback) onChangeCallback(paramKey, val);
+        if (onChangeCallback) onChangeCallback(paramKey, val, { isFinal: true, prevVal });
+    }
+    if (onChangeCallback && onChangeCallback.endGroup) {
+        onChangeCallback.endGroup();
     }
 }
 
@@ -476,7 +506,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         if (prog && newVal !== prog.getValue(paramKey)) {
             prog.setValue(paramKey, newVal);
             updateVisual();
-            if (onChangeCallback) onChangeCallback(paramKey, newVal);
+            if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: startVal });
         }
     }
 
@@ -486,11 +516,19 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         dialWrap.classList.remove('active');
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
+
+        const prog = getProg();
+        const finalVal = prog ? prog.getValue(paramKey) : startVal;
+        if (finalVal !== startVal && onChangeCallback) {
+            onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: startVal });
+        }
     }
 
     canvas.addEventListener('pointerdown', onPointerDown);
 
-    // Mouse wheel support
+    // Mouse wheel support with debounced commit
+    let wheelTimer = null;
+    let wheelStartVal = null;
     container.addEventListener('wheel', (e) => {
         e.preventDefault();
         const step = (e.shiftKey || e.ctrlKey) ? 1 : Math.max(1, Math.round(range / 64));
@@ -498,12 +536,23 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         const prog = getProg();
         if (prog) {
             let cur = prog.getValue(paramKey);
+            if (wheelStartVal === null) {
+                wheelStartVal = cur;
+            }
             let newVal = Math.min(Math.max(cur + dir * step, min), max);
             if (newVal !== cur) {
                 prog.setValue(paramKey, newVal);
                 updateVisual();
-                if (onChangeCallback) onChangeCallback(paramKey, newVal);
+                if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: wheelStartVal });
             }
+            clearTimeout(wheelTimer);
+            wheelTimer = setTimeout(() => {
+                const finalVal = prog.getValue(paramKey);
+                if (wheelStartVal !== null && finalVal !== wheelStartVal && onChangeCallback) {
+                    onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: wheelStartVal });
+                }
+                wheelStartVal = null;
+            }, 350);
         }
     }, { passive: false });
 
@@ -512,9 +561,12 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         const defVal = def.default ?? (isBipolar ? (def.offset ?? min) : min);
         const prog = getProg();
         if (prog) {
-            prog.setValue(paramKey, defVal);
-            updateVisual();
-            if (onChangeCallback) onChangeCallback(paramKey, defVal);
+            const curVal = prog.getValue(paramKey);
+            if (curVal !== defVal) {
+                prog.setValue(paramKey, defVal);
+                updateVisual();
+                if (onChangeCallback) onChangeCallback(paramKey, defVal, { isFinal: true, prevVal: curVal });
+            }
         }
     }
 
@@ -530,39 +582,65 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         resetToDefault();
     });
 
-    // Hover / Focus Keyboard Stepping (+ / -, Arrow keys)
+    // Hover / Focus Keyboard Stepping (+ / -, Arrow keys) with debounced commit
+    let keyTimer = null;
+    let keyStartVal = null;
     container.addEventListener('keydown', (e) => {
         const prog = getProg();
         if (!prog) return;
 
         if (['ArrowUp', 'ArrowRight', '+', '='].includes(e.key)) {
             e.preventDefault();
+            if (keyStartVal === null) keyStartVal = prog.getValue(paramKey);
             const step = (e.shiftKey || e.ctrlKey) ? 1 : Math.max(1, Math.round(range / 64));
             let newVal = Math.min(max, prog.getValue(paramKey) + step);
             if (newVal !== prog.getValue(paramKey)) {
                 prog.setValue(paramKey, newVal);
                 updateVisual();
-                if (onChangeCallback) onChangeCallback(paramKey, newVal);
+                if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: keyStartVal });
+                clearTimeout(keyTimer);
+                keyTimer = setTimeout(() => {
+                    const finalVal = prog.getValue(paramKey);
+                    if (keyStartVal !== null && finalVal !== keyStartVal && onChangeCallback) {
+                        onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: keyStartVal });
+                    }
+                    keyStartVal = null;
+                }, 350);
             }
         } else if (['ArrowDown', 'ArrowLeft', '-', '_'].includes(e.key)) {
             e.preventDefault();
+            if (keyStartVal === null) keyStartVal = prog.getValue(paramKey);
             const step = (e.shiftKey || e.ctrlKey) ? 1 : Math.max(1, Math.round(range / 64));
             let newVal = Math.max(min, prog.getValue(paramKey) - step);
             if (newVal !== prog.getValue(paramKey)) {
                 prog.setValue(paramKey, newVal);
                 updateVisual();
-                if (onChangeCallback) onChangeCallback(paramKey, newVal);
+                if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: keyStartVal });
+                clearTimeout(keyTimer);
+                keyTimer = setTimeout(() => {
+                    const finalVal = prog.getValue(paramKey);
+                    if (keyStartVal !== null && finalVal !== keyStartVal && onChangeCallback) {
+                        onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: keyStartVal });
+                    }
+                    keyStartVal = null;
+                }, 350);
             }
         } else if (e.key === 'Home') {
             e.preventDefault();
-            prog.setValue(paramKey, min);
-            updateVisual();
-            if (onChangeCallback) onChangeCallback(paramKey, min);
+            const cur = prog.getValue(paramKey);
+            if (cur !== min) {
+                prog.setValue(paramKey, min);
+                updateVisual();
+                if (onChangeCallback) onChangeCallback(paramKey, min, { isFinal: true, prevVal: cur });
+            }
         } else if (e.key === 'End') {
             e.preventDefault();
-            prog.setValue(paramKey, max);
-            updateVisual();
-            if (onChangeCallback) onChangeCallback(paramKey, max);
+            const cur = prog.getValue(paramKey);
+            if (cur !== max) {
+                prog.setValue(paramKey, max);
+                updateVisual();
+                if (onChangeCallback) onChangeCallback(paramKey, max, { isFinal: true, prevVal: cur });
+            }
         }
     });
 
@@ -596,9 +674,9 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
                 }
                 parsed = Math.min(Math.max(parsed, min), max);
                 const currentProg = getProg();
-                if (currentProg) {
+                if (currentProg && parsed !== curVal) {
                     currentProg.setValue(paramKey, parsed);
-                    if (onChangeCallback) onChangeCallback(paramKey, parsed);
+                    if (onChangeCallback) onChangeCallback(paramKey, parsed, { isFinal: true, prevVal: curVal });
                 }
             }
             updateVisual();
@@ -675,7 +753,7 @@ function createToggleButton(paramKey, program, onChangeCallback) {
             const next = current === 1 ? 0 : 1;
             prog.setValue(paramKey, next);
             updateVisual();
-            if (onChangeCallback) onChangeCallback(paramKey, next);
+            if (onChangeCallback) onChangeCallback(paramKey, next, { isFinal: true, prevVal: current });
         }
     });
 
@@ -770,25 +848,48 @@ function createBipolarSlider(paramKey, program, onChangeCallback, opts = {}) {
         }
     }
 
+    let startVal = null;
+
+    rangeInput.addEventListener('pointerdown', () => {
+        const prog = getProg();
+        startVal = prog ? prog.getValue(paramKey) : parseInt(rangeInput.value, 10);
+    });
+
     rangeInput.addEventListener('input', () => {
         const val = parseInt(rangeInput.value, 10);
         const prog = getProg();
+        if (startVal === null) {
+            startVal = prog ? prog.getValue(paramKey) : val;
+        }
         if (prog) {
             prog.setValue(paramKey, val);
         }
         updateVisual();
-        if (onChangeCallback) onChangeCallback(paramKey, val);
+        if (onChangeCallback) onChangeCallback(paramKey, val, { isInterim: true, prevVal: startVal });
     });
+
+    const commitSlider = () => {
+        const val = parseInt(rangeInput.value, 10);
+        if (startVal !== null && val !== startVal) {
+            if (onChangeCallback) onChangeCallback(paramKey, val, { isFinal: true, prevVal: startVal });
+        }
+        startVal = null;
+    };
+    rangeInput.addEventListener('change', commitSlider);
+    rangeInput.addEventListener('pointerup', commitSlider);
 
     // Reset to center (0) on double-click or right-click
     const resetCenter = (e) => {
         e.preventDefault();
         const prog = getProg();
         if (prog) {
-            prog.setValue(paramKey, center);
+            const curVal = prog.getValue(paramKey);
+            if (curVal !== center) {
+                prog.setValue(paramKey, center);
+                updateVisual();
+                if (onChangeCallback) onChangeCallback(paramKey, center, { isFinal: true, prevVal: curVal });
+            }
         }
-        updateVisual();
-        if (onChangeCallback) onChangeCallback(paramKey, center);
     };
     rangeInput.addEventListener('dblclick', resetCenter);
     rangeInput.addEventListener('contextmenu', resetCenter);
@@ -812,11 +913,12 @@ function createBipolarSlider(paramKey, program, onChangeCallback, opts = {}) {
             let typed = parseInt(input.value, 10);
             if (isNaN(typed)) typed = currentDiff;
             const targetVal = Math.min(max, Math.max(min, typed + center));
-            if (prog) {
+            const curVal = currentDiff + center;
+            if (prog && targetVal !== curVal) {
                 prog.setValue(paramKey, targetVal);
+                if (onChangeCallback) onChangeCallback(paramKey, targetVal, { isFinal: true, prevVal: curVal });
             }
             updateVisual();
-            if (onChangeCallback) onChangeCallback(paramKey, targetVal);
         };
 
         input.addEventListener('blur', commit);
@@ -892,10 +994,12 @@ function createSelect(paramKey, program, onChangeCallback) {
     select.addEventListener('change', () => {
         const val = parseInt(select.value, 10);
         const prog = getProg();
+        let curVal = val;
         if (prog) {
+            curVal = prog.getValue(paramKey);
             prog.setValue(paramKey, val);
         }
-        if (onChangeCallback) onChangeCallback(paramKey, val);
+        if (onChangeCallback) onChangeCallback(paramKey, val, { isFinal: true, prevVal: curVal });
     });
 
     container.appendChild(label);
@@ -1532,10 +1636,18 @@ function createArpSequencer(program, onChangeCallback) {
     clearBtn.addEventListener('click', () => {
         const prog = getProg();
         if (prog) {
+            if (onChangeCallback && onChangeCallback.beginGroup) {
+                onChangeCallback.beginGroup('Clear Arp Pattern');
+            }
             for (let i = 1; i <= 16; i++) {
                 const numStr = i.toString().padStart(2, '0');
-                prog.setValue(`ARP_PTN_STEP${numStr}`, 1); // Off
-                if (onChangeCallback) onChangeCallback(`ARP_PTN_STEP${numStr}`, 1);
+                const key = `ARP_PTN_STEP${numStr}`;
+                const prev = prog.getValue(key);
+                prog.setValue(key, 1); // Off
+                if (onChangeCallback) onChangeCallback(key, 1, { isFinal: true, prevVal: prev });
+            }
+            if (onChangeCallback && onChangeCallback.endGroup) {
+                onChangeCallback.endGroup();
             }
         }
         container.refresh();
@@ -1550,10 +1662,18 @@ function createArpSequencer(program, onChangeCallback) {
     fillBtn.addEventListener('click', () => {
         const prog = getProg();
         if (prog) {
+            if (onChangeCallback && onChangeCallback.beginGroup) {
+                onChangeCallback.beginGroup('Fill Arp Pattern');
+            }
             for (let i = 1; i <= 16; i++) {
                 const numStr = i.toString().padStart(2, '0');
-                prog.setValue(`ARP_PTN_STEP${numStr}`, 0); // Auto
-                if (onChangeCallback) onChangeCallback(`ARP_PTN_STEP${numStr}`, 0);
+                const key = `ARP_PTN_STEP${numStr}`;
+                const prev = prog.getValue(key);
+                prog.setValue(key, 0); // Auto
+                if (onChangeCallback) onChangeCallback(key, 0, { isFinal: true, prevVal: prev });
+            }
+            if (onChangeCallback && onChangeCallback.endGroup) {
+                onChangeCallback.endGroup();
             }
         }
         container.refresh();
@@ -1569,16 +1689,26 @@ function createArpSequencer(program, onChangeCallback) {
         const pool = [0, 0, 1, 2, 4, 5, 6, 11]; // Musical probability weights
         const prog = getProg();
         if (prog) {
+            if (onChangeCallback && onChangeCallback.beginGroup) {
+                onChangeCallback.beginGroup('Randomize Arp Pattern');
+            }
             for (let i = 1; i <= 16; i++) {
                 const numStr = i.toString().padStart(2, '0');
+                const stepKey = `ARP_PTN_STEP${numStr}`;
+                const modKey = `ARP_PTN_STEP_MOD${numStr}`;
                 const stepMode = pool[Math.floor(Math.random() * pool.length)];
                 const modLvl = Math.floor(Math.random() * 4);
-                prog.setValue(`ARP_PTN_STEP${numStr}`, stepMode);
-                prog.setValue(`ARP_PTN_STEP_MOD${numStr}`, modLvl);
+                const prevStep = prog.getValue(stepKey);
+                const prevMod = prog.getValue(modKey);
+                prog.setValue(stepKey, stepMode);
+                prog.setValue(modKey, modLvl);
                 if (onChangeCallback) {
-                    onChangeCallback(`ARP_PTN_STEP${numStr}`, stepMode);
-                    onChangeCallback(`ARP_PTN_STEP_MOD${numStr}`, modLvl);
+                    onChangeCallback(stepKey, stepMode, { isFinal: true, prevVal: prevStep });
+                    onChangeCallback(modKey, modLvl, { isFinal: true, prevVal: prevMod });
                 }
+            }
+            if (onChangeCallback && onChangeCallback.endGroup) {
+                onChangeCallback.endGroup();
             }
         }
         container.refresh();
@@ -1656,20 +1786,22 @@ function createArpSequencer(program, onChangeCallback) {
         modeBtn.addEventListener('change', () => {
             const prog = getProg();
             if (prog) {
+                const prev = prog.getValue(stepKey);
                 const next = parseInt(modeBtn.value, 10);
                 prog.setValue(stepKey, next);
                 updateStep();
-                if (onChangeCallback) onChangeCallback(stepKey, next);
+                if (onChangeCallback) onChangeCallback(stepKey, next, { isFinal: true, prevVal: prev });
             }
         });
 
         modBtn.addEventListener('change', () => {
             const prog = getProg();
             if (prog) {
+                const prev = prog.getValue(modKey);
                 const next = parseInt(modBtn.value, 10);
                 prog.setValue(modKey, next);
                 updateStep();
-                if (onChangeCallback) onChangeCallback(modKey, next);
+                if (onChangeCallback) onChangeCallback(modKey, next, { isFinal: true, prevVal: prev });
             }
         });
 
