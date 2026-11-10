@@ -30,8 +30,9 @@ class App {
         this.isComparing = false;
         this.compareSavedProgram = null;
 
-        // Sound Design Solo & Mute States & Active Oscillator Tab
+        // Sound Design Solo & Mute States & Active Tabs
         this.selectedOsc = 1; // Active oscillator tab (1, 2, or 3)
+        this.selectedEnv = 1; // Active envelope tab (1, 2, or 3)
         this.soloState = { osc1: false, osc2: false, osc3: false, noise: false };
         this.muteState = { osc1: false, osc2: false, osc3: false, noise: false };
         this.savedMixerLevels = null;
@@ -169,10 +170,24 @@ class App {
                     }
                 }
 
+                // If it's an envelope parameter, switch active envelope tab if needed
+                const envMatch = paramKey.match(/^ENV(\d)_/);
+                let envNum = envMatch ? parseInt(envMatch[1], 10) : 0;
+                if (!envNum && (paramKey === 'ENV1_VCA_VEL_SENS' || paramKey === 'ENV1_RESET')) envNum = 1;
+                if (!envNum && (paramKey === 'ENV2_FLT_VEL_SENS' || paramKey === 'ENV2_RESET')) envNum = 2;
+                if (!envNum && paramKey === 'ENV3_RESET') envNum = 3;
+                if (envNum && this.selectedEnv !== envNum) {
+                    this.selectedEnv = envNum;
+                }
+
                 if (typeof document !== 'undefined') {
                     if (oscMatch) {
                         const oscCard = document.querySelector('.osc-unified-card');
                         if (oscCard && oscCard.refresh) oscCard.refresh();
+                    }
+                    if (envNum) {
+                        const envCard = document.querySelector('.env-unified-card');
+                        if (envCard && envCard.refresh) envCard.refresh();
                     }
 
                     // Refresh the specific control in the UI
@@ -185,8 +200,8 @@ class App {
 
                     // Refresh visualizers if affected
                     if (paramKey.startsWith('ENV')) {
-                        const envNum = paramKey.charAt(3);
-                        const viz = document.querySelector(`.adsr-visualizer[data-env="${envNum}"]`);
+                        const eNum = paramKey.charAt(3);
+                        const viz = document.querySelector(`.adsr-visualizer[data-env="${eNum}"]`);
                         if (viz && viz.refresh) viz.refresh();
                     } else if (paramKey.startsWith('FILTER_') || paramKey === 'DRIVE_VOICE') {
                         const viz = document.querySelector('.filter-visualizer');
@@ -645,6 +660,12 @@ class App {
         const seq = document.getElementById('arp-seq-wrapper');
         if (seq && seq.refresh) seq.refresh();
 
+        const oscCard = document.querySelector('.osc-unified-card');
+        if (oscCard && oscCard.refresh) oscCard.refresh();
+
+        const envCard = document.querySelector('.env-unified-card');
+        if (envCard && envCard.refresh) envCard.refresh();
+
         this.updateActivePartIndicator();
         this.updateTimbralModeUI();
         this.updateUndoRedoUI();
@@ -939,6 +960,277 @@ class App {
         return card;
     }
 
+    createEnvelopePanel(timbre, onChange) {
+        if (typeof document === 'undefined') return document.createElement('div');
+
+        const card = document.createElement('div');
+        card.className = 'synth-card env-unified-card';
+        card.setAttribute('data-section-type', 'env');
+        card.setAttribute('data-section-index', this.selectedEnv);
+
+        const head = document.createElement('div');
+        head.className = 'synth-card-header';
+
+        // Title Group with Drag Handle
+        const titleGroup = document.createElement('div');
+        titleGroup.className = 'card-title-group';
+        titleGroup.setAttribute('draggable', 'true');
+        titleGroup.title = 'Drag active envelope settings to another section';
+
+        const dragHandle = document.createElement('span');
+        dragHandle.className = 'card-drag-handle';
+        dragHandle.textContent = '⋮⋮';
+
+        const titleText = document.createElement('span');
+        titleText.className = 'card-title-text';
+        titleText.textContent = 'Envelopes';
+
+        titleGroup.appendChild(dragHandle);
+        titleGroup.appendChild(titleText);
+        head.appendChild(titleGroup);
+
+        // Segmented Tabs: Env 1, Env 2, Env 3
+        const tabGroup = document.createElement('div');
+        tabGroup.className = 'env-tabs-group';
+
+        const tabButtons = [];
+        const envLabels = ['Env 1 (Amp)', 'Env 2 (Filter)', 'Env 3 (Mod)'];
+
+        for (let i = 1; i <= 3; i++) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `btn-env-tab ${this.selectedEnv === i ? 'active' : ''}`;
+            btn.setAttribute('data-env', i);
+            btn.textContent = `Env ${i}`;
+
+            // Drag-and-drop drop target to copy directly between envelopes
+            btn.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                btn.classList.add('tab-drop-hover');
+            });
+            btn.addEventListener('dragleave', (e) => {
+                e.stopPropagation();
+                btn.classList.remove('tab-drop-hover');
+            });
+            btn.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                btn.classList.remove('tab-drop-hover');
+                try {
+                    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                    if (data && data.kind === 'section' && data.sectionType === 'env') {
+                        copySection('env', data.sectionIndex, 'env', i, timbre(), onChange);
+                        card.refresh();
+                        this.showNotification(`Copied Env ${data.sectionIndex} to Env ${i}`, 'success');
+                    }
+                } catch (err) {}
+            });
+
+            btn.onclick = () => {
+                this.selectedEnv = i;
+                updateEnvSelection();
+            };
+
+            tabGroup.appendChild(btn);
+            tabButtons.push(btn);
+        }
+        head.appendChild(tabGroup);
+
+        // Section Menu Button (Copy, Paste, Reset, Randomize)
+        const menuWrap = document.createElement('div');
+        menuWrap.className = 'card-menu-wrap';
+
+        const menuBtn = document.createElement('button');
+        menuBtn.type = 'button';
+        menuBtn.className = 'card-menu-btn';
+        menuBtn.textContent = '⋯';
+        menuBtn.title = 'Envelope Actions (Copy, Paste, Reset, Randomize)';
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'card-dropdown-menu';
+
+        const updateMenuState = () => {
+            const clip = getSectionClipboard();
+            const canPaste = clip && clip.sectionType === 'env';
+            dropdown.innerHTML = `
+                <div class="menu-item" data-action="copy">📋 Copy Env ${card.getAttribute('data-section-index')}</div>
+                <div class="menu-item ${canPaste ? '' : 'disabled'}" data-action="paste">📥 Paste Section</div>
+                <div class="menu-item" data-action="reset">↺ Reset to Defaults</div>
+                <div class="menu-item" data-action="randomize">🎲 Smart Randomize</div>
+            `;
+
+            dropdown.querySelector('[data-action="copy"]').onclick = (e) => {
+                e.stopPropagation();
+                const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
+                copySectionToClipboard('env', curIdx, timbre());
+                closeMenu();
+                this.showNotification(`Copied Envelope ${curIdx} to clipboard`, 'info');
+            };
+
+            const pasteEl = dropdown.querySelector('[data-action="paste"]');
+            if (canPaste) {
+                pasteEl.onclick = (e) => {
+                    e.stopPropagation();
+                    const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
+                    pasteSectionFromClipboard('env', curIdx, timbre(), onChange);
+                    closeMenu();
+                    card.refresh();
+                    this.showNotification(`Pasted into Envelope ${curIdx}`, 'success');
+                };
+            }
+
+            dropdown.querySelector('[data-action="reset"]').onclick = (e) => {
+                e.stopPropagation();
+                const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
+                resetSectionToInit('env', curIdx, timbre(), onChange);
+                closeMenu();
+                card.refresh();
+                this.showNotification(`Reset Envelope ${curIdx} to defaults`, 'info');
+            };
+
+            dropdown.querySelector('[data-action="randomize"]').onclick = (e) => {
+                e.stopPropagation();
+                const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
+                randomizeSection('env', curIdx, timbre(), onChange);
+                closeMenu();
+                card.refresh();
+                this.showNotification(`Randomized Envelope ${curIdx}`, 'success');
+            };
+        };
+
+        const closeMenu = () => {
+            dropdown.classList.remove('open');
+            window.removeEventListener('click', closeMenu);
+        };
+
+        menuBtn.onclick = (e) => {
+            e.stopPropagation();
+            const isOpen = dropdown.classList.contains('open');
+            document.querySelectorAll('.card-dropdown-menu.open').forEach(m => m.classList.remove('open'));
+            if (!isOpen) {
+                updateMenuState();
+                dropdown.classList.add('open');
+                window.addEventListener('click', closeMenu);
+            }
+        };
+
+        menuWrap.appendChild(menuBtn);
+        menuWrap.appendChild(dropdown);
+        head.appendChild(menuWrap);
+
+        // Drag start on header title
+        titleGroup.addEventListener('dragstart', (e) => {
+            const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
+            e.dataTransfer.setData('text/plain', JSON.stringify({
+                kind: 'section',
+                sectionType: 'env',
+                sectionIndex: curIdx
+            }));
+            card.classList.add('is-dragging');
+        });
+
+        titleGroup.addEventListener('dragend', () => {
+            card.classList.remove('is-dragging');
+        });
+
+        card.appendChild(head);
+
+        // Body
+        const body = document.createElement('div');
+        body.className = 'synth-card-body';
+
+        // Top: Row of all 3 ADSR visualizer curves side-by-side
+        const graphsRow = document.createElement('div');
+        graphsRow.className = 'adsr-graphs-row';
+
+        const graphCards = [];
+        for (let i = 1; i <= 3; i++) {
+            const gCard = document.createElement('div');
+            gCard.className = `adsr-graph-card ${this.selectedEnv === i ? 'active' : ''}`;
+            gCard.setAttribute('data-env', i);
+            gCard.title = `Click to edit ${envLabels[i - 1]}`;
+
+            const gLabel = document.createElement('div');
+            gLabel.className = 'adsr-graph-label';
+            gLabel.textContent = envLabels[i - 1];
+
+            const viz = createADSRVisualizer(i, timbre);
+            gCard.appendChild(gLabel);
+            gCard.appendChild(viz);
+
+            gCard.onclick = () => {
+                this.selectedEnv = i;
+                updateEnvSelection();
+            };
+
+            graphsRow.appendChild(gCard);
+            graphCards.push(gCard);
+        }
+        body.appendChild(graphsRow);
+
+        // Bottom: Panes for selected envelope controls
+        const panes = [];
+        for (let i = 1; i <= 3; i++) {
+            const pane = document.createElement('div');
+            pane.className = `env-pane env-pane-${i}`;
+            pane.style.display = (this.selectedEnv === i) ? 'flex' : 'none';
+
+            const knobs = document.createElement('div');
+            knobs.className = 'knob-row';
+            knobs.appendChild(createKnob(`ENV${i}_ATK`, timbre, onChange));
+            knobs.appendChild(createKnob(`ENV${i}_DCY`, timbre, onChange));
+            knobs.appendChild(createKnob(`ENV${i}_SUS`, timbre, onChange));
+            knobs.appendChild(createKnob(`ENV${i}_REL`, timbre, onChange));
+            if (i === 1) knobs.appendChild(createKnob('ENV1_VCA_VEL_SENS', timbre, onChange));
+            if (i === 2) knobs.appendChild(createKnob('ENV2_FLT_VEL_SENS', timbre, onChange));
+            pane.appendChild(knobs);
+
+            pane.appendChild(createSelect(`ENV${i}_RESET`, timbre, onChange));
+
+            body.appendChild(pane);
+            panes.push(pane);
+        }
+
+        card.appendChild(body);
+
+        const updateEnvSelection = () => {
+            const idx = this.selectedEnv;
+            card.setAttribute('data-section-index', idx);
+
+            tabButtons.forEach((btn, i) => {
+                btn.classList.toggle('active', i + 1 === idx);
+            });
+
+            graphCards.forEach((gc, i) => {
+                gc.classList.toggle('active', i + 1 === idx);
+            });
+
+            panes.forEach((pane, i) => {
+                const active = (i + 1 === idx);
+                pane.style.display = active ? 'flex' : 'none';
+                if (active) {
+                    pane.querySelectorAll('[data-param]').forEach(el => {
+                        if (el.refresh) el.refresh();
+                    });
+                }
+            });
+        };
+
+        card.refresh = () => {
+            card.querySelectorAll('[data-param]').forEach(el => {
+                if (el.refresh) el.refresh();
+            });
+            card.querySelectorAll('.adsr-visualizer').forEach(v => {
+                if (v.refresh) v.refresh();
+            });
+            updateEnvSelection();
+        };
+
+        updateEnvSelection();
+        return card;
+    }
+
     buildEditorUI() {
         if (typeof document === 'undefined') return;
         const grid = document.getElementById('editor-grid');
@@ -970,7 +1262,7 @@ class App {
         };
 
         // ========================================================
-        // --- ROW 1: SOUND GENERATION (OSCILLATOR 1/2/3) & FILTER ---
+        // --- ROW 1: TOP SYNTHESIS ROW (OSCILLATORS, FILTER, ENVELOPES) ---
         // ========================================================
         const row1 = makeRow('rack-row-1');
         row1.appendChild(this.createOscillatorPanel(timbre, onChange));
@@ -1001,213 +1293,29 @@ class App {
         fltSubKnobs.appendChild(createKnob('FILTER_ENV2', timbre, onChange));
         fltSubKnobs.appendChild(createKnob('FILTER_TRACKING', timbre, onChange));
         fltSubKnobs.appendChild(createKnob('FILTER_FM', timbre, onChange));
+        fltSubKnobs.appendChild(createKnob('DRIVE_VOICE', timbre, onChange));
         flt.body.appendChild(fltSubKnobs);
 
         const mixKnobs = document.createElement('div');
         mixKnobs.className = 'knob-row';
         mixKnobs.appendChild(createKnob('MIX_NOISE', timbre, onChange));
-        mixKnobs.appendChild(createKnob('DRIVE_VOICE', timbre, onChange));
         mixKnobs.appendChild(createKnob('LAY_MASTER_VOLUME', timbre, onChange));
         flt.body.appendChild(mixKnobs);
         row1.appendChild(flt.card);
 
+        // ENVELOPES (1–3 Unified)
+        row1.appendChild(this.createEnvelopePanel(timbre, onChange));
+
         grid.appendChild(row1);
 
         // ========================================================
-        // --- ROW 2: VOICE PERFORMANCE & EFFECTS/PAN ---
+        // --- ROW 2: MODULATION ROW (LFOS, MATH, KNOBS & MOD MATRIX) ---
         // ========================================================
         const row2 = makeRow('rack-row-2');
 
-        // VOICE PERFORMANCE
-        const vceCard = makeSection('Voice Performance');
-        const vceSelects = document.createElement('div');
-        vceSelects.className = 'select-row';
-        vceSelects.appendChild(createSelect('VCE_MODE', timbre, onChange));
-        vceSelects.appendChild(createSelect('VCE_UNISON', timbre, onChange));
-        vceCard.body.appendChild(vceSelects);
-
-        const vceKnobs1 = document.createElement('div');
-        vceKnobs1.className = 'knob-row';
-        vceKnobs1.appendChild(createKnob('VCE_DETUNE', timbre, onChange));
-        vceKnobs1.appendChild(createKnob('VCE_DETUNE_OSC', timbre, onChange));
-        vceKnobs1.appendChild(createKnob('VCE_GLIDE', timbre, onChange));
-        vceCard.body.appendChild(vceKnobs1);
-
-        const vceKnobs2 = document.createElement('div');
-        vceKnobs2.className = 'knob-row';
-        vceKnobs2.appendChild(createKnob('VCE_PBRANGE_DOWN', timbre, onChange));
-        vceKnobs2.appendChild(createKnob('VCE_PBRANGE_UP', timbre, onChange));
-        vceCard.body.appendChild(vceKnobs2);
-        row2.appendChild(vceCard.card);
-
-        // EFFECTS & PAN
-        const fxSec = createSectionCard('Effects & Pan', 'fx', 1, timbre, onChange);
-        const panRow = document.createElement('div');
-        panRow.className = 'pan-strip';
-        panRow.appendChild(createSelect('PAN_MODE', timbre, onChange));
-        panRow.appendChild(createKnob('VCE_PAN_SPREAD', timbre, onChange));
-        panRow.appendChild(createSelect('IFX_CHORUS', timbre, onChange));
-        fxSec.body.appendChild(panRow);
-
-        const fxPanels = document.createElement('div');
-        fxPanels.className = 'fx-panels-row';
-
-        // Delay
-        const dlyBox = document.createElement('div');
-        dlyBox.className = 'fx-sub-panel';
-        dlyBox.innerHTML = '<div class="fx-sub-title">Delay</div>';
-        dlyBox.appendChild(createSelect('DLY_TYPE', timbre, onChange));
-        const dlyKnobs = document.createElement('div');
-        dlyKnobs.className = 'knob-row';
-        dlyKnobs.appendChild(createKnob('DLY_PARAM1', timbre, onChange));
-        dlyKnobs.appendChild(createKnob('DLY_PARAM2', timbre, onChange));
-        dlyKnobs.appendChild(createKnob('DLY_PARAM3', timbre, onChange));
-        dlyBox.appendChild(dlyKnobs);
-        fxPanels.appendChild(dlyBox);
-
-        // Reverb
-        const revBox = document.createElement('div');
-        revBox.className = 'fx-sub-panel';
-        revBox.innerHTML = '<div class="fx-sub-title">Reverb</div>';
-        const revKnobs = document.createElement('div');
-        revKnobs.className = 'knob-row';
-        revKnobs.appendChild(createKnob('REV_PARAM1', timbre, onChange));
-        revKnobs.appendChild(createKnob('REV_PARAM2', timbre, onChange));
-        revKnobs.appendChild(createKnob('REV_PARAM3', timbre, onChange));
-        revBox.appendChild(revKnobs);
-        fxPanels.appendChild(revBox);
-
-        fxSec.body.appendChild(fxPanels);
-
-        const eqRow = document.createElement('div');
-        eqRow.className = 'knob-row';
-        eqRow.appendChild(createKnob('IFX_EQ', timbre, onChange));
-        eqRow.appendChild(createKnob('MORPH_KNOB', timbre, onChange));
-        fxSec.body.appendChild(eqRow);
-
-        row2.appendChild(fxSec.card);
-        grid.appendChild(row2);
-
-        // ========================================================
-        // --- ROW 3: MODULATION MATRIX (12 SLOTS) & MACRO KNOBS ---
-        // ========================================================
-        const row3 = makeRow('rack-row-3');
-
-        // Matrix
-        const mtxSec = createSectionCard('Modulation Matrix (12 Slots)', 'mtx_group', 1, timbre, onChange);
-        const mtxGrid = document.createElement('div');
-        mtxGrid.className = 'matrix-grid-monsta';
-
-        for (let m = 1; m <= 12; m++) {
-            const slotBox = document.createElement('div');
-            slotBox.className = 'matrix-slot';
-
-            const slotHead = document.createElement('div');
-            slotHead.className = 'matrix-slot-head';
-
-            const slotTitle = document.createElement('span');
-            slotTitle.className = 'matrix-slot-title';
-            slotTitle.textContent = `Slot ${m}`;
-
-            const btnClear = document.createElement('button');
-            btnClear.className = 'btn-clear-slot';
-            btnClear.title = 'Clear this matrix routing';
-            btnClear.textContent = '✕';
-            btnClear.onclick = () => {
-                timbre.setValue(`MTX${m}_SRC`, 0);
-                timbre.setValue(`MTX${m}_DST`, 0);
-                timbre.setValue(`MTX${m}_AMT`, 128); // 0 bipolar
-                onChange(`MTX${m}_SRC`, 0);
-                onChange(`MTX${m}_DST`, 0);
-                onChange(`MTX${m}_AMT`, 128);
-                slotBox.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
-            };
-
-            slotHead.appendChild(slotTitle);
-            slotHead.appendChild(btnClear);
-            slotBox.appendChild(slotHead);
-
-            const slotContent = document.createElement('div');
-            slotContent.className = 'matrix-slot-content';
-
-            const selBox = document.createElement('div');
-            selBox.className = 'matrix-selects';
-            selBox.appendChild(createSelect(`MTX${m}_SRC`, timbre, onChange));
-            selBox.appendChild(createSelect(`MTX${m}_DST`, timbre, onChange));
-
-            slotContent.appendChild(selBox);
-            slotContent.appendChild(createKnob(`MTX${m}_AMT`, timbre, onChange, { small: true }));
-            slotBox.appendChild(slotContent);
-            mtxGrid.appendChild(slotBox);
-        }
-        mtxSec.body.appendChild(mtxGrid);
-        row3.appendChild(mtxSec.card);
-
-        // Hardware Macro Knobs & Encoder Assignments
-        const macroSec = makeSection('Hardware Knobs & Macro Assignments');
-        const macroRow = document.createElement('div');
-        macroRow.className = 'macro-grid';
-
-        const potGroup = document.createElement('div');
-        potGroup.className = 'macro-group';
-        potGroup.innerHTML = '<div class="macro-group-title">Physical Pots (F, Q, M)</div>';
-        const potSelects = document.createElement('div');
-        potSelects.className = 'select-row';
-        potSelects.appendChild(createSelect('LAY_POT1_ASSIGN', timbre, onChange));
-        potSelects.appendChild(createSelect('LAY_POT2_ASSIGN', timbre, onChange));
-        potSelects.appendChild(createSelect('LAY_POT3_ASSIGN', timbre, onChange));
-        potGroup.appendChild(potSelects);
-        macroRow.appendChild(potGroup);
-
-        const encGroup = document.createElement('div');
-        encGroup.className = 'macro-group';
-        encGroup.innerHTML = '<div class="macro-group-title">Display Encoders (1–4)</div>';
-        const encSelects = document.createElement('div');
-        encSelects.className = 'select-row';
-        encSelects.appendChild(createSelect('LAY_ENC1_ASSIGN', timbre, onChange));
-        encSelects.appendChild(createSelect('LAY_ENC2_ASSIGN', timbre, onChange));
-        encSelects.appendChild(createSelect('LAY_ENC3_ASSIGN', timbre, onChange));
-        encSelects.appendChild(createSelect('LAY_ENC4_ASSIGN', timbre, onChange));
-        encGroup.appendChild(encSelects);
-        macroRow.appendChild(encGroup);
-
-        macroSec.body.appendChild(macroRow);
-        row3.appendChild(macroSec.card);
-
-        grid.appendChild(row3);
-
-        // ========================================================
-        // --- ROW 4: ENVELOPES (1-3), LFOS (1-3), MATH OPERATORS ---
-        // ========================================================
-        const row4 = makeRow('rack-row-4');
-
-        // Envelopes Group Card
-        const envGroupCard = makeSection('Envelopes (1–3)');
-        const envGrid = document.createElement('div');
-        envGrid.className = 'env-multi-grid';
-
-        for (let e = 1; e <= 3; e++) {
-            const isAmp = e === 1;
-            const isFlt = e === 2;
-            const title = isAmp ? 'Env 1 (Amp / VCA)' : (isFlt ? 'Env 2 (Filter)' : 'Env 3 (Modulation)');
-            const subEnv = createSectionCard(title, 'env', e, timbre, onChange, { className: 'env-sub-card' });
-            subEnv.body.appendChild(createADSRVisualizer(e, timbre));
-
-            const eKnobs = document.createElement('div');
-            eKnobs.className = 'knob-row';
-            eKnobs.appendChild(createKnob(`ENV${e}_ATK`, timbre, onChange));
-            eKnobs.appendChild(createKnob(`ENV${e}_DCY`, timbre, onChange));
-            eKnobs.appendChild(createKnob(`ENV${e}_SUS`, timbre, onChange));
-            eKnobs.appendChild(createKnob(`ENV${e}_REL`, timbre, onChange));
-            if (isAmp) eKnobs.appendChild(createKnob('ENV1_VCA_VEL_SENS', timbre, onChange));
-            if (isFlt) eKnobs.appendChild(createKnob('ENV2_FLT_VEL_SENS', timbre, onChange));
-            subEnv.body.appendChild(eKnobs);
-
-            subEnv.body.appendChild(createSelect(`ENV${e}_RESET`, timbre, onChange));
-            envGrid.appendChild(subEnv.card);
-        }
-        envGroupCard.body.appendChild(envGrid);
-        row4.appendChild(envGroupCard.card);
+        // Left Column: LFOs + Math + Knobs
+        const modLeftCol = document.createElement('div');
+        modLeftCol.className = 'mod-left-column';
 
         // LFOs Group Card
         const lfoGroupCard = makeSection('Low Frequency Oscillators (1–3)');
@@ -1232,17 +1340,17 @@ class App {
             lfoGrid.appendChild(subLfo.card);
         }
         lfoGroupCard.body.appendChild(lfoGrid);
-        row4.appendChild(lfoGroupCard.card);
+        modLeftCol.appendChild(lfoGroupCard.card);
 
         // Math Operators Card
-        const mathSec = makeSection('Math Operators (Lag & Multipliers)');
+        const mathSec = makeSection('Math Operators');
         const mathGrid = document.createElement('div');
         mathGrid.className = 'math-operators-grid';
 
         // Lag Generator
         const lagBox = document.createElement('div');
         lagBox.className = 'math-sub-panel';
-        lagBox.innerHTML = '<div class="fx-sub-title">Lag Generator (Portamento/Glide)</div>';
+        lagBox.innerHTML = '<div class="fx-sub-title">Lag Generator (Glide)</div>';
         lagBox.appendChild(createSelect('LAG_SRC1', timbre, onChange));
         const lagKnobs = document.createElement('div');
         lagKnobs.className = 'knob-row';
@@ -1253,7 +1361,7 @@ class App {
         // Multipliers 1 & 2
         const mult1Box = document.createElement('div');
         mult1Box.className = 'math-sub-panel';
-        mult1Box.innerHTML = '<div class="fx-sub-title">Multiplier 1 (Src A × Src B)</div>';
+        mult1Box.innerHTML = '<div class="fx-sub-title">Multiplier 1 (A × B)</div>';
         const mult1Sels = document.createElement('div');
         mult1Sels.className = 'select-row';
         mult1Sels.appendChild(createSelect('MULT_A1', timbre, onChange));
@@ -1263,7 +1371,7 @@ class App {
 
         const mult2Box = document.createElement('div');
         mult2Box.className = 'math-sub-panel';
-        mult2Box.innerHTML = '<div class="fx-sub-title">Multiplier 2 (Src A × Src B)</div>';
+        mult2Box.innerHTML = '<div class="fx-sub-title">Multiplier 2 (A × B)</div>';
         const mult2Sels = document.createElement('div');
         mult2Sels.className = 'select-row';
         mult2Sels.appendChild(createSelect('MULT_A2', timbre, onChange));
@@ -1272,14 +1380,238 @@ class App {
         mathGrid.appendChild(mult2Box);
 
         mathSec.body.appendChild(mathGrid);
-        row4.appendChild(mathSec.card);
+        modLeftCol.appendChild(mathSec.card);
 
-        grid.appendChild(row4);
+        // Knobs Card (Hardware Pots & Encoders F, Q, M, E1, E2, E3, E4)
+        const knobsSec = makeSection('Knobs');
+        const knobsGrid = document.createElement('div');
+        knobsGrid.className = 'knobs-assign-grid';
+        knobsGrid.appendChild(createSelect('LAY_POT1_ASSIGN', timbre, onChange));
+        knobsGrid.appendChild(createSelect('LAY_POT2_ASSIGN', timbre, onChange));
+        knobsGrid.appendChild(createSelect('LAY_POT3_ASSIGN', timbre, onChange));
+        knobsGrid.appendChild(createSelect('LAY_ENC1_ASSIGN', timbre, onChange));
+        knobsGrid.appendChild(createSelect('LAY_ENC2_ASSIGN', timbre, onChange));
+        knobsGrid.appendChild(createSelect('LAY_ENC3_ASSIGN', timbre, onChange));
+        knobsGrid.appendChild(createSelect('LAY_ENC4_ASSIGN', timbre, onChange));
+        knobsSec.body.appendChild(knobsGrid);
+        modLeftCol.appendChild(knobsSec.card);
+
+        row2.appendChild(modLeftCol);
+
+        // Right Column: Modulation Matrix (12 single-row slots)
+        const mtxSec = createSectionCard('Modulation Matrix (12 Slots)', 'mtx_group', 1, timbre, onChange);
+        const mtxList = document.createElement('div');
+        mtxList.className = 'matrix-slots-list';
+
+        for (let m = 1; m <= 12; m++) {
+            const slotRow = document.createElement('div');
+            slotRow.className = 'matrix-slot-row';
+            slotRow.setAttribute('data-slot', m);
+
+            // Drag badge
+            const badge = document.createElement('div');
+            badge.className = 'matrix-slot-badge';
+            badge.setAttribute('draggable', 'true');
+            badge.textContent = `${m}`;
+            badge.title = `Slot ${m} • Drag to copy to another slot`;
+
+            badge.addEventListener('dragstart', (e) => {
+                e.dataTransfer.setData('text/plain', JSON.stringify({
+                    kind: 'section',
+                    sectionType: 'mtx',
+                    sectionIndex: m
+                }));
+                slotRow.classList.add('is-dragging');
+            });
+            badge.addEventListener('dragend', () => {
+                slotRow.classList.remove('is-dragging');
+            });
+
+            // Drop target on slot row
+            slotRow.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                slotRow.classList.add('slot-drop-hover');
+            });
+            slotRow.addEventListener('dragleave', () => {
+                slotRow.classList.remove('slot-drop-hover');
+            });
+            slotRow.addEventListener('drop', (e) => {
+                e.preventDefault();
+                slotRow.classList.remove('slot-drop-hover');
+                try {
+                    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                    if (data && data.kind === 'section' && data.sectionType === 'mtx') {
+                        copySection('mtx', data.sectionIndex, 'mtx', m, timbre(), onChange);
+                        slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                        this.showNotification(`Copied Slot ${data.sectionIndex} to Slot ${m}`, 'success');
+                    }
+                } catch (err) {}
+            });
+
+            const srcSelect = createSelect(`MTX${m}_SRC`, timbre, onChange);
+            srcSelect.classList.add('mtx-select-src');
+
+            const arrow = document.createElement('span');
+            arrow.className = 'matrix-arrow';
+            arrow.textContent = '→';
+
+            const dstSelect = createSelect(`MTX${m}_DST`, timbre, onChange);
+            dstSelect.classList.add('mtx-select-dst');
+
+            const amtSlider = createBipolarSlider(`MTX${m}_AMT`, timbre, onChange, { label: 'Amt' });
+
+            // Action buttons: Copy, Paste, Clear
+            const actions = document.createElement('div');
+            actions.className = 'matrix-slot-actions';
+
+            const btnCopy = document.createElement('button');
+            btnCopy.type = 'button';
+            btnCopy.className = 'btn-slot-icon';
+            btnCopy.title = `Copy Slot ${m} routing to clipboard`;
+            btnCopy.textContent = '📋';
+            btnCopy.onclick = () => {
+                copySectionToClipboard('mtx', m, timbre());
+                this.showNotification(`Copied Matrix Slot ${m} to clipboard`, 'info');
+            };
+
+            const btnPaste = document.createElement('button');
+            btnPaste.type = 'button';
+            btnPaste.className = 'btn-slot-icon';
+            btnPaste.title = `Paste into Slot ${m}`;
+            btnPaste.textContent = '📥';
+            btnPaste.onclick = () => {
+                const res = pasteSectionFromClipboard('mtx', m, timbre(), onChange);
+                if (res) {
+                    slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                    this.showNotification(`Pasted into Matrix Slot ${m}`, 'success');
+                } else {
+                    this.showNotification('Clipboard is empty or contains non-matrix data', 'warning');
+                }
+            };
+
+            const btnClear = document.createElement('button');
+            btnClear.type = 'button';
+            btnClear.className = 'btn-slot-icon btn-slot-clear';
+            btnClear.title = `Clear Slot ${m}`;
+            btnClear.textContent = '✕';
+            btnClear.onclick = () => {
+                resetSectionToInit('mtx', m, timbre(), onChange);
+                slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+            };
+
+            actions.appendChild(btnCopy);
+            actions.appendChild(btnPaste);
+            actions.appendChild(btnClear);
+
+            slotRow.appendChild(badge);
+            slotRow.appendChild(srcSelect);
+            slotRow.appendChild(arrow);
+            slotRow.appendChild(dstSelect);
+            slotRow.appendChild(amtSlider);
+            slotRow.appendChild(actions);
+
+            mtxList.appendChild(slotRow);
+        }
+        mtxSec.body.appendChild(mtxList);
+        row2.appendChild(mtxSec.card);
+
+        grid.appendChild(row2);
 
         // ========================================================
-        // --- ROW 5: ARPEGGIATOR & CHORDER ENGINES ---
+        // --- ROW 3: VOICE PERFORMANCE & EFFECTS ---
         // ========================================================
-        const row5 = makeRow('rack-row-5');
+        const row3 = makeRow('rack-row-3');
+
+        // VOICE PERFORMANCE
+        const vceCard = makeSection('Voice Performance');
+        const vceSelects = document.createElement('div');
+        vceSelects.className = 'select-row';
+        vceSelects.appendChild(createSelect('VCE_MODE', timbre, onChange));
+        vceSelects.appendChild(createSelect('VCE_UNISON', timbre, onChange));
+        vceCard.body.appendChild(vceSelects);
+
+        const vceKnobs1 = document.createElement('div');
+        vceKnobs1.className = 'knob-row';
+        vceKnobs1.appendChild(createKnob('VCE_DETUNE', timbre, onChange));
+        vceKnobs1.appendChild(createKnob('VCE_DETUNE_OSC', timbre, onChange));
+        vceKnobs1.appendChild(createKnob('VCE_GLIDE', timbre, onChange));
+        vceCard.body.appendChild(vceKnobs1);
+
+        const vceKnobs2 = document.createElement('div');
+        vceKnobs2.className = 'knob-row';
+        vceKnobs2.appendChild(createKnob('VCE_PBRANGE_DOWN', timbre, onChange));
+        vceKnobs2.appendChild(createKnob('VCE_PBRANGE_UP', timbre, onChange));
+        vceCard.body.appendChild(vceKnobs2);
+        row3.appendChild(vceCard.card);
+
+        // EFFECTS (6 Coequal Groups: Pan, Chorus, Delay, Reverb, EQ, Morph)
+        const fxSec = createSectionCard('Effects & Space', 'fx', 1, timbre, onChange);
+        const fxGrid = document.createElement('div');
+        fxGrid.className = 'fx-coequal-grid';
+
+        // 1. Pan Group
+        const panBox = document.createElement('div');
+        panBox.className = 'fx-sub-panel';
+        panBox.innerHTML = '<div class="fx-sub-title">Pan</div>';
+        panBox.appendChild(createSelect('PAN_MODE', timbre, onChange));
+        panBox.appendChild(createKnob('VCE_PAN_SPREAD', timbre, onChange));
+        fxGrid.appendChild(panBox);
+
+        // 2. Chorus Group
+        const chorusBox = document.createElement('div');
+        chorusBox.className = 'fx-sub-panel';
+        chorusBox.innerHTML = '<div class="fx-sub-title">Chorus</div>';
+        chorusBox.appendChild(createSelect('IFX_CHORUS', timbre, onChange));
+        fxGrid.appendChild(chorusBox);
+
+        // 3. Delay Group
+        const dlyBox = document.createElement('div');
+        dlyBox.className = 'fx-sub-panel';
+        dlyBox.innerHTML = '<div class="fx-sub-title">Delay</div>';
+        dlyBox.appendChild(createSelect('DLY_TYPE', timbre, onChange));
+        const dlyKnobs = document.createElement('div');
+        dlyKnobs.className = 'knob-row';
+        dlyKnobs.appendChild(createKnob('DLY_PARAM1', timbre, onChange));
+        dlyKnobs.appendChild(createKnob('DLY_PARAM2', timbre, onChange));
+        dlyKnobs.appendChild(createKnob('DLY_PARAM3', timbre, onChange));
+        dlyBox.appendChild(dlyKnobs);
+        fxGrid.appendChild(dlyBox);
+
+        // 4. Reverb Group
+        const revBox = document.createElement('div');
+        revBox.className = 'fx-sub-panel';
+        revBox.innerHTML = '<div class="fx-sub-title">Reverb</div>';
+        const revKnobs = document.createElement('div');
+        revKnobs.className = 'knob-row';
+        revKnobs.appendChild(createKnob('REV_PARAM1', timbre, onChange));
+        revKnobs.appendChild(createKnob('REV_PARAM2', timbre, onChange));
+        revKnobs.appendChild(createKnob('REV_PARAM3', timbre, onChange));
+        revBox.appendChild(revKnobs);
+        fxGrid.appendChild(revBox);
+
+        // 5. EQ Group
+        const eqBox = document.createElement('div');
+        eqBox.className = 'fx-sub-panel';
+        eqBox.innerHTML = '<div class="fx-sub-title">EQ</div>';
+        eqBox.appendChild(createKnob('IFX_EQ', timbre, onChange));
+        fxGrid.appendChild(eqBox);
+
+        // 6. Morph Group
+        const morphBox = document.createElement('div');
+        morphBox.className = 'fx-sub-panel';
+        morphBox.innerHTML = '<div class="fx-sub-title">Morph</div>';
+        morphBox.appendChild(createKnob('MORPH_KNOB', timbre, onChange));
+        fxGrid.appendChild(morphBox);
+
+        fxSec.body.appendChild(fxGrid);
+        row3.appendChild(fxSec.card);
+
+        grid.appendChild(row3);
+
+        // ========================================================
+        // --- ROW 4: ARPEGGIATOR & CHORDER ENGINES ---
+        // ========================================================
+        const row4 = makeRow('rack-row-4');
 
         // Arpeggiator & 16-Step Pattern Sequencer
         const arpSec = makeSection('Arpeggiator & 16-Step Pattern Sequencer');
@@ -1305,7 +1637,7 @@ class App {
         const arpSeq = createArpSequencer(timbre, onChange);
         arpSeq.id = 'arp-seq-wrapper';
         arpSec.body.appendChild(arpSeq);
-        row5.appendChild(arpSec.card);
+        row4.appendChild(arpSec.card);
 
         // FW v3 Scaler & Chorder Engine
         const chordSec = makeSection('FW v3 Chorder & Scaler Engine');
@@ -1328,9 +1660,9 @@ class App {
         }
         chordDegreesBox.appendChild(degreesRow);
         chordSec.body.appendChild(chordDegreesBox);
-        row5.appendChild(chordSec.card);
+        row4.appendChild(chordSec.card);
 
-        grid.appendChild(row5);
+        grid.appendChild(row4);
 
         // Hook up Program Bar controls
         this.setupProgramBar();

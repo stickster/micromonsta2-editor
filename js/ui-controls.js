@@ -11,7 +11,6 @@
  * - Interactive Audition Keyboard (Mouse, Touch, and Computer Keyboard QWERTY playback)
  */
 
-
 /**
  * Resolves a program reference which can be either an MM2Program instance or a dynamic provider function
  */
@@ -579,11 +578,230 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
 }
 
 /**
+ * Creates a toggle button bound to a binary On/Off parameter
+ */
+function createToggleButton(paramKey, program, onChangeCallback) {
+    const def = PARAM_MAP.get(paramKey);
+    if (!def) return document.createElement('div');
+
+    const container = document.createElement('div');
+    container.className = 'toggle-container';
+    container.setAttribute('data-param', paramKey);
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'btn-param-toggle';
+    button.title = `${def.title || def.label || paramKey} (Click to toggle)`;
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'toggle-label';
+    labelSpan.textContent = def.label || paramKey;
+
+    const stateSpan = document.createElement('span');
+    stateSpan.className = 'toggle-state-badge';
+
+    button.appendChild(labelSpan);
+    button.appendChild(stateSpan);
+
+    const getProg = () => resolveProgram(program);
+
+    function updateVisual() {
+        const prog = getProg();
+        if (prog) {
+            const val = prog.getValue(paramKey);
+            const isOn = val === 1;
+            button.setAttribute('aria-pressed', isOn ? 'true' : 'false');
+            if (isOn) {
+                button.classList.add('active');
+                stateSpan.textContent = 'ON';
+            } else {
+                button.classList.remove('active');
+                stateSpan.textContent = 'OFF';
+            }
+        }
+    }
+
+    button.addEventListener('click', (e) => {
+        e.preventDefault();
+        const prog = getProg();
+        if (prog) {
+            const current = prog.getValue(paramKey);
+            const next = current === 1 ? 0 : 1;
+            prog.setValue(paramKey, next);
+            updateVisual();
+            if (onChangeCallback) onChangeCallback(paramKey, next);
+        }
+    });
+
+    container.appendChild(button);
+    container.refresh = updateVisual;
+    updateVisual();
+
+    return container;
+}
+
+/**
+ * Creates a bidirectional bipolar slider (-99 to +99) bound to a parameter (e.g. MTX AMT)
+ */
+function createBipolarSlider(paramKey, program, onChangeCallback, opts = {}) {
+    const def = PARAM_MAP.get(paramKey);
+    if (!def) return document.createElement('div');
+
+    const container = document.createElement('div');
+    container.className = 'bipolar-slider-container';
+    container.setAttribute('data-param', paramKey);
+
+    const min = def.min ?? 29;
+    const max = def.max ?? 227;
+    const center = def.offset ?? 128;
+    const defaultVal = def.default ?? center;
+
+    const label = document.createElement('span');
+    label.className = 'bipolar-label';
+    label.textContent = opts.label ?? (def.label || 'Amt');
+    label.title = def.title || paramKey;
+
+    const trackWrap = document.createElement('div');
+    trackWrap.className = 'bipolar-track-wrap';
+
+    const track = document.createElement('div');
+    track.className = 'bipolar-track';
+
+    const zeroMark = document.createElement('div');
+    zeroMark.className = 'bipolar-zero-mark';
+    track.appendChild(zeroMark);
+
+    const fillBar = document.createElement('div');
+    fillBar.className = 'bipolar-fill';
+    track.appendChild(fillBar);
+
+    const rangeInput = document.createElement('input');
+    rangeInput.type = 'range';
+    rangeInput.className = 'bipolar-range';
+    rangeInput.min = min;
+    rangeInput.max = max;
+    rangeInput.step = 1;
+    rangeInput.value = defaultVal;
+    rangeInput.title = `${def.title || paramKey} • Double/right-click to center (0)`;
+
+    trackWrap.appendChild(track);
+    trackWrap.appendChild(rangeInput);
+
+    const valDisplay = document.createElement('span');
+    valDisplay.className = 'bipolar-val editable';
+    valDisplay.title = 'Click to type exact value (-99 to +99)';
+
+    container.appendChild(label);
+    container.appendChild(trackWrap);
+    container.appendChild(valDisplay);
+
+    const getProg = () => resolveProgram(program);
+
+    function updateVisual() {
+        const prog = getProg();
+        const val = prog ? prog.getValue(paramKey) : defaultVal;
+        rangeInput.value = val;
+
+        const diff = val - center;
+        valDisplay.textContent = diff > 0 ? `+${diff}` : `${diff}`;
+
+        if (diff > 0) {
+            const posRatio = Math.min(1, Math.max(0, (val - center) / (max - center)));
+            const widthPct = posRatio * 50;
+            fillBar.style.left = '50%';
+            fillBar.style.width = `${widthPct}%`;
+            fillBar.className = 'bipolar-fill fill-pos';
+        } else if (diff < 0) {
+            const negRatio = Math.min(1, Math.max(0, (center - val) / (center - min)));
+            const widthPct = negRatio * 50;
+            fillBar.style.left = `${50 - widthPct}%`;
+            fillBar.style.width = `${widthPct}%`;
+            fillBar.className = 'bipolar-fill fill-neg';
+        } else {
+            fillBar.style.left = '50%';
+            fillBar.style.width = '0%';
+            fillBar.className = 'bipolar-fill';
+        }
+    }
+
+    rangeInput.addEventListener('input', () => {
+        const val = parseInt(rangeInput.value, 10);
+        const prog = getProg();
+        if (prog) {
+            prog.setValue(paramKey, val);
+        }
+        updateVisual();
+        if (onChangeCallback) onChangeCallback(paramKey, val);
+    });
+
+    // Reset to center (0) on double-click or right-click
+    const resetCenter = (e) => {
+        e.preventDefault();
+        const prog = getProg();
+        if (prog) {
+            prog.setValue(paramKey, center);
+        }
+        updateVisual();
+        if (onChangeCallback) onChangeCallback(paramKey, center);
+    };
+    rangeInput.addEventListener('dblclick', resetCenter);
+    rangeInput.addEventListener('contextmenu', resetCenter);
+
+    // Click-to-type inline editing
+    valDisplay.addEventListener('click', () => {
+        const prog = getProg();
+        const currentDiff = (prog ? prog.getValue(paramKey) : defaultVal) - center;
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'bipolar-val-input';
+        input.min = min - center;
+        input.max = max - center;
+        input.value = currentDiff;
+        valDisplay.textContent = '';
+        valDisplay.appendChild(input);
+        input.focus();
+        input.select();
+
+        const commit = () => {
+            let typed = parseInt(input.value, 10);
+            if (isNaN(typed)) typed = currentDiff;
+            const targetVal = Math.min(max, Math.max(min, typed + center));
+            if (prog) {
+                prog.setValue(paramKey, targetVal);
+            }
+            updateVisual();
+            if (onChangeCallback) onChangeCallback(paramKey, targetVal);
+        };
+
+        input.addEventListener('blur', commit);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                updateVisual();
+            }
+        });
+    });
+
+    container.refresh = updateVisual;
+    updateVisual();
+
+    return container;
+}
+
+/**
  * Creates a select dropdown bound to a parameter
  */
 function createSelect(paramKey, program, onChangeCallback) {
     const def = PARAM_MAP.get(paramKey);
     if (!def) return document.createElement('div');
+
+    // Auto-promote binary On/Off dropdowns to clean toggle buttons
+    if (def.values && def.values.length === 2 && def.values[0] === 'Off' && def.values[1] === 'On') {
+        return createToggleButton(paramKey, program, onChangeCallback);
+    }
 
     const container = document.createElement('div');
     container.className = 'select-container';

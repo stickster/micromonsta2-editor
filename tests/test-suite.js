@@ -811,6 +811,166 @@ async function runAllTests(logger = console.log) {
         logger(`  Error: ${e.message}`);
     }
 
+    logger('\n--- [17] Mixed-Case Patch Names, Toggle Buttons & Bipolar Sliders Tests ---');
+    try {
+        // 1. Mixed-case patch name preservation
+        const prog = new MM2Program();
+        prog.name = 'MemHurts';
+        assertEqual(prog.name, 'MemHurts', 'Patch name preserves mixed-case ("MemHurts")');
+
+        const roundtrip = new MM2Program(prog.toSysEx());
+        assertEqual(roundtrip.name, 'MemHurts', 'Roundtrip serialization preserves mixed-case name');
+
+        // 2. Binary On/Off toggle button
+        const toggle = createToggleButton('ARP_OFF_ON', prog);
+        const btn = toggle.querySelector('button');
+        assert(btn !== null, 'createToggleButton creates a button element');
+        assertEqual(btn.getAttribute('aria-pressed'), 'false', 'Initial toggle aria-pressed is false');
+
+        // Click to toggle ON
+        btn.click();
+        assertEqual(prog.getValue('ARP_OFF_ON'), 1, 'Clicking toggle sets parameter to 1');
+        assertEqual(btn.getAttribute('aria-pressed'), 'true', 'Active toggle aria-pressed is true');
+        assert(btn.classList.contains('active'), 'Active toggle has "active" CSS class');
+
+        // Click to toggle OFF
+        btn.click();
+        assertEqual(prog.getValue('ARP_OFF_ON'), 0, 'Clicking toggle again sets parameter to 0');
+        assertEqual(btn.getAttribute('aria-pressed'), 'false', 'Inactive toggle aria-pressed is false');
+
+        // 3. Auto-promote binary On/Off dropdowns in createSelect
+        const selectContainer = createSelect('ARP_LATCH', prog);
+        const selectBtn = selectContainer.querySelector('button.btn-param-toggle');
+        assert(selectBtn !== null, 'createSelect automatically returns a toggle button for binary On/Off params');
+
+        // 4. Bipolar slider (-99 to +99)
+        prog.setValue('MTX1_AMT', 128);
+        const slider = createBipolarSlider('MTX1_AMT', prog);
+        const range = slider.querySelector('input[type="range"]');
+        const valDisplay = slider.querySelector('.bipolar-val');
+        assert(range !== null, 'createBipolarSlider contains range input');
+        assertEqual(Number(range.value), 128, 'Bipolar slider center is 128 (0)');
+        assertEqual(valDisplay.textContent, '0', 'Center value displays as 0');
+
+        // Set to maximum (+99)
+        range.value = '227';
+        range.dispatchEvent(new Event('input'));
+        assertEqual(prog.getValue('MTX1_AMT'), 227, 'Bipolar slider sets parameter to 227');
+        assertEqual(valDisplay.textContent, '+99', 'Value displays as +99');
+
+        // Set to minimum (-99)
+        range.value = '29';
+        range.dispatchEvent(new Event('input'));
+        assertEqual(prog.getValue('MTX1_AMT'), 29, 'Bipolar slider sets parameter to 29');
+        assertEqual(valDisplay.textContent, '-99', 'Value displays as -99');
+
+        // Reset to center on double-click
+        range.dispatchEvent(new Event('dblclick'));
+        assertEqual(prog.getValue('MTX1_AMT'), 128, 'Double-click resets bipolar slider to center 128 (0)');
+        assertEqual(valDisplay.textContent, '0', 'Value readout resets to 0');
+
+        // 5. Modulation Matrix slot clipboard and init reset
+        prog.setValue('MTX1_SRC', 5);
+        prog.setValue('MTX1_DST', 10);
+        prog.setValue('MTX1_AMT', 175);
+
+        const clip = copySectionToClipboard('mtx', 1, prog);
+        assert(clip !== null, 'copySectionToClipboard succeeds for mtx slot 1');
+        assertEqual(clip.data.src, 5, 'Clipboard captured MTX1 source');
+        assertEqual(clip.data.dst, 10, 'Clipboard captured MTX1 dest');
+        assertEqual(clip.data.amt, 175, 'Clipboard captured MTX1 amount');
+
+        const pasteOk = pasteSectionFromClipboard('mtx', 2, prog);
+        assert(pasteOk, 'pasteSectionFromClipboard succeeds for mtx slot 2');
+        assertEqual(prog.getValue('MTX2_SRC'), 5, 'Slot 2 received source');
+        assertEqual(prog.getValue('MTX2_DST'), 10, 'Slot 2 received dest');
+        assertEqual(prog.getValue('MTX2_AMT'), 175, 'Slot 2 received amount');
+
+        resetSectionToInit('mtx', 2, prog);
+        assertEqual(prog.getValue('MTX2_SRC'), 0, 'Reset slot 2 source to 0');
+        assertEqual(prog.getValue('MTX2_DST'), 0, 'Reset slot 2 dest to 0');
+        assertEqual(prog.getValue('MTX2_AMT'), 128, 'Reset slot 2 amount to 128 (0 bipolar)');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+    }
+
+    logger('\n--- [18] Unified Envelope Panel & Web MIDI Disconnect/Reconnect Detection Tests ---');
+    try {
+        const app = new App();
+        const midi = app.midi;
+
+        // 1. Unified Envelope Selection
+        assertEqual(app.selectedEnv, 1, 'App initializes with selectedEnv = 1');
+        app.selectedEnv = 2;
+        assertEqual(app.selectedEnv, 2, 'selectedEnv updates to 2');
+
+        // Auto-switch to Env 3 on incoming hardware parameter tweak
+        // ENV3_ATK is NRPN 59
+        midi.onMidiMessage({ data: new Uint8Array([0xBE, 99, 0]), timeStamp: Date.now() });
+        midi.onMidiMessage({ data: new Uint8Array([0xBE, 98, 59]), timeStamp: Date.now() });
+        midi.onMidiMessage({ data: new Uint8Array([0xBE, 6, 88]), timeStamp: Date.now() });
+        assertEqual(app.activeTimbre.getValue('ENV3_ATK'), 88, 'Incoming NRPN 59 updated activeTimbre ENV3_ATK to 88');
+        assertEqual(app.selectedEnv, 3, 'Auto-switched active envelope tab to Env 3 on hardware tweak');
+
+        // 2. Web MIDI Device Disconnect and Reconnect Detection
+        const mockIn = {
+            id: 'mm2-in-port',
+            name: 'H12MIDI-Pro Port 5',
+            type: 'input',
+            state: 'connected',
+            addEventListener: () => {},
+            removeEventListener: () => {}
+        };
+        const mockOut = {
+            id: 'mm2-out-port',
+            name: 'H12MIDI-Pro Port 5',
+            type: 'output',
+            state: 'connected',
+            send: () => {}
+        };
+
+        midi.midiAccess = {
+            inputs: new Map([[mockIn.id, mockIn]]),
+            outputs: new Map([[mockOut.id, mockOut]])
+        };
+        midi.inPort = mockIn;
+        midi.outPort = mockOut;
+        midi.savedInPortId = mockIn.id;
+        midi.savedInPortName = mockIn.name;
+        midi.savedOutPortId = mockOut.id;
+        midi.savedOutPortName = mockOut.name;
+
+        let disconnectEventFired = false;
+        let reconnectEventFired = false;
+
+        midi.on('connection-lost', (ev) => {
+            if (ev.type === 'input') disconnectEventFired = true;
+        });
+
+        midi.on('connection-restored', (ev) => {
+            if (ev.type === 'input') reconnectEventFired = true;
+        });
+
+        // Simulate device unplug (state === 'disconnected')
+        midi.onStateChange({
+            port: { id: mockIn.id, name: mockIn.name, type: 'input', state: 'disconnected' }
+        });
+
+        assertEqual(midi.inPort, null, 'inPort is set to null on disconnect');
+        assert(disconnectEventFired, 'connection-lost event emitted on port disconnect');
+        assertEqual(midi.savedInPortName, mockIn.name, 'savedInPortName preserved for automatic reconnection');
+
+        // Simulate device re-plug (state === 'connected')
+        midi.onStateChange({
+            port: { id: mockIn.id, name: mockIn.name, type: 'input', state: 'connected' }
+        });
+
+        assert(midi.inPort !== null, 'inPort automatically re-bound on reconnection');
+        assert(reconnectEventFired, 'connection-restored event emitted on port reconnection');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
