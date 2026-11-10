@@ -913,9 +913,43 @@ class App {
             panes.push(pane);
         }
 
-        // Global Oscillator Phase Reset setting at the footer
+        // Global Oscillator Phase Reset & Noise Generator in footer
         const footer = document.createElement('div');
         footer.className = 'osc-footer-strip';
+
+        const noiseGroup = document.createElement('div');
+        noiseGroup.className = 'osc-noise-group';
+        const noiseBadges = document.createElement('div');
+        noiseBadges.className = 'osc-noise-badges';
+
+        const noiseMuteBtn = document.createElement('button');
+        noiseMuteBtn.type = 'button';
+        noiseMuteBtn.className = 'btn-badge-toggle btn-mute' + (this.muteState.noise ? ' active' : '');
+        noiseMuteBtn.textContent = 'M';
+        noiseMuteBtn.title = 'Mute Noise Generator';
+        noiseMuteBtn.onclick = () => {
+            this.muteState.noise = !this.muteState.noise;
+            this.applySoloMute();
+            noiseMuteBtn.classList.toggle('active', this.muteState.noise);
+        };
+
+        const noiseSoloBtn = document.createElement('button');
+        noiseSoloBtn.type = 'button';
+        noiseSoloBtn.className = 'btn-badge-toggle btn-solo' + (this.soloState.noise ? ' active' : '');
+        noiseSoloBtn.textContent = 'S';
+        noiseSoloBtn.title = 'Solo Noise Generator';
+        noiseSoloBtn.onclick = () => {
+            this.soloState.noise = !this.soloState.noise;
+            this.applySoloMute();
+            noiseSoloBtn.classList.toggle('active', this.soloState.noise);
+        };
+
+        noiseBadges.appendChild(noiseMuteBtn);
+        noiseBadges.appendChild(noiseSoloBtn);
+        noiseGroup.appendChild(noiseBadges);
+        noiseGroup.appendChild(createKnob('MIX_NOISE', timbre, onChange, { small: true }));
+
+        footer.appendChild(noiseGroup);
         footer.appendChild(createSelect('OSC_PHASE_RESET', timbre, onChange));
         body.appendChild(footer);
 
@@ -1267,13 +1301,8 @@ class App {
         const row1 = makeRow('rack-row-1');
         row1.appendChild(this.createOscillatorPanel(timbre, onChange));
 
-        // FILTER & MIXER
-        const flt = createSectionCard('Filter & Mixer', 'flt', 1, timbre, onChange, {
-            hasSoloMute: true,
-            soloMuteLabel: 'Noise',
-            onSolo: (s) => { this.soloState.noise = s; this.applySoloMute(); },
-            onMute: (m) => { this.muteState.noise = m; this.applySoloMute(); }
-        });
+        // FILTER
+        const flt = createSectionCard('Filter', 'flt', 1, timbre, onChange);
         flt.body.appendChild(createFilterCurveVisualizer(timbre));
 
         const fltSelects = document.createElement('div');
@@ -1282,25 +1311,22 @@ class App {
         fltSelects.appendChild(createSelect('FILTER_CHARACTER', timbre, onChange));
         flt.body.appendChild(fltSelects);
 
-        const fltMainKnobs = document.createElement('div');
-        fltMainKnobs.className = 'knob-row flt-main-knobs';
-        fltMainKnobs.appendChild(createKnob('FILTER_FREQ', timbre, onChange, { large: true }));
-        fltMainKnobs.appendChild(createKnob('FILTER_RESO', timbre, onChange, { large: true }));
-        flt.body.appendChild(fltMainKnobs);
+        // Filter Knobs — Row 1: Cutoff, Resonance, Tracking, Envelope
+        const fltRow1Knobs = document.createElement('div');
+        fltRow1Knobs.className = 'knob-row flt-main-knobs';
+        fltRow1Knobs.appendChild(createKnob('FILTER_FREQ', timbre, onChange, { large: true }));
+        fltRow1Knobs.appendChild(createKnob('FILTER_RESO', timbre, onChange, { large: true }));
+        fltRow1Knobs.appendChild(createKnob('FILTER_TRACKING', timbre, onChange));
+        fltRow1Knobs.appendChild(createKnob('FILTER_ENV2', timbre, onChange));
+        flt.body.appendChild(fltRow1Knobs);
 
-        const fltSubKnobs = document.createElement('div');
-        fltSubKnobs.className = 'knob-row';
-        fltSubKnobs.appendChild(createKnob('FILTER_ENV2', timbre, onChange));
-        fltSubKnobs.appendChild(createKnob('FILTER_TRACKING', timbre, onChange));
-        fltSubKnobs.appendChild(createKnob('FILTER_FM', timbre, onChange));
-        fltSubKnobs.appendChild(createKnob('DRIVE_VOICE', timbre, onChange));
-        flt.body.appendChild(fltSubKnobs);
-
-        const mixKnobs = document.createElement('div');
-        mixKnobs.className = 'knob-row';
-        mixKnobs.appendChild(createKnob('MIX_NOISE', timbre, onChange));
-        mixKnobs.appendChild(createKnob('LAY_MASTER_VOLUME', timbre, onChange));
-        flt.body.appendChild(mixKnobs);
+        // Filter Knobs — Row 2: FM, Drive, Mix / Volume
+        const fltRow2Knobs = document.createElement('div');
+        fltRow2Knobs.className = 'knob-row';
+        fltRow2Knobs.appendChild(createKnob('FILTER_FM', timbre, onChange));
+        fltRow2Knobs.appendChild(createKnob('DRIVE_VOICE', timbre, onChange));
+        fltRow2Knobs.appendChild(createKnob('LAY_MASTER_VOLUME', timbre, onChange));
+        flt.body.appendChild(fltRow2Knobs);
         row1.appendChild(flt.card);
 
         // ENVELOPES (1–3 Unified)
@@ -1313,7 +1339,7 @@ class App {
         // ========================================================
         const row2 = makeRow('rack-row-2');
 
-        // Left Column: LFOs + Math + Knobs
+        // Left Column: LFOs (1–3) + Math Operators
         const modLeftCol = document.createElement('div');
         modLeftCol.className = 'mod-left-column';
 
@@ -1455,23 +1481,26 @@ class App {
         lfoGroupCard.body.appendChild(lfoGrid);
         modLeftCol.appendChild(lfoGroupCard.card);
 
-        // Math Operators Card
+        // Math Operators Card (Compact 2-column layout: Lag on left, Multipliers stacked on right)
         const mathSec = makeSection('Math Operators');
         const mathGrid = document.createElement('div');
         mathGrid.className = 'math-operators-grid';
 
-        // Lag Generator
+        // Lag Generator (Left column: source select and amount knob side-by-side in horizontal row)
         const lagBox = document.createElement('div');
         lagBox.className = 'math-sub-panel';
         lagBox.innerHTML = '<div class="fx-sub-title">Lag Generator (Glide)</div>';
-        lagBox.appendChild(createSelect('LAG_SRC1', timbre, onChange));
-        const lagKnobs = document.createElement('div');
-        lagKnobs.className = 'knob-row';
-        lagKnobs.appendChild(createKnob('LAG_AMT1', timbre, onChange));
-        lagBox.appendChild(lagKnobs);
+        const lagControls = document.createElement('div');
+        lagControls.className = 'lag-controls-row';
+        lagControls.appendChild(createSelect('LAG_SRC1', timbre, onChange));
+        lagControls.appendChild(createKnob('LAG_AMT1', timbre, onChange));
+        lagBox.appendChild(lagControls);
         mathGrid.appendChild(lagBox);
 
-        // Multipliers 1 & 2
+        // Multipliers 1 & 2 (Right column: vertically stacked in .math-mult-stack)
+        const multStack = document.createElement('div');
+        multStack.className = 'math-mult-stack';
+
         const mult1Box = document.createElement('div');
         mult1Box.className = 'math-sub-panel';
         mult1Box.innerHTML = '<div class="fx-sub-title">Multiplier 1 (A × B)</div>';
@@ -1480,7 +1509,7 @@ class App {
         mult1Sels.appendChild(createSelect('MULT_A1', timbre, onChange));
         mult1Sels.appendChild(createSelect('MULT_B1', timbre, onChange));
         mult1Box.appendChild(mult1Sels);
-        mathGrid.appendChild(mult1Box);
+        multStack.appendChild(mult1Box);
 
         const mult2Box = document.createElement('div');
         mult2Box.className = 'math-sub-panel';
@@ -1490,12 +1519,19 @@ class App {
         mult2Sels.appendChild(createSelect('MULT_A2', timbre, onChange));
         mult2Sels.appendChild(createSelect('MULT_B2', timbre, onChange));
         mult2Box.appendChild(mult2Sels);
-        mathGrid.appendChild(mult2Box);
+        multStack.appendChild(mult2Box);
 
+        mathGrid.appendChild(multStack);
         mathSec.body.appendChild(mathGrid);
         modLeftCol.appendChild(mathSec.card);
 
-        // Knobs Card (Hardware Pots & Encoders F, Q, M, E1, E2, E3, E4)
+        row2.appendChild(modLeftCol);
+
+        // Right Column: Knobs + Modulation Matrix
+        const modRightCol = document.createElement('div');
+        modRightCol.className = 'mod-right-column';
+
+        // Knobs Card (Hardware Pots & Encoders F, Q, M, E1, E2, E3, E4) placed above Matrix
         const knobsSec = makeSection('Knobs');
         const knobsGrid = document.createElement('div');
         knobsGrid.className = 'knobs-assign-grid';
@@ -1507,9 +1543,7 @@ class App {
         knobsGrid.appendChild(createSelect('LAY_ENC3_ASSIGN', timbre, onChange));
         knobsGrid.appendChild(createSelect('LAY_ENC4_ASSIGN', timbre, onChange));
         knobsSec.body.appendChild(knobsGrid);
-        modLeftCol.appendChild(knobsSec.card);
-
-        row2.appendChild(modLeftCol);
+        modRightCol.appendChild(knobsSec.card);
 
         // Right Column: Modulation Matrix (12 single-row slots)
         const mtxSec = createSectionCard('Modulation Matrix (12 Slots)', 'mtx_group', 1, timbre, onChange);
@@ -1638,7 +1672,8 @@ class App {
             mtxList.appendChild(slotRow);
         }
         mtxSec.body.appendChild(mtxList);
-        row2.appendChild(mtxSec.card);
+        modRightCol.appendChild(mtxSec.card);
+        row2.appendChild(modRightCol);
 
         grid.appendChild(row2);
 
@@ -1669,42 +1704,34 @@ class App {
         vceCard.body.appendChild(vceKnobs2);
         row3.appendChild(vceCard.card);
 
-        // EFFECTS (6 Coequal Groups: Pan, Chorus, Delay, Reverb, EQ, Morph)
+        // EFFECTS (Horizontal 2-row layout: Top = Delay & Reverb; Bottom = Chorus/EQ/Morph & Pan)
         const fxSec = createSectionCard('Effects & Space', 'fx', 1, timbre, onChange);
-        const fxGrid = document.createElement('div');
-        fxGrid.className = 'fx-coequal-grid';
+        const fxLayout = document.createElement('div');
+        fxLayout.className = 'fx-layout-grid';
 
-        // 1. Pan Group
-        const panBox = document.createElement('div');
-        panBox.className = 'fx-sub-panel';
-        panBox.innerHTML = '<div class="fx-sub-title">Pan</div>';
-        panBox.appendChild(createSelect('PAN_MODE', timbre, onChange));
-        panBox.appendChild(createKnob('VCE_PAN_SPREAD', timbre, onChange));
-        fxGrid.appendChild(panBox);
+        // --- Top Row (Time & Space) ---
+        const fxRowTop = document.createElement('div');
+        fxRowTop.className = 'fx-row-top';
 
-        // 2. Chorus Group
-        const chorusBox = document.createElement('div');
-        chorusBox.className = 'fx-sub-panel';
-        chorusBox.innerHTML = '<div class="fx-sub-title">Chorus</div>';
-        chorusBox.appendChild(createSelect('IFX_CHORUS', timbre, onChange));
-        fxGrid.appendChild(chorusBox);
-
-        // 3. Delay Group
+        // 1. Delay (Horizontal strip with DLY_TYPE on left, knobs on right)
         const dlyBox = document.createElement('div');
-        dlyBox.className = 'fx-sub-panel';
+        dlyBox.className = 'fx-sub-panel fx-sub-delay';
         dlyBox.innerHTML = '<div class="fx-sub-title">Delay</div>';
-        dlyBox.appendChild(createSelect('DLY_TYPE', timbre, onChange));
+        const dlyStrip = document.createElement('div');
+        dlyStrip.className = 'fx-strip-horizontal';
+        dlyStrip.appendChild(createSelect('DLY_TYPE', timbre, onChange));
         const dlyKnobs = document.createElement('div');
         dlyKnobs.className = 'knob-row';
         dlyKnobs.appendChild(createKnob('DLY_PARAM1', timbre, onChange));
         dlyKnobs.appendChild(createKnob('DLY_PARAM2', timbre, onChange));
         dlyKnobs.appendChild(createKnob('DLY_PARAM3', timbre, onChange));
-        dlyBox.appendChild(dlyKnobs);
-        fxGrid.appendChild(dlyBox);
+        dlyStrip.appendChild(dlyKnobs);
+        dlyBox.appendChild(dlyStrip);
+        fxRowTop.appendChild(dlyBox);
 
-        // 4. Reverb Group
+        // 2. Reverb (Decay, Mod/Damp, Level in a single row)
         const revBox = document.createElement('div');
-        revBox.className = 'fx-sub-panel';
+        revBox.className = 'fx-sub-panel fx-sub-reverb';
         revBox.innerHTML = '<div class="fx-sub-title">Reverb</div>';
         const revKnobs = document.createElement('div');
         revKnobs.className = 'knob-row';
@@ -1712,23 +1739,43 @@ class App {
         revKnobs.appendChild(createKnob('REV_PARAM2', timbre, onChange));
         revKnobs.appendChild(createKnob('REV_PARAM3', timbre, onChange));
         revBox.appendChild(revKnobs);
-        fxGrid.appendChild(revBox);
+        fxRowTop.appendChild(revBox);
 
-        // 5. EQ Group
-        const eqBox = document.createElement('div');
-        eqBox.className = 'fx-sub-panel';
-        eqBox.innerHTML = '<div class="fx-sub-title">EQ</div>';
-        eqBox.appendChild(createKnob('IFX_EQ', timbre, onChange));
-        fxGrid.appendChild(eqBox);
+        fxLayout.appendChild(fxRowTop);
 
-        // 6. Morph Group
-        const morphBox = document.createElement('div');
-        morphBox.className = 'fx-sub-panel';
-        morphBox.innerHTML = '<div class="fx-sub-title">Morph</div>';
-        morphBox.appendChild(createKnob('MORPH_KNOB', timbre, onChange));
-        fxGrid.appendChild(morphBox);
+        // --- Bottom Row (Modulation, Tone & Stereo) ---
+        const fxRowBottom = document.createElement('div');
+        fxRowBottom.className = 'fx-row-bottom';
 
-        fxSec.body.appendChild(fxGrid);
+        // 3. Chorus, EQ & Morph Unified Sub-panel
+        const unifiedBox = document.createElement('div');
+        unifiedBox.className = 'fx-sub-panel fx-sub-unified';
+        unifiedBox.innerHTML = '<div class="fx-sub-title">Chorus, EQ & Morph</div>';
+        const unifiedStrip = document.createElement('div');
+        unifiedStrip.className = 'fx-strip-horizontal';
+        unifiedStrip.appendChild(createSelect('IFX_CHORUS', timbre, onChange));
+        const unifiedKnobs = document.createElement('div');
+        unifiedKnobs.className = 'knob-row';
+        unifiedKnobs.appendChild(createKnob('IFX_EQ', timbre, onChange));
+        unifiedKnobs.appendChild(createKnob('MORPH_KNOB', timbre, onChange));
+        unifiedStrip.appendChild(unifiedKnobs);
+        unifiedBox.appendChild(unifiedStrip);
+        fxRowBottom.appendChild(unifiedBox);
+
+        // 4. Pan Sub-panel
+        const panBox = document.createElement('div');
+        panBox.className = 'fx-sub-panel fx-sub-pan';
+        panBox.innerHTML = '<div class="fx-sub-title">Pan</div>';
+        const panStrip = document.createElement('div');
+        panStrip.className = 'fx-strip-horizontal';
+        panStrip.appendChild(createSelect('PAN_MODE', timbre, onChange));
+        panStrip.appendChild(createKnob('VCE_PAN_SPREAD', timbre, onChange));
+        panBox.appendChild(panStrip);
+        fxRowBottom.appendChild(panBox);
+
+        fxLayout.appendChild(fxRowBottom);
+
+        fxSec.body.appendChild(fxLayout);
         row3.appendChild(fxSec.card);
 
         grid.appendChild(row3);
@@ -1766,24 +1813,61 @@ class App {
 
         // FW v3 Scaler & Chorder Engine
         const chordSec = makeSection('FW v3 Chorder & Scaler Engine');
+
+        // Top Row: Single horizontal flex row
         const chordTopRow = document.createElement('div');
         chordTopRow.className = 'chord-top-row';
-        chordTopRow.appendChild(createSelect('KBD_MIDI_INPUT', timbre, onChange));
-        chordTopRow.appendChild(createSelect('KBD_KEY', timbre, onChange));
-        chordTopRow.appendChild(createSelect('KBD_SCALE', timbre, onChange));
+
+        // 1. Stacked toggles (MIDI Input + Chord Expand)
+        const chordToggleStack = document.createElement('div');
+        chordToggleStack.className = 'chord-toggle-stack';
+        chordToggleStack.appendChild(createSelect('KBD_MIDI_INPUT', timbre, onChange));
+        chordToggleStack.appendChild(createSelect('KBD_CHORD_EXPAND', timbre, onChange));
+        chordTopRow.appendChild(chordToggleStack);
+
+        // 2. Key
+        const keySelect = createSelect('KBD_KEY', timbre, onChange);
+        keySelect.classList.add('chord-key-select');
+        chordTopRow.appendChild(keySelect);
+
+        // 3. Scale
+        const scaleSelect = createSelect('KBD_SCALE', timbre, onChange);
+        scaleSelect.classList.add('chord-scale-select');
+        chordTopRow.appendChild(scaleSelect);
+
+        // 4. Octave
         chordTopRow.appendChild(createKnob('KBD_OCTAVE', timbre, onChange));
-        chordTopRow.appendChild(createSelect('KBD_CHORD_EXPAND', timbre, onChange));
         chordSec.body.appendChild(chordTopRow);
 
+        // Scale Degree Section (2 columns)
         const chordDegreesBox = document.createElement('div');
         chordDegreesBox.className = 'chord-degrees-grid';
-        chordDegreesBox.innerHTML = '<div class="chord-degrees-title">Scale Degree Chords (Degree 1 = Base Chord; Degrees 2–7 require Chord Expand)</div>';
-        const degreesRow = document.createElement('div');
-        degreesRow.className = 'select-row chord-degrees-row';
-        for (let d = 1; d <= 7; d++) {
-            degreesRow.appendChild(createSelect(`CHORD_TYPE${d}`, timbre, onChange));
+        chordDegreesBox.innerHTML = '<div class="chord-degrees-title">Scale Degree Chords</div>';
+
+        const chordCols = document.createElement('div');
+        chordCols.className = 'chord-degrees-columns';
+
+        // Column 1: Chords 1–4
+        const col1 = document.createElement('div');
+        col1.className = 'chord-degrees-col';
+        for (let d = 1; d <= 4; d++) {
+            col1.appendChild(createSelect(`CHORD_TYPE${d}`, timbre, onChange));
         }
-        chordDegreesBox.appendChild(degreesRow);
+        chordCols.appendChild(col1);
+
+        // Column 2: Chords 5–7 + Note
+        const col2 = document.createElement('div');
+        col2.className = 'chord-degrees-col';
+        for (let d = 5; d <= 7; d++) {
+            col2.appendChild(createSelect(`CHORD_TYPE${d}`, timbre, onChange));
+        }
+        const noteEl = document.createElement('div');
+        noteEl.className = 'chord-degrees-note';
+        noteEl.textContent = 'Degree 1 = Base Chord; Degrees 2–7 require Chord Expand';
+        col2.appendChild(noteEl);
+        chordCols.appendChild(col2);
+
+        chordDegreesBox.appendChild(chordCols);
         chordSec.body.appendChild(chordDegreesBox);
         row4.appendChild(chordSec.card);
 

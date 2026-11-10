@@ -1,6 +1,9 @@
 /* MicroMonsta 2 Editor & Patch Librarian - Clean Vanilla CSS Stylesheet */
 
 :root {
+    --min-app-width: 800px;
+    --max-app-width: 1440px;
+
     --bg-dark: #121316;
     --bg-panel: #1a1c22;
     --bg-card: #22252c;
@@ -23,6 +26,14 @@
     --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
+/* Resolution-Dependent Minimum Width (2× on HiDPI Displays) */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi), (min-resolution: 2dppx) {
+    :root {
+        --min-app-width: 1600px;
+        --max-app-width: 1920px;
+    }
+}
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -37,7 +48,7 @@ body {
     line-height: 1.4;
     user-select: none;
     -webkit-user-select: none;
-    min-width: 800px;
+    min-width: var(--min-app-width);
     overflow-x: auto;
 }
 
@@ -52,7 +63,7 @@ header.app-header {
     position: sticky;
     top: 0;
     z-index: 100;
-    min-width: 800px;
+    min-width: var(--min-app-width);
 }
 
 .brand-section {
@@ -264,8 +275,8 @@ header.app-header {
 
 /* App Content Layout */
 main.app-main {
-    max-width: 1440px;
-    min-width: 800px;
+    max-width: var(--max-app-width);
+    min-width: var(--min-app-width);
     margin: 0 auto;
     padding: 16px 20px 180px 20px;
 }
@@ -429,7 +440,8 @@ main.app-main {
     grid-template-columns: 1.5fr 1.5fr;
 }
 
-.mod-left-column {
+.mod-left-column,
+.mod-right-column {
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -448,11 +460,39 @@ main.app-main {
     border-radius: 6px;
     padding: 8px;
     gap: 8px;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
-.lfo-sub-card .synth-card-header {
-    font-size: 11px;
+.lfo-sub-card.slot-drop-hover {
+    border-color: var(--accent-cyan);
+    background: rgba(0, 210, 255, 0.08);
+}
+
+.lfo-sub-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     padding-bottom: 4px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.lfo-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    background: rgba(0, 210, 255, 0.12);
+    border: 1px solid rgba(0, 210, 255, 0.3);
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: grab;
+    user-select: none;
+}
+
+.lfo-badge:active {
+    cursor: grabbing;
 }
 
 /* Filter Main Knobs Prominence */
@@ -543,6 +583,14 @@ main.app-main {
     flex-shrink: 0;
 }
 
+.icon-line {
+    display: inline-block;
+    vertical-align: middle;
+    pointer-events: none;
+    flex-shrink: 0;
+    transition: color 0.15s ease, stroke 0.15s ease;
+}
+
 .btn-slot-icon {
     background: transparent;
     border: 1px solid transparent;
@@ -552,6 +600,9 @@ main.app-main {
     border-radius: 4px;
     cursor: pointer;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn-slot-icon:hover {
@@ -860,28 +911,56 @@ main.app-main {
     width: 100%;
 }
 
-/* Effects Coequal Grid (Pan, Chorus, Delay, Reverb, EQ, Morph) */
-.fx-coequal-grid {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
+/* Effects & Space Horizontal Layout (Top: Delay & Reverb; Bottom: Chorus/EQ/Morph & Pan) */
+.fx-layout-grid {
+    display: flex;
+    flex-direction: column;
     gap: 10px;
     width: 100%;
 }
 
-.fx-coequal-grid .fx-sub-panel {
+.fx-row-top,
+.fx-row-bottom {
+    display: grid;
+    gap: 10px;
+}
+
+.fx-row-top {
+    grid-template-columns: 1.15fr 1fr;
+}
+
+.fx-row-bottom {
+    grid-template-columns: 1.35fr 0.85fr;
+}
+
+.fx-strip-horizontal {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.fx-sub-panel {
     background: var(--bg-card-inner);
     border: 1px solid var(--border-color);
     border-radius: 6px;
-    padding: 6px 8px;
+    padding: 8px 10px;
     display: flex;
     flex-direction: column;
     gap: 6px;
     min-width: 0;
 }
 
-.fx-coequal-grid .fx-sub-panel .knob-row {
+.fx-sub-panel .knob-row {
     justify-content: center;
     gap: 8px;
+}
+
+.fx-coequal-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 10px;
+    width: 100%;
 }
 
 /* Native Live Sync Modal Dialog */
@@ -1046,9 +1125,21 @@ main.app-main {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     padding-top: 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     margin-top: 2px;
+}
+
+.osc-noise-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.osc-noise-badges {
+    display: flex;
+    gap: 3px;
 }
 
 .synth-card-body {
@@ -1588,7 +1679,7 @@ footer.audition-footer {
     bottom: 0;
     left: 0;
     right: 0;
-    min-width: 800px;
+    min-width: var(--min-app-width);
     background: #14161a;
     border-top: 1px solid var(--border-color);
     padding: 8px 20px;
@@ -1597,7 +1688,7 @@ footer.audition-footer {
 }
 
 .audition-bar {
-    max-width: 1440px;
+    max-width: var(--max-app-width);
     margin: 0 auto;
     display: flex;
     align-items: center;
@@ -2251,8 +2342,9 @@ footer.audition-footer {
 /* Math Operators Grid */
 .math-operators-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: 1fr 1fr;
     gap: 12px;
+    align-items: stretch;
 }
 
 .math-sub-panel {
@@ -2263,6 +2355,19 @@ footer.audition-footer {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.math-mult-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.lag-controls-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
 }
 
 /* Modulation Matrix Slot Clear Button */
@@ -2291,14 +2396,31 @@ footer.audition-footer {
 
 /* FW v3 Chorder & Scaler Layout */
 .chord-top-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 10px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
     background: var(--bg-card-inner);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     padding: 10px;
     margin-bottom: 10px;
+}
+
+.chord-toggle-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 0 0 auto;
+}
+
+.chord-key-select {
+    flex: 0 0 68px;
+    min-width: 68px;
+}
+
+.chord-scale-select {
+    flex: 1;
+    min-width: 120px;
 }
 
 .chord-degrees-grid {
@@ -2319,10 +2441,23 @@ footer.audition-footer {
     text-transform: uppercase;
 }
 
-.chord-degrees-row {
+.chord-degrees-columns {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 8px;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.chord-degrees-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.chord-degrees-note {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 4px;
 }
 
 /* Knob Value Inline Click-to-Type Editing */
@@ -2369,6 +2504,7 @@ footer.audition-footer {
     color: #000 !important;
     box-shadow: 0 0 10px var(--accent-cyan-glow) !important;
 }
+
 
 #kbd-latch.active {
     background: var(--accent-cyan);
