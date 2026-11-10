@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Pre-commit hook: Run the MicroMonsta 2 automated CLI test suite before allowing a commit.
+
+echo "[pre-commit] Running automated test suite (node tests/cli-runner.js)..."
+node tests/cli-runner.js
+RESULT=$?
+
+if [ $RESULT -ne 0 ]; then
+    echo ""
+    echo "[pre-commit] ❌ Commit aborted: Automated test suite failed."
+    echo "             Fix the failing tests before committing."
+    exit 1
+fi
+
+echo "[pre-commit] ✓ All tests passed."
+exit 0
