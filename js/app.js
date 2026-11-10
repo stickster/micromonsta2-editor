@@ -924,10 +924,11 @@ class App {
 
         const noiseMuteBtn = document.createElement('button');
         noiseMuteBtn.type = 'button';
-        noiseMuteBtn.className = 'btn-badge-toggle btn-mute' + (this.muteState.noise ? ' active' : '');
+        noiseMuteBtn.className = 'btn-sm-badge btn-mute' + (this.muteState.noise ? ' active' : '');
         noiseMuteBtn.textContent = 'M';
         noiseMuteBtn.title = 'Mute Noise Generator';
-        noiseMuteBtn.onclick = () => {
+        noiseMuteBtn.onclick = (e) => {
+            e.stopPropagation();
             this.muteState.noise = !this.muteState.noise;
             this.applySoloMute();
             noiseMuteBtn.classList.toggle('active', this.muteState.noise);
@@ -935,10 +936,11 @@ class App {
 
         const noiseSoloBtn = document.createElement('button');
         noiseSoloBtn.type = 'button';
-        noiseSoloBtn.className = 'btn-badge-toggle btn-solo' + (this.soloState.noise ? ' active' : '');
+        noiseSoloBtn.className = 'btn-sm-badge btn-solo' + (this.soloState.noise ? ' active' : '');
         noiseSoloBtn.textContent = 'S';
         noiseSoloBtn.title = 'Solo Noise Generator';
-        noiseSoloBtn.onclick = () => {
+        noiseSoloBtn.onclick = (e) => {
+            e.stopPropagation();
             this.soloState.noise = !this.soloState.noise;
             this.applySoloMute();
             noiseSoloBtn.classList.toggle('active', this.soloState.noise);
@@ -946,8 +948,8 @@ class App {
 
         noiseBadges.appendChild(noiseMuteBtn);
         noiseBadges.appendChild(noiseSoloBtn);
-        noiseGroup.appendChild(noiseBadges);
         noiseGroup.appendChild(createKnob('MIX_NOISE', timbre, onChange, { small: true }));
+        noiseGroup.appendChild(noiseBadges);
 
         footer.appendChild(noiseGroup);
         footer.appendChild(createSelect('OSC_PHASE_RESET', timbre, onChange));

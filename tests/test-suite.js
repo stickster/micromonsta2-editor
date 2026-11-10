@@ -60,7 +60,9 @@ if (typeof document === 'undefined') {
             for (const fn of list) fn(event);
         }
         click() {
-            this.dispatchEvent({ type: 'click', preventDefault: () => {}, stopPropagation: () => {} });
+            const ev = { type: 'click', preventDefault: () => {}, stopPropagation: () => {} };
+            if (this.onclick) this.onclick(ev);
+            this.dispatchEvent(ev);
         }
         querySelector(sel) {
             for (const ch of this.children) {
@@ -1093,6 +1095,32 @@ async function runAllTests(logger = console.log) {
         assert(!key12.classList.contains('pressed'), 'Key 12 cleared on noteOff');
         assert(!key16.classList.contains('chord-note'), 'Key 16 cleared on noteOff');
         assert(!key19.classList.contains('chord-note'), 'Key 19 cleared on noteOff');
+
+        // Noise Mute & Solo Badges & Right-of-Knob Placement
+        const testApp = new App();
+        const oscPanel = testApp.createOscillatorPanel(testApp.activeTimbre, () => {});
+        const noiseGroup = oscPanel.querySelector('.osc-noise-group');
+        assert(noiseGroup !== null, 'Noise group exists in oscillator panel footer');
+        assertEqual(noiseGroup.children[0].getAttribute('data-param'), 'MIX_NOISE', 'Noise knob is first child on left');
+        const noiseBadges = noiseGroup.children[1];
+        assert(noiseBadges.classList.contains('osc-noise-badges'), 'Noise badges are second child immediately to right of knob');
+
+        const noiseMuteBtn = noiseBadges.querySelector('.btn-mute');
+        const noiseSoloBtn = noiseBadges.querySelector('.btn-solo');
+        assert(noiseMuteBtn !== null, 'Noise mute button exists');
+        assert(noiseSoloBtn !== null, 'Noise solo button exists');
+        assert(noiseMuteBtn.classList.contains('btn-sm-badge'), 'Noise mute button has .btn-sm-badge class');
+        assert(noiseSoloBtn.classList.contains('btn-sm-badge'), 'Noise solo button has .btn-sm-badge class');
+
+        // Toggle Noise Mute
+        noiseMuteBtn.click();
+        assertEqual(testApp.muteState.noise, true, 'Clicking noise mute sets muteState.noise to true');
+        assert(noiseMuteBtn.classList.contains('active'), 'Noise mute button has .active class when muted');
+
+        // Toggle Noise Solo
+        noiseSoloBtn.click();
+        assertEqual(testApp.soloState.noise, true, 'Clicking noise solo sets soloState.noise to true');
+        assert(noiseSoloBtn.classList.contains('active'), 'Noise solo button has .active class when soloed');
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }
