@@ -1304,7 +1304,8 @@ main.app-main {
     letter-spacing: 0.5px;
 }
 
-.control-select {
+.control-select,
+.control-input {
     background: var(--bg-card-inner);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
@@ -1316,8 +1317,13 @@ main.app-main {
     width: 100%;
 }
 
-.control-select:focus {
+.control-select:focus,
+.control-input:focus {
     border-color: var(--accent-cyan);
+}
+
+#settings-undo-levels {
+    width: 80px;
 }
 
 /* Modulation Matrix Grid */
