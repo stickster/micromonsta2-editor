@@ -371,6 +371,14 @@ main.app-main {
     color: #fff;
 }
 
+.btn:disabled,
+.btn[disabled] {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+    box-shadow: none !important;
+}
+
 .btn-primary {
     background: var(--accent-cyan);
     color: #000;
@@ -2100,6 +2108,19 @@ footer.audition-footer {
     background: var(--accent-cyan);
     color: #000;
     box-shadow: 0 0 10px var(--accent-cyan-glow);
+}
+
+.btn-push {
+    background: rgba(255, 159, 67, 0.12);
+    color: var(--accent-orange);
+    border-color: rgba(255, 159, 67, 0.4);
+    font-weight: 700;
+}
+
+.btn-push:hover {
+    background: var(--accent-orange);
+    color: #000;
+    box-shadow: 0 0 10px rgba(255, 159, 67, 0.4);
 }
 
 /* Card Header Drag-and-Drop & Section Actions */

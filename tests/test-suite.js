@@ -1617,6 +1617,46 @@ async function runAllTests(logger = console.log) {
         logger(`  Error: ${e.message}`);
     }
 
+    logger('\n--- [25] Live Sync UI & Fetch/Push Inactivity Tests ---');
+    try {
+        const testApp = new App();
+        const chkLiveSync = document.createElement('input');
+        chkLiveSync.type = 'checkbox';
+        chkLiveSync.id = 'chk-prog-live-sync';
+        document.registerMockElement('chk-prog-live-sync', chkLiveSync);
+
+        const btnFetch = document.createElement('button');
+        btnFetch.id = 'btn-prog-fetch';
+        document.registerMockElement('btn-prog-fetch', btnFetch);
+
+        const btnPush = document.createElement('button');
+        btnPush.id = 'btn-prog-push';
+        document.registerMockElement('btn-prog-push', btnPush);
+
+        // Initially Live Sync is false
+        testApp.midi.liveSync = false;
+        testApp.updateLiveSyncUI();
+        assertEqual(btnFetch.disabled, false, 'Fetch button enabled when Live Sync is false');
+        assertEqual(btnPush.disabled, false, 'Push button enabled when Live Sync is false');
+        assertEqual(chkLiveSync.checked, false, 'Live sync checkbox is unchecked');
+
+        // Turn Live Sync on
+        testApp.midi.liveSync = true;
+        testApp.updateLiveSyncUI();
+        assertEqual(btnFetch.disabled, true, 'Fetch button disabled when Live Sync is true');
+        assertEqual(btnPush.disabled, true, 'Push button disabled when Live Sync is true');
+        assertEqual(chkLiveSync.checked, true, 'Live sync checkbox is checked');
+
+        // Turn Live Sync back off
+        testApp.midi.liveSync = false;
+        testApp.updateLiveSyncUI();
+        assertEqual(btnFetch.disabled, false, 'Fetch button re-enabled when Live Sync turned off');
+        assertEqual(btnPush.disabled, false, 'Push button re-enabled when Live Sync turned off');
+        assertEqual(chkLiveSync.checked, false, 'Live sync checkbox is unchecked again');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

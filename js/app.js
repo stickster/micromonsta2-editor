@@ -76,6 +76,7 @@ class App {
         this.updateActivePartIndicator();
         this.updateSyncStatus('synced');
         this.updateUndoRedoUI();
+        this.updateLiveSyncUI();
         this.setupKeyboardShortcuts();
 
         // On load, always start in Editor mode
@@ -729,6 +730,31 @@ class App {
         const btnRedo = document.getElementById('btn-prog-redo');
         if (btnUndo) btnUndo.disabled = this.undoStack.length === 0;
         if (btnRedo) btnRedo.disabled = this.redoStack.length === 0;
+    }
+
+    updateLiveSyncUI() {
+        if (typeof document === 'undefined') return;
+        const isLive = !!(this.midi && this.midi.liveSync);
+        const chkLiveSync = document.getElementById('chk-prog-live-sync');
+        if (chkLiveSync && chkLiveSync.checked !== isLive) {
+            chkLiveSync.checked = isLive;
+        }
+
+        const btnFetch = document.getElementById('btn-prog-fetch');
+        if (btnFetch) {
+            btnFetch.disabled = isLive;
+            btnFetch.title = isLive
+                ? 'Fetch disabled while Live Sync is streaming parameters directly'
+                : 'Fetch current sound patch directly from MM2 hardware';
+        }
+
+        const btnPush = document.getElementById('btn-prog-push');
+        if (btnPush) {
+            btnPush.disabled = isLive;
+            btnPush.title = isLive
+                ? 'Push disabled while Live Sync is streaming parameters directly'
+                : 'Send patch to MicroMonsta 2 hardware';
+        }
     }
 
     toggleCompare(forceState) {
@@ -2112,6 +2138,7 @@ class App {
         const chkLiveSync = document.getElementById('chk-prog-live-sync');
         if (chkLiveSync) {
             chkLiveSync.checked = this.midi.liveSync;
+            this.updateLiveSyncUI();
             chkLiveSync.onchange = () => {
                 if (chkLiveSync.checked) {
                     const dialog = document.getElementById('live-sync-dialog');
@@ -2124,18 +2151,21 @@ class App {
                                 this.midi.liveSync = true;
                                 chkLiveSync.checked = true;
                                 this.midi.saveSettings();
+                                this.updateLiveSyncUI();
                                 this.fetchActiveProgram();
                                 this.showNotification('Live Sync ENABLED (Fetched MM2 hardware settings)', 'success');
                             } else if (choice === 'push') {
                                 this.midi.liveSync = true;
                                 chkLiveSync.checked = true;
                                 this.midi.saveSettings();
+                                this.updateLiveSyncUI();
                                 this.confirmAndSendProgram();
                                 this.showNotification('Live Sync ENABLED (Pushed patch to MM2)', 'success');
                             } else {
                                 this.midi.liveSync = false;
                                 chkLiveSync.checked = false;
                                 this.midi.saveSettings();
+                                this.updateLiveSyncUI();
                             }
                         };
                         dialog.addEventListener('close', onClose);
@@ -2144,11 +2174,13 @@ class App {
                         // Fallback if dialog.showModal not supported
                         this.midi.liveSync = true;
                         this.midi.saveSettings();
+                        this.updateLiveSyncUI();
                         this.updateSyncStatus('synced');
                     }
                 } else {
                     this.midi.liveSync = false;
                     this.midi.saveSettings();
+                    this.updateLiveSyncUI();
                     this.updateSyncStatus('modified');
                     this.showNotification('Live Parameter Sync DISABLED (Staged Commit)', 'info');
                 }
@@ -2158,7 +2190,10 @@ class App {
         // Hardware Fetch Button
         const btnFetch = document.getElementById('btn-prog-fetch');
         if (btnFetch) {
-            btnFetch.onclick = () => this.fetchActiveProgram();
+            btnFetch.onclick = () => {
+                if (this.midi && this.midi.liveSync) return;
+                this.fetchActiveProgram();
+            };
         }
 
         // Undo & Redo Buttons
@@ -2241,7 +2276,10 @@ class App {
 
         const btnPush = document.getElementById('btn-prog-push');
         if (btnPush) {
-            btnPush.onclick = () => this.confirmAndSendProgram();
+            btnPush.onclick = () => {
+                if (this.midi && this.midi.liveSync) return;
+                this.confirmAndSendProgram();
+            };
         }
 
         const btnAddToLib = document.getElementById('btn-prog-add-to-lib');
