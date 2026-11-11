@@ -1027,21 +1027,50 @@ async function runAllTests(logger = console.log) {
         });
 
         // Simulate device unplug (state === 'disconnected')
+        mockIn.state = 'disconnected';
+        mockOut.state = 'disconnected';
+        let disconnectOutEventFired = false;
+        let reconnectOutEventFired = false;
+        midi.on('connection-lost', (ev) => {
+            if (ev.type === 'output') disconnectOutEventFired = true;
+        });
+        midi.on('connection-restored', (ev) => {
+            if (ev.type === 'output') reconnectOutEventFired = true;
+        });
+
         midi.onStateChange({
             port: { id: mockIn.id, name: mockIn.name, type: 'input', state: 'disconnected' }
         });
+        midi.onStateChange({
+            port: { id: mockOut.id, name: mockOut.name, type: 'output', state: 'disconnected' }
+        });
 
         assertEqual(midi.inPort, null, 'inPort is set to null on disconnect');
-        assert(disconnectEventFired, 'connection-lost event emitted on port disconnect');
+        assertEqual(midi.outPort, null, 'outPort is set to null on disconnect');
+        assert(disconnectEventFired, 'connection-lost event emitted on input port disconnect');
+        assert(disconnectOutEventFired, 'connection-lost event emitted on output port disconnect');
         assertEqual(midi.savedInPortName, mockIn.name, 'savedInPortName preserved for automatic reconnection');
+        assertEqual(midi.savedOutPortName, mockOut.name, 'savedOutPortName preserved for automatic reconnection');
 
-        // Simulate device re-plug (state === 'connected')
+        // Simulate device re-plug with input port connecting first (and disconnected outPort in map)
+        mockIn.state = 'connected';
         midi.onStateChange({
             port: { id: mockIn.id, name: mockIn.name, type: 'input', state: 'connected' }
         });
 
         assert(midi.inPort !== null, 'inPort automatically re-bound on reconnection');
-        assert(reconnectEventFired, 'connection-restored event emitted on port reconnection');
+        assert(reconnectEventFired, 'connection-restored event emitted on input port reconnection');
+        assertEqual(midi.outPort, null, 'outPort remains null while output port is still disconnected (not bound to stale port)');
+
+        // Now output port connects
+        mockOut.state = 'connected';
+        midi.onStateChange({
+            port: { id: mockOut.id, name: mockOut.name, type: 'output', state: 'connected' }
+        });
+
+        assert(midi.outPort !== null, 'outPort automatically re-bound on reconnection');
+        assert(reconnectOutEventFired, 'connection-restored event emitted on output port reconnection');
+        assertEqual(midi.outPort.id, mockOut.id, 'outPort correctly restored to reconnected output device');
 
         // 3. Downstream Router / Hardware Responsiveness Probe and Timeout
         let responsivenessChangedFired = false;

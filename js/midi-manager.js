@@ -104,12 +104,12 @@ class MidiManager {
 
     getInputs() {
         if (!this.midiAccess) return [];
-        return Array.from(this.midiAccess.inputs.values());
+        return Array.from(this.midiAccess.inputs.values()).filter(p => !p.state || p.state === 'connected');
     }
 
     getOutputs() {
         if (!this.midiAccess) return [];
-        return Array.from(this.midiAccess.outputs.values());
+        return Array.from(this.midiAccess.outputs.values()).filter(p => !p.state || p.state === 'connected');
     }
 
     autoSelectPorts() {
@@ -130,13 +130,16 @@ class MidiManager {
             matchedOut = outputs.find(o => (this.savedOutPortName && o.name === this.savedOutPortName) || (this.savedOutPortId && o.id === this.savedOutPortId));
         }
 
-        // Prioritize saved port if present, else fallback to MM2 port or first available port
-        const targetIn = matchedIn || mm2In || inputs[0];
+        // Prioritize saved port if present; if a saved port preference exists but is temporarily disconnected,
+        // do not fall back to an unrelated port so we don't clobber the user's saved preference during reconnects.
+        const hasSavedIn = !!(this.savedInPortName || this.savedInPortId);
+        const targetIn = matchedIn || mm2In || (hasSavedIn ? null : inputs[0]);
         if (targetIn && (!this.inPort || this.inPort.id !== targetIn.id)) {
             this.setInputPort(targetIn.id);
         }
 
-        const targetOut = matchedOut || mm2Out || outputs[0];
+        const hasSavedOut = !!(this.savedOutPortName || this.savedOutPortId);
+        const targetOut = matchedOut || mm2Out || (hasSavedOut ? null : outputs[0]);
         if (targetOut && (!this.outPort || this.outPort.id !== targetOut.id)) {
             this.setOutputPort(targetOut.id);
         }
