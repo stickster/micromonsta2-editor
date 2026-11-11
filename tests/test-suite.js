@@ -1323,6 +1323,34 @@ async function runAllTests(logger = console.log) {
         logger(`  Error: ${e.message}`);
     }
 
+    logger('\n--- [22] Voice Panel Pitch Bend Down Range ---');
+    try {
+        const downDef = PARAM_MAP.get('VCE_PBRANGE_DOWN');
+        assertEqual(downDef.min, 52, 'Down min raw value is 52 (-12)');
+        assertEqual(downDef.max, 64, 'Down max raw value is 64 (0)');
+
+        const downProg = new MM2Program();
+        downProg.setValue('VCE_PBRANGE_DOWN', 10);
+        assertEqual(downProg.getValue('VCE_PBRANGE_DOWN'), 52, 'Down clamps below -12 to 52');
+        downProg.setValue('VCE_PBRANGE_DOWN', 100);
+        assertEqual(downProg.getValue('VCE_PBRANGE_DOWN'), 64, 'Down clamps above 0 to 64');
+        downProg.setValue('VCE_PBRANGE_DOWN', 62);
+
+        assertEqual(formatParamDisplay(downDef, 52), '-12', 'Down displays -12 at minimum');
+        assertEqual(formatParamDisplay(downDef, 64), '0', 'Down displays 0 at maximum');
+
+        const downKnob = createKnob('VCE_PBRANGE_DOWN', () => downProg, () => {});
+        const downCanvas = downKnob.querySelector('canvas') || downKnob;
+        downCanvas.dispatchEvent({ type: 'pointerdown', clientX: 100, clientY: 100, preventDefault: () => {} });
+        window.dispatchEvent({ type: 'pointermove', clientX: 100, clientY: -1000 }); // drag far up
+        assertEqual(downProg.getValue('VCE_PBRANGE_DOWN'), 64, 'Dragging Down knob up reaches 0 (raw 64)');
+        window.dispatchEvent({ type: 'pointermove', clientX: 100, clientY: 1000 }); // drag far down
+        assertEqual(downProg.getValue('VCE_PBRANGE_DOWN'), 52, 'Dragging Down knob down reaches -12 (raw 52)');
+        window.dispatchEvent({ type: 'pointerup' });
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

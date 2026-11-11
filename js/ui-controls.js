@@ -340,7 +340,10 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     const min = def.min ?? 0;
     const max = def.max ?? (def.values ? def.values.length - 1 : 127);
     const range = Math.max(1, Math.abs(max - min));
-    const isBipolar = (min < 0) || (def.offset && def.offset > 0);
+    // Offset-based params only draw from center when the offset lies inside the range.
+    // Ranges that end at the offset (e.g. -12..0 pitch bend down) behave like unipolar knobs.
+    const offsetIsRelative = !!(def.offset && def.offset >= max);
+    const isBipolar = (min < 0) || (def.offset && def.offset > 0 && !offsetIsRelative);
 
     const dialWrap = document.createElement('div');
     dialWrap.className = 'knob-dial';
@@ -654,7 +657,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'knob-value-input';
-        input.value = curVal + (def.displayOffset || 0);
+        input.value = offsetIsRelative ? `${curVal - def.offset}` : curVal + (def.displayOffset || 0);
 
         valueEl.textContent = '';
         valueEl.appendChild(input);
@@ -669,7 +672,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
             let parsed = parseInt(raw, 10);
             if (!isNaN(parsed)) {
                 parsed -= (def.displayOffset || 0);
-                if (def.offset && (raw.startsWith('+') || raw.startsWith('-'))) {
+                if (def.offset && (offsetIsRelative || raw.startsWith('+') || raw.startsWith('-'))) {
                     parsed = parsed + def.offset;
                 }
                 parsed = Math.min(Math.max(parsed, min), max);
