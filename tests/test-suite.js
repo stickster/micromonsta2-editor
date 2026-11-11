@@ -1316,6 +1316,13 @@ async function runAllTests(logger = console.log) {
         logger(`  Error: ${e.message}`);
     }
 
+    logger('\n--- [21] Voice Panel Glide Label ---');
+    try {
+        assertEqual(PARAM_MAP.get('VCE_GLIDE').label, 'Glide', 'VCE_GLIDE knob label is "Glide"');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
