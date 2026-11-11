@@ -1862,12 +1862,9 @@ class App {
         const dlyStrip = document.createElement('div');
         dlyStrip.className = 'fx-strip-horizontal';
         dlyStrip.appendChild(createSelect('DLY_TYPE', timbre, onChange));
-        const dlyKnobs = document.createElement('div');
-        dlyKnobs.className = 'knob-row';
-        dlyKnobs.appendChild(createKnob('DLY_PARAM1', timbre, onChange));
-        dlyKnobs.appendChild(createKnob('DLY_PARAM2', timbre, onChange));
-        dlyKnobs.appendChild(createKnob('DLY_PARAM3', timbre, onChange));
-        dlyStrip.appendChild(dlyKnobs);
+        dlyStrip.appendChild(createKnob('DLY_PARAM1', timbre, onChange));
+        dlyStrip.appendChild(createKnob('DLY_PARAM2', timbre, onChange));
+        dlyStrip.appendChild(createKnob('DLY_PARAM3', timbre, onChange));
         dlyBox.appendChild(dlyStrip);
         fxRowTop.appendChild(dlyBox);
 
@@ -1896,11 +1893,8 @@ class App {
         const unifiedStrip = document.createElement('div');
         unifiedStrip.className = 'fx-strip-horizontal';
         unifiedStrip.appendChild(createSelect('IFX_CHORUS', timbre, onChange));
-        const unifiedKnobs = document.createElement('div');
-        unifiedKnobs.className = 'knob-row';
-        unifiedKnobs.appendChild(createKnob('IFX_EQ', timbre, onChange));
-        unifiedKnobs.appendChild(createKnob('MORPH_KNOB', timbre, onChange));
-        unifiedStrip.appendChild(unifiedKnobs);
+        unifiedStrip.appendChild(createKnob('IFX_EQ', timbre, onChange));
+        unifiedStrip.appendChild(createKnob('MORPH_KNOB', timbre, onChange));
         unifiedBox.appendChild(unifiedStrip);
         fxRowBottom.appendChild(unifiedBox);
 
