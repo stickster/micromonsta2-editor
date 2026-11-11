@@ -1,6 +1,25 @@
 #!/usr/bin/env sh
-# Pre-commit hook: Run the MicroMonsta 2 automated CLI test suite before allowing a commit.
+# Pre-commit hook: Run the MicroMonsta 2 automated CLI test suite before allowing a commit,
+# and synchronize package.json with js/version.js.
 
+# 1. Sync package.json version with js/version.js
+VERSION_IN_JS=$(node -e "try { const { APP_VERSION } = require('./js/version.js'); console.log(APP_VERSION || ''); } catch (e) { console.log(''); }")
+
+if [ -n "$VERSION_IN_JS" ] && [ -f "package.json" ]; then
+    VERSION_IN_PKG=$(node -e "try { const p = require('./package.json'); console.log(p.version || ''); } catch (e) { console.log(''); }")
+    if [ "$VERSION_IN_JS" != "$VERSION_IN_PKG" ]; then
+        echo "[pre-commit] Synchronizing package.json version ($VERSION_IN_PKG -> $VERSION_IN_JS)..."
+        node -e "
+            const fs = require('fs');
+            let content = fs.readFileSync('package.json', 'utf8');
+            content = content.replace(/(\"version\":\s*\")([^\"]+)(\")/, '\"version\": \"$VERSION_IN_JS\"');
+            fs.writeFileSync('package.json', content);
+        "
+        git add package.json
+    fi
+fi
+
+# 2. Run automated test suite
 echo "[pre-commit] Running automated test suite (node tests/cli-runner.js)..."
 node tests/cli-runner.js
 RESULT=$?

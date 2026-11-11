@@ -1664,6 +1664,20 @@ async function runAllTests(logger = console.log) {
             assertEqual(globalThis.PKG_JSON.version, '0.1.0', 'package.json version matches 0.1.0');
             assertEqual(App.VERSION, globalThis.PKG_JSON.version, 'App.VERSION is aligned with package.json version');
         }
+
+        // Test settings version element displays version
+        const mockSettingsVer = document.createElement('span');
+        mockSettingsVer.id = 'settings-app-version';
+        document.registerMockElement('settings-app-version', mockSettingsVer);
+
+        const mockHeaderVer = document.createElement('span');
+        mockHeaderVer.id = 'app-version-badge';
+        document.registerMockElement('app-version-badge', mockHeaderVer);
+
+        const appInstance = new App();
+        appInstance.buildSettingsUI();
+        assertEqual(mockSettingsVer.textContent, `v${App.VERSION}`, 'Settings panel displays current version v0.1.0');
+        assertEqual(mockHeaderVer.textContent, `v${App.VERSION}`, 'Header badge displays current version v0.1.0');
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }

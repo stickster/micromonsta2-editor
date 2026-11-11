@@ -4,7 +4,7 @@
 
 class App {
     static get VERSION() {
-        return '0.1.0';
+        return typeof APP_VERSION !== 'undefined' ? APP_VERSION : '0.1.0';
     }
 
     constructor() {
@@ -2840,6 +2840,16 @@ class App {
                     this.showNotification('Periodic connection checks disabled.', 'info');
                 }
             };
+        }
+
+        const settingsVer = document.getElementById('settings-app-version');
+        if (settingsVer) {
+            settingsVer.textContent = `v${App.VERSION}`;
+        }
+
+        const headerVer = document.getElementById('app-version-badge');
+        if (headerVer) {
+            headerVer.textContent = `v${App.VERSION}`;
         }
     }
 

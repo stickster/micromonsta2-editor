@@ -46,5 +46,8 @@ All commit messages MUST follow the [Conventional Commits](https://www.conventio
 
 ## 3. Versioning and Pre-Push Policy
 - **Semantic Versioning**: The application follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
-- **Single Source of Truth**: The canonical application version is specified in `package.json` (`version`) and mirrored in `App.VERSION` (`js/app.js`) and the UI version badge in `index.html`.
-- **Pre-Push Gate**: Every push of the `main` branch to the remote is guarded by `.githooks/pre-push`. The version in `package.json` must be updated (bumped) relative to the remote `main` branch before any push is allowed.
+- **Single Source of Truth**: The canonical application version is specified in `js/version.js` (`APP_VERSION`).
+  - To change or bump the version, edit the `APP_VERSION` string in `js/version.js` and nowhere else.
+  - The UI (Settings panel and header badge) loads `App.VERSION` dynamically from `js/version.js`.
+  - The `.githooks/pre-commit` hook automatically keeps `package.json` synchronized with `js/version.js`.
+- **Pre-Push Gate**: Every push of the `main` branch to the remote is guarded by `.githooks/pre-push`. The version in `package.json` (and `js/version.js`) must be bumped relative to the remote `main` branch before pushing new commits to `origin/main`.
