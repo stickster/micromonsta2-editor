@@ -1157,15 +1157,19 @@ function createFilterCurveVisualizer(program) {
     pathBg.setAttribute('class', 'filter-fill');
     pathBg.setAttribute('fill', 'url(#filter-curve-grad)');
 
-    const pathLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pathLine.setAttribute('class', 'filter-stroke');
+    const pathStopband = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathStopband.setAttribute('class', 'filter-stroke-stopband');
+
+    const pathPassband = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathPassband.setAttribute('class', 'filter-stroke');
 
     const cutoffPoint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     cutoffPoint.setAttribute('class', 'filter-cutoff-point');
     cutoffPoint.setAttribute('r', '3');
 
     svg.appendChild(pathBg);
-    svg.appendChild(pathLine);
+    svg.appendChild(pathStopband);
+    svg.appendChild(pathPassband);
     svg.appendChild(cutoffPoint);
     container.appendChild(svg);
 
@@ -1233,13 +1237,51 @@ function createFilterCurveVisualizer(program) {
 
         const N = 120;
         let strokePath = '';
+        const pts = [];
         for (let i = 0; i <= N; i++) {
             const x = x0 + (i / N) * (x1 - x0);
             const hz = F_MIN * Math.pow(F_MAX / F_MIN, i / N);
             const db = 20 * Math.log10(Math.max(1e-6, magnitude(hz / cutoffHz)));
-            strokePath += `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${dbToY(db).toFixed(2)} `;
+            const y = dbToY(db);
+            pts.push({ x, y, hz, db });
+            strokePath += `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)} `;
         }
         strokePath = strokePath.trim();
+
+        // Segregate the active curve from the flat attenuation floor (at DB_MIN = -48 dB).
+        // Frequencies rolling off or passing remain in the full bright filter curve.
+        // Once the response bottoms out at the attenuation floor, it transitions to a thin floor line.
+        let curvePath = '';
+        let floorPath = '';
+        let curveStarted = false;
+        let floorStarted = false;
+
+        const FLOOR_EPSILON = 0.5; // Within 0.5 dB of DB_MIN (-48 dB) is on the attenuation floor
+
+        for (let i = 0; i <= N; i++) {
+            const pt = pts[i];
+            const isFloor = pt.db <= (DB_MIN + FLOOR_EPSILON);
+            const prevOnFloor = i > 0 && pts[i - 1].db <= (DB_MIN + FLOOR_EPSILON);
+            const nextOnFloor = i < N && pts[i + 1].db <= (DB_MIN + FLOOR_EPSILON);
+
+            // Active curve segment includes all points not on the floor, plus the boundary point entering/leaving the floor
+            if (!isFloor || !prevOnFloor || !nextOnFloor) {
+                if (!isFloor || prevOnFloor !== nextOnFloor) {
+                    curvePath += `${!curveStarted ? 'M' : 'L'} ${pt.x.toFixed(2)} ${pt.y.toFixed(2)} `;
+                    curveStarted = true;
+                }
+            } else {
+                curveStarted = false;
+            }
+
+            // Attenuation floor segment connects points on the floor (connecting from the point where it reaches the floor)
+            if (isFloor) {
+                floorPath += `${!floorStarted ? 'M' : 'L'} ${pt.x.toFixed(2)} ${pt.y.toFixed(2)} `;
+                floorStarted = true;
+            } else {
+                floorStarted = false;
+            }
+        }
 
         const cutDb = 20 * Math.log10(Math.max(1e-6, magnitude(1)));
         cutoffPoint.setAttribute('cx', hzToX(cutoffHz).toFixed(2));
@@ -1247,7 +1289,8 @@ function createFilterCurveVisualizer(program) {
 
         const bottomLevel = yBot;
         const fillPath = `${strokePath} L ${x1} ${bottomLevel} L ${x0} ${bottomLevel} Z`;
-        pathLine.setAttribute('d', strokePath);
+        pathPassband.setAttribute('d', curvePath.trim());
+        pathStopband.setAttribute('d', floorPath.trim());
         pathBg.setAttribute('d', fillPath);
     }
 

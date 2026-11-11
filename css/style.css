@@ -2302,11 +2302,20 @@ footer.audition-footer {
 
 .filter-visualizer {
     height: 56px;
+    max-width: 240px;
+    margin: 0 auto;
+    width: 100%;
 }
 
 .filter-stroke {
     stroke: var(--accent-cyan);
     stroke-width: 2.2;
+    fill: none;
+}
+
+.filter-stroke-stopband {
+    stroke: rgba(255, 255, 255, 0.35);
+    stroke-width: 1;
     fill: none;
 }
 
