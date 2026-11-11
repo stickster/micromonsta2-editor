@@ -1397,6 +1397,60 @@ async function runAllTests(logger = console.log) {
         logger(`  Error: ${e.message}`);
     }
 
+    logger('\n--- [24] Timbral Mode Detection from MM2 Hardware ---');
+    try {
+        const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+        const makeProbeApp = (staleMode, timeoutMs = 20) => {
+            const probeApp = new App();
+            const sent = [];
+            probeApp.midi.outPort = { name: 'Mock MM2', send: (bytes) => sent.push(Array.from(bytes)) };
+            probeApp.modeProbeTimeoutMs = timeoutMs;
+            probeApp.setTimbralMode(staleMode);
+            return { probeApp, sent };
+        };
+        const partA = new MM2Program();
+        partA.name = 'PART_A';
+        const partB = new MM2Program();
+        partB.name = 'PART_B';
+
+        // 1. Monotimbral hardware: Part B request goes unanswered, so a stale bitimbral flag is corrected
+        const mono = makeProbeApp('bitimbral');
+        mono.probeApp.fetchActiveProgram(0);
+        mono.probeApp.midi.emit('program-received', { program: partA, slot: 0 });
+        await wait(250);
+        assert(mono.sent.some(m => m[6] === 0x42), 'Part B is probed after reading Part A');
+        assertEqual(mono.probeApp.synthTimbralMode, 'monotimbral', 'No Part B reply detects monotimbral mode');
+
+        // 2. Two-layer hardware: Part B reply switches a stale mono flag to bitimbral without touching the editor's Part B
+        const bi = makeProbeApp('monotimbral', 500);
+        bi.probeApp.timbreB.name = 'EDITOR_B';
+        bi.probeApp.fetchActiveProgram(0);
+        bi.probeApp.midi.emit('program-received', { program: partA, slot: 0 });
+        await wait(200);
+        bi.probeApp.midi.emit('program-received', { program: partB, slot: 1 });
+        await wait(60);
+        assertEqual(bi.probeApp.synthTimbralMode, 'bitimbral', 'Part B reply detects bitimbral mode');
+        assertEqual(bi.probeApp.timbreB.name, 'EDITOR_B', 'Mode probe leaves the editor Part B untouched');
+
+        // 3. Initial detection also loads Part B into the editor
+        const detect = makeProbeApp('monotimbral', 500);
+        detect.probeApp.fetchActiveProgram(0, { probe: 'load' });
+        detect.probeApp.midi.emit('program-received', { program: partA, slot: 0 });
+        await wait(200);
+        detect.probeApp.midi.emit('program-received', { program: partB, slot: 1 });
+        await wait(60);
+        assertEqual(detect.probeApp.synthTimbralMode, 'bitimbral', 'Initial detection finds bitimbral mode');
+        assertEqual(detect.probeApp.timbreB.name, 'PART_B', 'Initial detection loads Part B into the editor');
+
+        // 4. Fetching Part B directly never triggers a probe
+        const direct = makeProbeApp('monotimbral');
+        direct.probeApp.fetchActiveProgram(1);
+        assertEqual(direct.probeApp._pendingProbe, null, 'Fetching Part B does not schedule a mode probe');
+        clearTimeout(direct.probeApp._fetchTimeout);
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

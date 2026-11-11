@@ -50,6 +50,9 @@ class App {
         this.muteState = { osc1: false, osc2: false, osc3: false, noise: false };
         this.savedMixerLevels = null;
         this.syncStatus = 'synced'; // 'synced' | 'modified' | 'streaming' | 'fetching'
+        this.modeProbeTimeoutMs = 1500; // How long to wait for a Part B reply before assuming monotimbral
+        this._modeProbe = null;
+        this._pendingProbe = null;
 
         this.bindEvents();
     }
@@ -112,22 +115,33 @@ class App {
         // MM2 Detection Listener
         this.midi.on('mm2-detected', ({ inPort }) => {
             this.showNotification(`MM2 detected on ${inPort.name}. Loading Patch A settings...`, 'info');
-            this.fetchActiveProgram(0);
-            if (this.synthTimbralMode !== 'monotimbral') {
-                setTimeout(() => this.fetchActiveProgram(1), 400);
-            }
+            // Read Part A, then probe Part B to detect mono vs. two-layer (bi) mode and load Part B if present
+            this.fetchActiveProgram(0, { probe: 'load' });
         });
 
         // MIDI Event Listeners
         this.midi.on('program-received', ({ program, slot }) => {
             clearTimeout(this._fetchTimeout);
             console.log(`Captured program from MM2: "${program.name}" for slot ${slot}`);
+            let skipLoad = false;
             if (slot === 1) {
-                this.timbreB.rawData = program.rawData;
-                this.originalSnapshotB = this.timbreB.clone();
+                // A Part B reply means the MM2 has two active layers (bitimbral); no reply means monotimbral
                 if (this.synthTimbralMode === 'monotimbral') {
                     this.setTimbralMode('bitimbral');
                 }
+                if (this._modeProbe) {
+                    clearTimeout(this._modeProbeTimeout);
+                    skipLoad = !this._modeProbe.loadPartB;
+                    this._modeProbe = null;
+                }
+            }
+            if (skipLoad) {
+                // Mode probe only: leave the editor's Part B untouched
+                return;
+            }
+            if (slot === 1) {
+                this.timbreB.rawData = program.rawData;
+                this.originalSnapshotB = this.timbreB.clone();
             } else {
                 this.timbreA.rawData = program.rawData;
                 this.originalSnapshotA = this.timbreA.clone();
@@ -144,6 +158,13 @@ class App {
             this.updateActivePartIndicator();
             this.updateSyncStatus('synced');
             this.showNotification(`Loaded MM2 hardware Patch ${slot === 1 ? 'B' : 'A'} ("${program.name}")`, 'success');
+
+            // Part A was just read: probe Part B to find out whether the MM2 has one or two active layers
+            if (slot === 0 && this._pendingProbe) {
+                const probe = this._pendingProbe;
+                this._pendingProbe = null;
+                setTimeout(() => this.probeTimbralMode({ loadPartB: probe === 'load' }), 150);
+            }
         });
 
         this.midi.on('port-change', () => {
@@ -714,7 +735,7 @@ class App {
         }
     }
 
-    fetchActiveProgram(targetSlot = this.activeSlot) {
+    fetchActiveProgram(targetSlot = this.activeSlot, opts = {}) {
         if (!this.midi.outPort) {
             this.showNotification('No MIDI Output port selected. Open Settings to connect.', 'error');
             this.switchView('settings');
@@ -723,9 +744,14 @@ class App {
         this.updateSyncStatus('fetching');
         const slot = targetSlot;
 
+        // After reading Part A, probe Part B to detect the synth's timbral mode
+        // ('load' also loads Part B into the editor; 'detect' only updates the mode indicator)
+        this._pendingProbe = slot === 0 ? (opts.probe ?? 'detect') : null;
+
         // Clear existing fetch timer and set a 3.0s fallback timeout
         clearTimeout(this._fetchTimeout);
         this._fetchTimeout = setTimeout(() => {
+            this._pendingProbe = null;
             if (this.syncStatus === 'fetching') {
                 this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
                 this.showNotification(`Fetch timed out: No response from MM2 on ${this.midi.outPort.name}. Check MIDI cable connections.`, 'warning');
@@ -734,6 +760,22 @@ class App {
 
         this.midi.fetchProgram(slot);
         this.showNotification(`Fetching Part ${slot === 0 ? 'A' : 'B'} from MicroMonsta 2...`, 'info');
+    }
+
+    /**
+     * Detects the MM2 timbral mode by requesting Part B. The synth only answers Part B requests when
+     * two layers are active (bitimbral/combi), so a reply means two layers and silence means monotimbral.
+     * SysEx cannot tell bitimbral from combi, so both are reported as bitimbral.
+     */
+    probeTimbralMode({ loadPartB = false } = {}) {
+        if (!this.midi.outPort) return;
+        clearTimeout(this._modeProbeTimeout);
+        this._modeProbe = { loadPartB };
+        this._modeProbeTimeout = setTimeout(() => {
+            this._modeProbe = null;
+            this.setTimbralMode('monotimbral');
+        }, this.modeProbeTimeoutMs);
+        this.midi.fetchProgram(1);
     }
 
     applySoloMute() {
