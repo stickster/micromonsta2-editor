@@ -1351,6 +1351,44 @@ async function runAllTests(logger = console.log) {
         logger(`  Error: ${e.message}`);
     }
 
+    logger('\n--- [23] Random LFO Cycle Graphics ---');
+    try {
+        const lfoProg = new MM2Program();
+        const renderLfoYs = (wave, speed) => {
+            lfoProg.setValue('LFO1_WAVE', wave);
+            lfoProg.setValue('LFO1_SPEED', speed);
+            const preview = createLFOWaveformPreview(1, () => lfoProg);
+            const d = preview.children[0].children[0].getAttribute('d');
+            return d.split(/[ML]/).map(s => s.trim()).filter(Boolean).map(s => parseFloat(s.split(/\s+/)[1]));
+        };
+        const countTurns = (ys) => {
+            let turns = 0;
+            let prevDir = 0;
+            for (let i = 1; i < ys.length; i++) {
+                const diff = ys[i] - ys[i - 1];
+                if (Math.abs(diff) < 1e-6) continue;
+                const dir = diff > 0 ? 1 : -1;
+                if (prevDir !== 0 && dir !== prevDir) turns++;
+                prevDir = dir;
+            }
+            return turns;
+        };
+
+        const randBi = renderLfoYs(5, 0);
+        const randUni = renderLfoYs(18, 0);
+        assert(countTurns(randBi) >= 4, 'Random Bipolar at slowest speed has multiple peaks and valleys');
+        assert(countTurns(randUni) >= 4, 'Random Unipolar at slowest speed has multiple peaks and valleys');
+        assert(Math.min(...randUni) >= 5 - 1e-6 && Math.max(...randUni) <= 25 + 1e-6, 'Random Unipolar stays within the graph height');
+        assert(new Set(randBi.map(y => y.toFixed(3))).size > 40, 'Random Bipolar trace is not a flat or stepped line');
+
+        // S&H graphics are unchanged: held levels only (at most 2 at the slowest speed; the last sample
+        // lands on the next cycle boundary)
+        const shBi = renderLfoYs(4, 0);
+        assert(new Set(shBi.map(y => y.toFixed(3))).size <= 2, 'S&H Bipolar remains held levels at slowest speed');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

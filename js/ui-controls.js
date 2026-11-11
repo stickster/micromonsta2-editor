@@ -1364,14 +1364,21 @@ function createLFOWaveformPreview(lfoNumber, program) {
                 });
                 break;
             }
-            case 5: // Random Bipolar: smooth interpolation between random levels
+            case 5: // Random Bipolar: smooth, multi-node random curve
             case 18: { // Random Unipolar
                 const uni = wave === 18;
-                d = periodic((ph) => {
-                    const n = Math.floor(ph);
-                    const f = frac(ph);
+                // Smoothly interpolated random "value noise" so the trace stays distinctive even at the
+                // slowest speed (1 cycle): several random nodes per cycle plus a faster, quieter second layer.
+                const nodesPerCycle = Math.max(1, Math.round(6 / cycles));
+                const valueNoise = (t, seed) => {
+                    const n = Math.floor(t);
+                    const f = frac(t);
                     const sm = f * f * (3 - 2 * f);
-                    const v = rnd(n) + (rnd(n + 1) - rnd(n)) * sm;
+                    return rnd(n + seed) + (rnd(n + 1 + seed) - rnd(n + seed)) * sm;
+                };
+                d = periodic((ph) => {
+                    const v = 0.65 * valueNoise(ph * nodesPerCycle, 0) +
+                        0.35 * valueNoise(ph * nodesPerCycle * 2.3, 1000);
                     return uni ? yUni((v + 1) / 2) : yOf(v);
                 });
                 break;
