@@ -15,7 +15,14 @@ _Coming soon._
 - **Settings**: MIDI port selection and app preferences, such as undo levels.
 - **SysEx handling**: Parses and builds MM2 SysEx patch data (firmware v3.x).
 
-> NOTE: Global settings such as the synth's timbral mode (monotimbral/multitimbral) are display-only and must be changed on the hardware, since these are not accessible through NRPN/CC or SysEx.
+## Hardware Limitations (System & Combi Settings)
+
+Due to the MicroMonsta 2 firmware implementation, certain settings cannot be read or managed remotely over USB-MIDI or 5-pin DIN:
+
+- **Combination Settings:** Combination definitions (such as Stack vs. Split mode, split point note, layer mix/balance, transpose, and performance controller assignments) cannot be read, edited, or backed up over MIDI. While MIDI Program Change (0–99) selects stored combination presets on the hardware, configuring combination parameters must be done directly using the MM2's screen and encoders.
+- **System Settings:** Global hardware options (master tuning, MIDI base channel, screen timeout, button-hold times) are not accessible via SysEx or NRPN.
+- **SysEx Scope:** Official MM2 SysEx dumps are strictly 216-byte single-layer sound presets (Layer A or Layer B). They do not include system configurations, combi presets, custom wavetables, or microtuning tables.
+- **Timbral Mode Selection:** The editor automatically detects whether the unit is monotimbral or multi-layer by probing Layer B, but switching between Monotimbral, Bitimbral, and Combi modes must be done on the synth hardware itself.
 
 ## Requirements
 
