@@ -1659,9 +1659,8 @@ async function runAllTests(logger = console.log) {
 
     logger('\n--- [26] App Versioning & Metadata Tests ---');
     try {
-        assertEqual(App.VERSION, '0.1.0', 'App.VERSION matches semantic version 0.1.0');
+        assertEqual(App.VERSION, APP_VERSION, 'App.VERSION matches APP_VERSION');
         if (typeof globalThis !== 'undefined' && globalThis.PKG_JSON) {
-            assertEqual(globalThis.PKG_JSON.version, '0.1.0', 'package.json version matches 0.1.0');
             assertEqual(App.VERSION, globalThis.PKG_JSON.version, 'App.VERSION is aligned with package.json version');
         }
 
@@ -1676,8 +1675,8 @@ async function runAllTests(logger = console.log) {
 
         const appInstance = new App();
         appInstance.buildSettingsUI();
-        assertEqual(mockSettingsVer.textContent, `v${App.VERSION}`, 'Settings panel displays current version v0.1.0');
-        assertEqual(mockHeaderVer.textContent, `v${App.VERSION}`, 'Header badge displays current version v0.1.0');
+        assertEqual(mockSettingsVer.textContent, `v${App.VERSION}`, 'Settings panel displays current version');
+        assertEqual(mockHeaderVer.textContent, `v${App.VERSION}`, 'Header badge displays current version');
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }
