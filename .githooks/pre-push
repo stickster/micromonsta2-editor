@@ -1,0 +1,62 @@
+#!/usr/bin/env sh
+# Pre-push hook: Ensure versioning is defined and updated before pushing main to origin.
+
+REMOTE="$1"
+URL="$2"
+
+# Read push refs passed via stdin: <local ref> <local sha> <remote ref> <remote sha>
+PUSHING_MAIN=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+    if [ "$local_ref" = "refs/heads/main" ] || [ "$remote_ref" = "refs/heads/main" ]; then
+        PUSHING_MAIN=1
+        break
+    fi
+done
+
+if [ "$PUSHING_MAIN" -eq 1 ]; then
+    echo "[pre-push] Checking versioning requirements for 'main' branch..."
+
+    if [ ! -f "package.json" ]; then
+        echo "[pre-push] ❌ Push aborted: package.json does not exist."
+        exit 1
+    fi
+
+    # Extract version from package.json using node
+    VERSION=$(node -e "try { const p = require('./package.json'); console.log(p.version || ''); } catch (e) { console.log(''); }")
+    if [ -z "$VERSION" ]; then
+        echo "[pre-push] ❌ Push aborted: No valid 'version' field found in package.json."
+        exit 1
+    fi
+
+    # Check that git remote main doesn't have the same or newer version unless remote ref is 000000... (initial push)
+    # Check if remote main exists
+    REMOTE_MAIN_REV=$(git rev-parse --verify "$REMOTE/main" 2>/dev/null)
+    if [ -n "$REMOTE_MAIN_REV" ]; then
+        REMOTE_VERSION=$(git show "$REMOTE/main:package.json" 2>/dev/null | node -e "
+            let d = '';
+            process.stdin.on('data', c => d += c);
+            process.stdin.on('end', () => {
+                try {
+                    const p = JSON.parse(d);
+                    console.log(p.version || '');
+                } catch(e) {
+                    console.log('');
+                }
+            });
+        ")
+
+        if [ -n "$REMOTE_VERSION" ] && [ "$VERSION" = "$REMOTE_VERSION" ]; then
+            # Check if there are new commits being pushed
+            AHEAD=$(git rev-list --count "$REMOTE/main..$local_sha" 2>/dev/null)
+            if [ "$AHEAD" -gt 0 ]; then
+                echo "[pre-push] ❌ Push aborted: package.json version is still '$VERSION', identical to remote '$REMOTE/main'."
+                echo "             You must update the version before pushing commits to main (e.g. bump to next version)."
+                exit 1
+            fi
+        fi
+    fi
+
+    echo "[pre-push] ✓ Version check passed: version $VERSION is ready to push."
+fi
+
+exit 0

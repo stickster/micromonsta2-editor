@@ -43,3 +43,8 @@ All commit messages MUST follow the [Conventional Commits](https://www.conventio
 2. Keep the subject line **72 characters or fewer**.
 3. Do **not** end the subject line with a period.
 4. Never use vague subjects like `"First round of changes"`, `"Updates"`, `"WIP"`, or `"Fix bugs"`.
+
+## 3. Versioning and Pre-Push Policy
+- **Semantic Versioning**: The application follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
+- **Single Source of Truth**: The canonical application version is specified in `package.json` (`version`) and mirrored in `App.VERSION` (`js/app.js`) and the UI version badge in `index.html`.
+- **Pre-Push Gate**: Every push of the `main` branch to the remote is guarded by `.githooks/pre-push`. The version in `package.json` must be updated (bumped) relative to the remote `main` branch before any push is allowed.

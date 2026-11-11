@@ -1657,6 +1657,17 @@ async function runAllTests(logger = console.log) {
         logger(`  Error: ${e.message}`);
     }
 
+    logger('\n--- [26] App Versioning & Metadata Tests ---');
+    try {
+        assertEqual(App.VERSION, '0.1.0', 'App.VERSION matches semantic version 0.1.0');
+        if (typeof globalThis !== 'undefined' && globalThis.PKG_JSON) {
+            assertEqual(globalThis.PKG_JSON.version, '0.1.0', 'package.json version matches 0.1.0');
+            assertEqual(App.VERSION, globalThis.PKG_JSON.version, 'App.VERSION is aligned with package.json version');
+        }
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

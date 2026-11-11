@@ -3,6 +3,10 @@
  */
 
 class App {
+    static get VERSION() {
+        return '0.1.0';
+    }
+
     constructor() {
         this.midi = new MidiManager();
         this.librarian = new PatchLibrarian();

@@ -8,6 +8,7 @@ const path = require('path');
 const vm = require('vm');
 
 const rootDir = path.resolve(__dirname, '..');
+global.PKG_JSON = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const scriptFiles = [
     'js/mm2-specs.js',
     'js/sysex-parser.js',

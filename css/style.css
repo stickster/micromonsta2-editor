@@ -93,6 +93,12 @@ header.app-header {
     font-family: var(--font-mono);
 }
 
+.brand-badge.app-version-badge {
+    color: var(--accent-cyan);
+    border-color: rgba(0, 229, 255, 0.25);
+    background: rgba(0, 229, 255, 0.05);
+}
+
 .header-center {
     display: flex;
     align-items: center;

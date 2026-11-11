@@ -1,0 +1,27 @@
+{
+  "name": "micromonsta2-editor",
+  "version": "0.1.0",
+  "description": "Hardware editor, patch librarian, and duplicate manager for Audiothingies MicroMonsta 2",
+  "main": "index.html",
+  "scripts": {
+    "test": "node tests/cli-runner.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stickster/micromonsta2-editor.git"
+  },
+  "keywords": [
+    "micromonsta2",
+    "audiothingies",
+    "synthesizer",
+    "web-midi",
+    "librarian",
+    "sysex"
+  ],
+  "author": "Paul W. Frields",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/stickster/micromonsta2-editor/issues"
+  },
+  "homepage": "https://stickster.github.io/micromonsta2-editor/"
+}
