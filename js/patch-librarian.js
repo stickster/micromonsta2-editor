@@ -346,6 +346,18 @@ class PatchLibrarian {
     }
 
     /**
+     * Deletes all patches in a given bank. Returns the number of patches removed.
+     */
+    clearBank(bankIndex) {
+        const bank = this.banks[bankIndex];
+        if (!bank) return 0;
+        const count = bank.length;
+        bank.clear();
+        this.saveAllBanks();
+        return count;
+    }
+
+    /**
      * Export a single program as .syx file download
      */
     exportProgramFile(program, fileName = null) {

@@ -2387,6 +2387,27 @@ class App {
             };
         }
 
+        // Delete all patches in the current bank
+        const btnDeleteAll = document.getElementById('btn-delete-all-patches');
+        if (btnDeleteAll) {
+            btnDeleteAll.onclick = () => {
+                const bank = this.librarian.activeBank;
+                if (!bank) return;
+                if (bank.length === 0) {
+                    this.showNotification(`"${bank.name}" is already empty.`, 'info');
+                    return;
+                }
+                const confirmed = confirm(
+                    `Delete all ${bank.length} patches in "${bank.name}"?\n\nThis cannot be undone.`
+                );
+                if (confirmed) {
+                    const removed = this.librarian.clearBank(this.librarian.activeBankIndex);
+                    this.renderLibrarianBank();
+                    this.showNotification(`Deleted ${removed} patches from "${bank.name}".`, 'success');
+                }
+            };
+        }
+
         // Dumps from MM2 are always appended to the currently selected bank (no separate target toggle)
     }
 

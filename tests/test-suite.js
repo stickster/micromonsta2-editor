@@ -465,6 +465,16 @@ async function runAllTests(logger = console.log) {
         app.midi.emit('program-received', { program: incomingPatch, slot: 0 });
         assertEqual(secondBank.length, 1, 'Dump follows the newly selected bank');
         assertEqual(testBank.length, 1, 'Previously selected bank is untouched');
+
+        // 5. clearBank deletes every patch in the target bank only
+        const otherBank = new MM2Bank('Other Bank', 1);
+        otherBank.addProgram(new MM2Program());
+        app.librarian.banks = [testBank, otherBank];
+        const removedCount = app.librarian.clearBank(0);
+        assertEqual(removedCount, 1, 'clearBank reports number of patches removed');
+        assertEqual(testBank.length, 0, 'clearBank empties the target bank');
+        assertEqual(otherBank.length, 1, 'clearBank leaves other banks untouched');
+        assertEqual(app.librarian.clearBank(99), 0, 'clearBank on invalid index returns 0');
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }
