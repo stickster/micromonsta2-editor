@@ -2259,7 +2259,7 @@ class App {
 
     async confirmAndSendProgram() {
         if (!this.midi.outPort) {
-            alert('No MIDI Output port is selected. Please open MIDI Settings and select H12MIDI-Pro Port 5.');
+            alert('No MIDI Output port is selected. Please open MIDI Settings and select port where Micromonsta 2 is connected.');
             this.switchView('settings');
             return;
         }

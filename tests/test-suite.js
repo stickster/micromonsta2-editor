@@ -363,9 +363,9 @@ async function runAllTests(logger = console.log) {
 
         // Test MM2 port identification
         const midi = new MidiManager();
-        assert(midi.isMM2Port({ name: 'H12MIDI-Pro Port 5' }), 'Recognizes H12MIDI-Pro Port 5 as MM2 port');
-        assert(midi.isMM2Port({ name: 'MicroMonsta 2 Synthesizer' }), 'Recognizes MicroMonsta by name');
-        assert(!midi.isMM2Port({ name: 'H12MIDI-Pro Port 1' }), 'Distinguishes Port 1 from MM2 Port 5');
+        assert(midi.isMM2Port({ name: 'MicroMonsta 2' }), 'Recognizes MicroMonsta 2 as MM2 port');
+        assert(midi.isMM2Port({ name: 'MicroMonsta 2' }), 'Recognizes MicroMonsta by name');
+        assert(!midi.isMM2Port({ name: 'Generic USB MIDI Device' }), 'Distinguishes generic device from MM2');
         assert(!midi.isMM2Port({ name: 'IAC Driver Bus 1' }), 'Ignores generic virtual ports');
 
         // Test fetchProgram dispatching
@@ -753,11 +753,11 @@ async function runAllTests(logger = console.log) {
         midi.baseChannel = 0;
         midi.savedBaseChannel = 0;
         midi.midiAccess = {
-            inputs: new Map([['in-1', { id: 'in-1', name: 'H12MIDI-Pro Port 5', removeEventListener: () => {}, addEventListener: () => {} }]]),
-            outputs: new Map([['out-1', { id: 'out-1', name: 'H12MIDI-Pro Port 5' }]])
+            inputs: new Map([['in-1', { id: 'in-1', name: 'MicroMonsta 2', removeEventListener: () => {}, addEventListener: () => {} }]]),
+            outputs: new Map([['out-1', { id: 'out-1', name: 'MicroMonsta 2' }]])
         };
         midi.autoSelectPorts();
-        assertEqual(midi.baseChannel, 14, 'Auto-migrated stale baseChannel 0 to 14 (Channel 15) on MM2 Port 5');
+        assertEqual(midi.baseChannel, 14, 'Auto-migrated stale baseChannel 0 to 14 (Channel 15) on MM2');
         assertEqual(midi.targetChannel, 14, 'targetChannel for Part A is 14 (Ch 15)');
         midi.activeSlot = 1;
         assertEqual(midi.targetChannel, 15, 'targetChannel for Part B is 15 (Ch 16)');
@@ -768,11 +768,11 @@ async function runAllTests(logger = console.log) {
         multiPortMidi.midiAccess = {
             inputs: new Map([
                 ['gen-in', { id: 'gen-in', name: 'Keyboard USB', removeEventListener: () => {}, addEventListener: () => {} }],
-                ['mm2-in', { id: 'mm2-in', name: 'H12MIDI-Pro Port 5', removeEventListener: () => {}, addEventListener: () => {} }]
+                ['mm2-in', { id: 'mm2-in', name: 'MicroMonsta 2', removeEventListener: () => {}, addEventListener: () => {} }]
             ]),
             outputs: new Map([
                 ['gen-out', { id: 'gen-out', name: 'Speakers MIDI' }],
-                ['mm2-out', { id: 'mm2-out', name: 'H12MIDI-Pro Port 5' }]
+                ['mm2-out', { id: 'mm2-out', name: 'MicroMonsta 2' }]
             ])
         };
         multiPortMidi.autoSelectPorts();
@@ -975,7 +975,7 @@ async function runAllTests(logger = console.log) {
         // 2. Web MIDI Device Disconnect and Reconnect Detection
         const mockIn = {
             id: 'mm2-in-port',
-            name: 'H12MIDI-Pro Port 5',
+            name: 'MicroMonsta 2',
             type: 'input',
             state: 'connected',
             addEventListener: () => {},
@@ -983,7 +983,7 @@ async function runAllTests(logger = console.log) {
         };
         const mockOut = {
             id: 'mm2-out-port',
-            name: 'H12MIDI-Pro Port 5',
+            name: 'MicroMonsta 2',
             type: 'output',
             state: 'connected',
             send: () => {}

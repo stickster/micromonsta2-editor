@@ -1,6 +1,6 @@
 /**
  * Web MIDI API Manager for MicroMonsta 2
- * Enforces Hardware Safe Mode, manages ports (targeting H12MIDI-Pro Port 5),
+ * Enforces Hardware Safe Mode, manages ports,
  * handles incoming program capture, and builds NRPN/SysEx messages.
  */
 
@@ -110,7 +110,7 @@ class MidiManager {
         const inputs = this.getInputs();
         const outputs = this.getOutputs();
 
-        // 1. Identify MM2 ports (targeting H12MIDI-Pro Port 5 or MicroMonsta)
+        // 1. Identify MM2 ports (targeting MicroMonsta)
         const mm2In = inputs.find(i => this.isMM2Port(i));
         const mm2Out = outputs.find(o => this.isMM2Port(o));
 
@@ -137,7 +137,7 @@ class MidiManager {
 
         // Auto-migrate baseChannel to 14 (Channel 15) if MM2 detected and baseChannel is unset or 0 (stale default)
         if ((this.isMM2Port(this.inPort) || this.isMM2Port(this.outPort)) && (this.baseChannel === 0 || this.savedBaseChannel === undefined || this.savedBaseChannel === 0)) {
-            console.log('[MidiManager] Detected MM2 on Port 5 with Channel 1. Auto-migrating base channel to 14 (Channel 15).');
+            console.log('[MidiManager] Detected MM2 with Channel 1. Auto-migrating base channel to 14 (Channel 15).');
             this.baseChannel = 14;
             this.savedBaseChannel = 14;
             this.saveSettings();
@@ -184,7 +184,7 @@ class MidiManager {
     isMM2Port(port) {
         if (!port || !port.name) return false;
         const n = port.name.toLowerCase();
-        return n.includes('h12midi-pro port 5') || n.includes('port 5') || n.includes('micromonsta');
+        return n.includes('micromonsta');
     }
 
     checkMM2Detection() {
