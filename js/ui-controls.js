@@ -1368,19 +1368,23 @@ function createLFOWaveformPreview(lfoNumber, program) {
             case 18: { // Random Unipolar
                 const uni = wave === 18;
                 // Smoothly interpolated random "value noise" so the trace stays distinctive even at the
-                // slowest speed (1 cycle): several random nodes per cycle plus a faster, quieter second layer.
-                const nodesPerCycle = Math.max(1, Math.round(6 / cycles));
+                // slowest speed: several random nodes across the window plus a faster, quieter second layer.
+                // The node count scales continuously with speed so the trace morphs smoothly as the knob turns.
+                const nodes = 3 + pos * 21;
                 const valueNoise = (t, seed) => {
                     const n = Math.floor(t);
                     const f = frac(t);
                     const sm = f * f * (3 - 2 * f);
                     return rnd(n + seed) + (rnd(n + 1 + seed) - rnd(n + seed)) * sm;
                 };
-                d = periodic((ph) => {
-                    const v = 0.65 * valueNoise(ph * nodesPerCycle, 0) +
-                        0.35 * valueNoise(ph * nodesPerCycle * 2.3, 1000);
-                    return uni ? yUni((v + 1) / 2) : yOf(v);
-                });
+                const N = 360;
+                for (let i = 0; i <= N; i++) {
+                    const f = i / N;
+                    const v = 0.65 * valueNoise(f * nodes, 0) + 0.35 * valueNoise(f * nodes * 2.3, 1000);
+                    const y = uni ? yUni((v + 1) / 2) : yOf(v);
+                    d += `${i === 0 ? 'M' : 'L'} ${(x0 + f * (x1 - x0)).toFixed(2)} ${y.toFixed(2)} `;
+                }
+                d = d.trim();
                 break;
             }
             case 6: case 7: case 8: // Attack A/B/C

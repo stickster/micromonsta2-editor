@@ -1393,6 +1393,19 @@ async function runAllTests(logger = console.log) {
         // lands on the next cycle boundary)
         const shBi = renderLfoYs(4, 0);
         assert(new Set(shBi.map(y => y.toFixed(3))).size <= 2, 'S&H Bipolar remains held levels at slowest speed');
+
+        // Random traces morph smoothly as speed changes (adjacent speed steps barely differ)
+        for (const wave of [5, 18]) {
+            let worstMeanDiff = 0;
+            let prev = renderLfoYs(wave, 0);
+            for (let s = 1; s <= 127; s++) {
+                const cur = renderLfoYs(wave, s);
+                const meanDiff = cur.reduce((a, y, i) => a + Math.abs(y - prev[i]), 0) / cur.length;
+                worstMeanDiff = Math.max(worstMeanDiff, meanDiff);
+                prev = cur;
+            }
+            assert(worstMeanDiff < 1.5, `Random wave ${wave} changes smoothly with speed (worst mean step ${worstMeanDiff.toFixed(2)})`);
+        }
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }
