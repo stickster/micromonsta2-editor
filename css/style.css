@@ -1545,16 +1545,6 @@ main.app-main {
     color: var(--text-muted);
 }
 
-.rec-badge {
-    background: var(--accent-red);
-    color: #fff;
-    font-size: 9px;
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-weight: 700;
-    animation: pulse 1.5s infinite;
-}
-
 @keyframes pulse {
     0% { opacity: 1; }
     50% { opacity: 0.5; }

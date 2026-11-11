@@ -427,7 +427,6 @@ async function runAllTests(logger = console.log) {
         const testBank = new MM2Bank('Test Bank', 0);
         app.librarian.banks = [testBank];
         app.librarian.activeBankIndex = 0;
-        app.librarian.receivingBankIndex = -1; // Default: auto-capture OFF
 
         assertEqual(app.currentView, 'editor', 'App initializes in Editor view by default');
         assertEqual(testBank.length, 0, 'Librarian bank starts empty');
@@ -443,20 +442,29 @@ async function runAllTests(logger = console.log) {
         assertEqual(app.timbreA.name, 'HW_PATCH', 'Editor timbreA loaded incoming hardware patch');
         assertEqual(app.timbreA.getValue('FILTER_FREQ'), 88, 'Editor timbreA parameter updated');
 
-        // 2. Librarian MUST NOT contain this patch
+        // 2. Librarian MUST NOT contain this patch while the Editor view is open
         assertEqual(testBank.length, 0, 'Librarian bank count remains 0 when loading in Editor');
 
-        // 3. handleIncomingProgram directly rejects when receivingBankIndex is -1
+        // 3. handleIncomingProgram rejects when there is no active bank
+        app.librarian.activeBankIndex = 5;
         const rejected = app.librarian.handleIncomingProgram(incomingPatch);
-        assertEqual(rejected, false, 'handleIncomingProgram rejects when auto-capture is not active');
+        assertEqual(rejected, false, 'handleIncomingProgram rejects when there is no active bank');
         assertEqual(testBank.length, 0, 'Bank count remains 0 after rejected capture');
 
-        // 4. Only when auto-capture is explicitly activated does it add to the designated bank
-        app.librarian.receivingBankIndex = 0;
-        const accepted = app.librarian.handleIncomingProgram(incomingPatch);
-        assertEqual(accepted, true, 'handleIncomingProgram accepts when auto-capture is active on bank');
-        assertEqual(testBank.length, 1, 'Bank count increments to 1 when auto-capture is enabled');
+        // 4. In the Librarian view, dumps always go to the currently selected bank
+        app.librarian.activeBankIndex = 0;
+        app.currentView = 'librarian';
+        app.midi.emit('program-received', { program: incomingPatch, slot: 0 });
+        assertEqual(testBank.length, 1, 'Dump from MM2 is appended to the selected bank in Librarian view');
         assertEqual(testBank.getProgram(0).name, 'HW_PATCH', 'Captured patch stored in librarian bank');
+
+        // 5. Selecting another bank retargets incoming dumps
+        const secondBank = new MM2Bank('Second Bank', 1);
+        app.librarian.banks = [testBank, secondBank];
+        app.librarian.activeBankIndex = 1;
+        app.midi.emit('program-received', { program: incomingPatch, slot: 0 });
+        assertEqual(secondBank.length, 1, 'Dump follows the newly selected bank');
+        assertEqual(testBank.length, 1, 'Previously selected bank is untouched');
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }

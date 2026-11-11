@@ -136,8 +136,8 @@ class App {
             this.redoStack = [];
             this.updateUndoRedoUI();
             // When loading Editor or working in Editor, do not add patch to Librarian!
-            // Only capture if user is in Librarian view and has designated a receiving bank target
-            if (this.currentView === 'librarian' && this.librarian.receivingBankIndex >= 0) {
+            // Only capture while the Librarian view is open; dumps go to the currently selected bank
+            if (this.currentView === 'librarian') {
                 this.librarian.handleIncomingProgram(program);
             }
             this.refreshEditorControls();
@@ -2345,21 +2345,13 @@ class App {
             };
         }
 
-        // Mark as auto-capture target toggle
-        const chkCapture = document.getElementById('chk-bank-capture-target');
-        if (chkCapture) {
-            chkCapture.onchange = () => {
-                this.librarian.receivingBankIndex = chkCapture.checked ? this.librarian.activeBankIndex : -1;
-                this.renderLibrarianBank();
-            };
-        }
+        // Dumps from MM2 are always appended to the currently selected bank (no separate target toggle)
     }
 
     renderLibrarianBank() {
         if (typeof document === 'undefined') return;
         const bankTabs = document.getElementById('bank-tabs');
         const progList = document.getElementById('librarian-prog-list');
-        const chkCapture = document.getElementById('chk-bank-capture-target');
         const dupBadge = document.getElementById('bank-duplicates-badge');
 
         if (!bankTabs || !progList) return;
@@ -2374,7 +2366,6 @@ class App {
                 <span class="bank-tab-drag" title="Drag to reorder banks">⋮⋮</span>
                 <span class="bank-tab-title">${bank.name}</span>
                 <span class="bank-tab-count">(${bank.length})</span>
-                ${idx === this.librarian.receivingBankIndex ? '<span class="rec-badge" title="Receiving MM2 Dumps">REC</span>' : ''}
             `;
 
             tab.onclick = () => {
@@ -2405,10 +2396,6 @@ class App {
 
         const activeBank = this.librarian.activeBank;
         if (!activeBank) return;
-
-        if (chkCapture) {
-            chkCapture.checked = this.librarian.receivingBankIndex === this.librarian.activeBankIndex;
-        }
 
         // Detect Duplicates for active bank
         const dupInfo = activeBank.detectDuplicates(true);

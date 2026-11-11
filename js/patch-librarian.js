@@ -12,7 +12,6 @@ class PatchLibrarian {
     constructor() {
         this.banks = [];
         this.activeBankIndex = 0;
-        this.receivingBankIndex = -1; // -1 means auto-receive into active bank or none
         this.db = null;
         this._listeners = new Map();
     }
@@ -272,15 +271,10 @@ class PatchLibrarian {
 
     /**
      * Handles incoming captured program from MM2 hardware.
-     * Only adds to bank if a receiving bank target is explicitly designated (receivingBankIndex >= 0).
+     * Always appends to the currently selected (active) bank.
      */
     handleIncomingProgram(program) {
-        if (this.receivingBankIndex < 0 || this.receivingBankIndex >= this.banks.length) {
-            // Auto-capture target is not active: do not add to librarian
-            return false;
-        }
-
-        const targetBank = this.banks[this.receivingBankIndex];
+        const targetBank = this.activeBank;
         if (!targetBank) return false;
 
         targetBank.addProgram(program);
