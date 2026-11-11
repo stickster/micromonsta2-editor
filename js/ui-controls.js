@@ -1427,20 +1427,23 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
     const head = document.createElement('div');
     head.className = 'synth-card-header';
 
-    const titleGroup = document.createElement('div');
-    titleGroup.className = 'card-title-group';
-    titleGroup.setAttribute('draggable', 'true');
-    titleGroup.title = 'Drag to copy settings to another section of the same type';
+    const isSingleton = (SECTION_DEFINITIONS[sectionType] && SECTION_DEFINITIONS[sectionType].count === 1) || opts.isSingleton;
 
-    const dragHandle = document.createElement('span');
-    dragHandle.className = 'card-drag-handle';
-    dragHandle.textContent = '⋮⋮';
+    const titleGroup = document.createElement('div');
+    titleGroup.className = isSingleton ? 'card-title-group static' : 'card-title-group';
+    if (!isSingleton) {
+        titleGroup.setAttribute('draggable', 'true');
+        titleGroup.title = 'Drag to copy settings to another section of the same type';
+
+        const dragHandle = document.createElement('span');
+        dragHandle.className = 'card-drag-handle';
+        dragHandle.textContent = '⋮⋮';
+        titleGroup.appendChild(dragHandle);
+    }
 
     const titleText = document.createElement('span');
     titleText.className = 'card-title-text';
     titleText.textContent = title;
-
-    titleGroup.appendChild(dragHandle);
     titleGroup.appendChild(titleText);
     head.appendChild(titleGroup);
 
@@ -1559,50 +1562,52 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
     menuWrap.appendChild(dropdown);
     head.appendChild(menuWrap);
 
-    // Section Drag-and-Drop Setup
-    titleGroup.addEventListener('dragstart', (e) => {
-        e.dataTransfer.setData('text/plain', JSON.stringify({
-            kind: 'section',
-            sectionType,
-            sectionIndex
-        }));
-        card.classList.add('is-dragging');
-        document.querySelectorAll(`.synth-card[data-section-type="${sectionType}"]`).forEach(c => {
-            if (c !== card) c.classList.add('valid-drop-target');
+    // Section Drag-and-Drop Setup (multi-instance sections only)
+    if (!isSingleton) {
+        titleGroup.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', JSON.stringify({
+                kind: 'section',
+                sectionType,
+                sectionIndex
+            }));
+            card.classList.add('is-dragging');
+            document.querySelectorAll(`.synth-card[data-section-type="${sectionType}"]`).forEach(c => {
+                if (c !== card) c.classList.add('valid-drop-target');
+            });
         });
-    });
 
-    titleGroup.addEventListener('dragend', () => {
-        card.classList.remove('is-dragging');
-        document.querySelectorAll('.valid-drop-target').forEach(c => c.classList.remove('valid-drop-target'));
-        document.querySelectorAll('.drop-hover').forEach(c => c.classList.remove('drop-hover'));
-    });
+        titleGroup.addEventListener('dragend', () => {
+            card.classList.remove('is-dragging');
+            document.querySelectorAll('.valid-drop-target').forEach(c => c.classList.remove('valid-drop-target'));
+            document.querySelectorAll('.drop-hover').forEach(c => c.classList.remove('drop-hover'));
+        });
 
-    card.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        if (card.classList.contains('valid-drop-target')) {
-            card.classList.add('drop-hover');
-        }
-    });
-
-    card.addEventListener('dragleave', () => {
-        card.classList.remove('drop-hover');
-    });
-
-    card.addEventListener('drop', (e) => {
-        e.preventDefault();
-        card.classList.remove('drop-hover');
-        try {
-            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-            if (data.kind === 'section' && data.sectionType === sectionType && data.sectionIndex !== sectionIndex) {
-                copySection(data.sectionType, data.sectionIndex, sectionType, sectionIndex, program, onChangeCallback);
-                card.refresh();
-                if (window.app && window.app.showNotification) {
-                    window.app.showNotification(`Copied Section ${data.sectionIndex} to ${sectionIndex}`, 'success');
-                }
+        card.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            if (card.classList.contains('valid-drop-target')) {
+                card.classList.add('drop-hover');
             }
-        } catch (err) {}
-    });
+        });
+
+        card.addEventListener('dragleave', () => {
+            card.classList.remove('drop-hover');
+        });
+
+        card.addEventListener('drop', (e) => {
+            e.preventDefault();
+            card.classList.remove('drop-hover');
+            try {
+                const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                if (data.kind === 'section' && data.sectionType === sectionType && data.sectionIndex !== sectionIndex) {
+                    copySection(data.sectionType, data.sectionIndex, sectionType, sectionIndex, program, onChangeCallback);
+                    card.refresh();
+                    if (window.app && window.app.showNotification) {
+                        window.app.showNotification(`Copied Section ${data.sectionIndex} to ${sectionIndex}`, 'success');
+                    }
+                }
+            } catch (err) {}
+        });
+    }
 
     card.appendChild(head);
 

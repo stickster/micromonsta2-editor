@@ -888,21 +888,14 @@ class App {
         const head = document.createElement('div');
         head.className = 'synth-card-header';
 
-        // Title Group with Drag Handle
+        // Title Group
         const titleGroup = document.createElement('div');
-        titleGroup.className = 'card-title-group';
-        titleGroup.setAttribute('draggable', 'true');
-        titleGroup.title = 'Drag active oscillator settings to another section';
-
-        const dragHandle = document.createElement('span');
-        dragHandle.className = 'card-drag-handle';
-        dragHandle.textContent = '⋮⋮';
+        titleGroup.className = 'card-title-group static';
 
         const titleText = document.createElement('span');
         titleText.className = 'card-title-text';
         titleText.textContent = 'Oscillator';
 
-        titleGroup.appendChild(dragHandle);
         titleGroup.appendChild(titleText);
         head.appendChild(titleGroup);
 
@@ -1076,21 +1069,6 @@ class App {
         menuWrap.appendChild(dropdown);
         head.appendChild(menuWrap);
 
-        // Drag start on header title
-        titleGroup.addEventListener('dragstart', (e) => {
-            const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
-            e.dataTransfer.setData('text/plain', JSON.stringify({
-                kind: 'section',
-                sectionType: 'osc',
-                sectionIndex: curIdx
-            }));
-            card.classList.add('is-dragging');
-        });
-
-        titleGroup.addEventListener('dragend', () => {
-            card.classList.remove('is-dragging');
-        });
-
         card.appendChild(head);
 
         // Body with Panes
@@ -1213,21 +1191,14 @@ class App {
         const head = document.createElement('div');
         head.className = 'synth-card-header';
 
-        // Title Group with Drag Handle
+        // Title Group
         const titleGroup = document.createElement('div');
-        titleGroup.className = 'card-title-group';
-        titleGroup.setAttribute('draggable', 'true');
-        titleGroup.title = 'Drag active envelope settings to another section';
-
-        const dragHandle = document.createElement('span');
-        dragHandle.className = 'card-drag-handle';
-        dragHandle.textContent = '⋮⋮';
+        titleGroup.className = 'card-title-group static';
 
         const titleText = document.createElement('span');
         titleText.className = 'card-title-text';
         titleText.textContent = 'Envelopes';
 
-        titleGroup.appendChild(dragHandle);
         titleGroup.appendChild(titleText);
         head.appendChild(titleGroup);
 
@@ -1360,21 +1331,6 @@ class App {
         menuWrap.appendChild(menuBtn);
         menuWrap.appendChild(dropdown);
         head.appendChild(menuWrap);
-
-        // Drag start on header title
-        titleGroup.addEventListener('dragstart', (e) => {
-            const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
-            e.dataTransfer.setData('text/plain', JSON.stringify({
-                kind: 'section',
-                sectionType: 'env',
-                sectionIndex: curIdx
-            }));
-            card.classList.add('is-dragging');
-        });
-
-        titleGroup.addEventListener('dragend', () => {
-            card.classList.remove('is-dragging');
-        });
 
         card.appendChild(head);
 

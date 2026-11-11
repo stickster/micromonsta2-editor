@@ -2115,11 +2115,15 @@ footer.audition-footer {
     transition: color 0.15s ease;
 }
 
-.card-title-group:hover .card-drag-handle {
+.card-title-group.static {
+    cursor: default;
+}
+
+.card-title-group:not(.static):hover .card-drag-handle {
     color: var(--accent-cyan);
 }
 
-.card-title-group:active {
+.card-title-group:not(.static):active {
     cursor: grabbing;
 }
 
