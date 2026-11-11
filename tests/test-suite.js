@@ -762,10 +762,9 @@ async function runAllTests(logger = console.log) {
         midi.activeSlot = 1;
         assertEqual(midi.targetChannel, 15, 'targetChannel for Part B is 15 (Ch 16)');
 
-        // 2. Prioritizes MM2 Port over other generic connected ports
-        const multiPortMidi = new MidiManager();
-        multiPortMidi.savedInPortName = 'Keyboard USB';
-        multiPortMidi.midiAccess = {
+        // 2. Saved port preference & MM2 port auto-selection
+        const defaultMidi = new MidiManager();
+        defaultMidi.midiAccess = {
             inputs: new Map([
                 ['gen-in', { id: 'gen-in', name: 'Keyboard USB', removeEventListener: () => {}, addEventListener: () => {} }],
                 ['mm2-in', { id: 'mm2-in', name: 'MicroMonsta 2', removeEventListener: () => {}, addEventListener: () => {} }]
@@ -775,9 +774,25 @@ async function runAllTests(logger = console.log) {
                 ['mm2-out', { id: 'mm2-out', name: 'MicroMonsta 2' }]
             ])
         };
-        multiPortMidi.autoSelectPorts();
-        assertEqual(multiPortMidi.inPort.id, 'mm2-in', 'Prioritizes MM2 input port over generic saved port');
-        assertEqual(multiPortMidi.outPort.id, 'mm2-out', 'Prioritizes MM2 output port over generic output port');
+        defaultMidi.autoSelectPorts();
+        assertEqual(defaultMidi.inPort.id, 'mm2-in', 'Auto-selects MM2 input port when no user preference is saved');
+        assertEqual(defaultMidi.outPort.id, 'mm2-out', 'Auto-selects MM2 output port when no user preference is saved');
+
+        const userSelectedMidi = new MidiManager();
+        userSelectedMidi.savedInPortName = 'Keyboard USB';
+        userSelectedMidi.midiAccess = {
+            inputs: new Map([
+                ['gen-in', { id: 'gen-in', name: 'Keyboard USB', removeEventListener: () => {}, addEventListener: () => {} }],
+                ['mm2-in', { id: 'mm2-in', name: 'MicroMonsta 2', removeEventListener: () => {}, addEventListener: () => {} }]
+            ]),
+            outputs: new Map([
+                ['gen-out', { id: 'gen-out', name: 'Speakers MIDI' }],
+                ['mm2-out', { id: 'mm2-out', name: 'MicroMonsta 2' }]
+            ])
+        };
+        userSelectedMidi.autoSelectPorts();
+        assertEqual(userSelectedMidi.inPort.id, 'gen-in', 'Preserves user-selected non-MM2 input port even when MM2 is connected');
+        assertEqual(userSelectedMidi.outPort.id, 'mm2-out', 'Still auto-selects MM2 output port when no output preference is saved');
 
         // 3. App Live Sync & Fetch status transitions
         const app = new App();

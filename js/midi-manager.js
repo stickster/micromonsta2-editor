@@ -124,13 +124,13 @@ class MidiManager {
             matchedOut = outputs.find(o => (this.savedOutPortName && o.name === this.savedOutPortName) || (this.savedOutPortId && o.id === this.savedOutPortId));
         }
 
-        // Prioritize MM2 port if present, else fallback to saved port or first port
-        const targetIn = mm2In || matchedIn || inputs[0];
+        // Prioritize saved port if present, else fallback to MM2 port or first available port
+        const targetIn = matchedIn || mm2In || inputs[0];
         if (targetIn && (!this.inPort || this.inPort.id !== targetIn.id)) {
             this.setInputPort(targetIn.id);
         }
 
-        const targetOut = mm2Out || matchedOut || outputs[0];
+        const targetOut = matchedOut || mm2Out || outputs[0];
         if (targetOut && (!this.outPort || this.outPort.id !== targetOut.id)) {
             this.setOutputPort(targetOut.id);
         }
