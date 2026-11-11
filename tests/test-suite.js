@@ -417,6 +417,24 @@ async function runAllTests(logger = console.log) {
         partBDump.name = 'LAYER_B';
         app.midi.emit('program-received', { program: partBDump, slot: 1 });
         assertEqual(app.synthTimbralMode, 'bitimbral', 'Receiving Part B hardware dump updates display indicator to bitimbral');
+
+        // 6. Copy Part button dynamic label and title tests
+        const mockCopyBtn = document.createElement('button');
+        mockCopyBtn.id = 'btn-prog-copy-other';
+        document.registerMockElement('btn-prog-copy-other', mockCopyBtn);
+
+        app.setTimbralMode('bitimbral');
+        app.selectPart(0);
+        assertEqual(mockCopyBtn.textContent, 'Copy A → B', 'Copy button shows "Copy A → B" when viewing Part A');
+        assert(mockCopyBtn.title.includes('Part A'), 'Copy button tooltip describes copying from Part A to Part B');
+
+        app.selectPart(1);
+        assertEqual(mockCopyBtn.textContent, 'Copy B → A', 'Copy button shows "Copy B → A" when viewing Part B');
+        assert(mockCopyBtn.title.includes('Part B'), 'Copy button tooltip describes copying from Part B to Part A');
+
+        app.selectPart(0);
+        assertEqual(mockCopyBtn.textContent, 'Copy A → B', 'Copy button returns to "Copy A → B" when switching back to Part A');
+        document.registerMockElement('btn-prog-copy-other', null);
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }

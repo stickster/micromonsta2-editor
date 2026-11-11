@@ -461,9 +461,19 @@ class App {
         if (btnCopyOther) {
             // When in monotimbral mode, Copy A/B settings should be hidden!
             btnCopyOther.style.display = isMono ? 'none' : 'inline-flex';
+            this.updateCopyPartButtonUI();
         }
 
         this.updateActivePartIndicator();
+    }
+
+    updateCopyPartButtonUI() {
+        if (typeof document === 'undefined') return;
+        const btnCopyOther = document.getElementById('btn-prog-copy-other');
+        if (!btnCopyOther) return;
+        const isPartA = this.activeSlot === 0;
+        btnCopyOther.textContent = isPartA ? 'Copy A → B' : 'Copy B → A';
+        btnCopyOther.title = isPartA ? 'Copy Part A settings to Part B' : 'Copy Part B settings to Part A';
     }
 
     updateActivePartIndicator() {
@@ -498,6 +508,7 @@ class App {
         }
         this.buildEditorUI();
         this.updateActivePartIndicator();
+        this.updateCopyPartButtonUI();
     }
 
     setUndoLevels(levels) {
