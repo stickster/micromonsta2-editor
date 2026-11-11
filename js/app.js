@@ -53,6 +53,7 @@ class App {
         this.modeProbeTimeoutMs = 1500; // How long to wait for a Part B reply before assuming monotimbral
         this._modeProbe = null;
         this._pendingProbe = null;
+        this._hasDetectedMM2Once = false;
 
         this.bindEvents();
     }
@@ -114,9 +115,17 @@ class App {
     bindEvents() {
         // MM2 Detection Listener
         this.midi.on('mm2-detected', ({ inPort }) => {
-            this.showNotification(`MM2 detected on ${inPort.name}. Loading Patch A settings...`, 'info');
-            // Read Part A, then probe Part B to detect mono vs. two-layer (bi) mode and load Part B if present
-            this.fetchActiveProgram(0, { probe: 'load' });
+            if (!this._hasDetectedMM2Once) {
+                this._hasDetectedMM2Once = true;
+                this.showNotification(`MM2 detected on ${inPort.name}. Loading Patch A settings...`, 'info');
+                // Read Part A, then probe Part B to detect mono vs. two-layer (bi) mode and load Part B if present
+                this.fetchActiveProgram(0, { probe: 'load' });
+            } else {
+                // Device reconnected after being disconnected:
+                // Do not blindly fire an immediate fetch which can time out while the hardware USB/firmware boots up.
+                // Prompt user whether to pull from hardware or push from editor.
+                this.promptReconnectSync();
+            }
         });
 
         // MIDI Event Listeners
@@ -272,6 +281,21 @@ class App {
 
         this.midi.on('connection-lost', ({ port, type }) => {
             const name = (port && port.name) ? port.name : 'MicroMonsta 2';
+            // Cancel any pending fetch or timbral mode probe timeouts to prevent false fetch error warnings or crashes
+            if (this._fetchTimeout) {
+                clearTimeout(this._fetchTimeout);
+                this._fetchTimeout = null;
+            }
+            if (this._modeProbeTimeout) {
+                clearTimeout(this._modeProbeTimeout);
+                this._modeProbeTimeout = null;
+            }
+            this._pendingProbe = null;
+            this._modeProbe = null;
+            if (this.syncStatus === 'fetching') {
+                this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
+            }
+
             this.showNotification(`⚠️ MIDI Connection Lost: ${name} (${type}) disconnected. Reconnecting automatically when plugged back in...`, 'warning');
             this.updateConnectionStatus();
             this.updateSettingsPortLists();
@@ -781,7 +805,8 @@ class App {
                 this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
                 this.midi.markHardwareResponsive(false);
                 this.updateConnectionStatus();
-                this.showNotification(`Fetch timed out: No response from MM2 on ${this.midi.outPort.name}. Check MIDI cable connections.`, 'warning');
+                const portName = (this.midi.outPort && this.midi.outPort.name) ? this.midi.outPort.name : 'selected port';
+                this.showNotification(`Fetch timed out: No response from MM2 on ${portName}. Check MIDI cable connections.`, 'warning');
             }
         }, 3000);
 

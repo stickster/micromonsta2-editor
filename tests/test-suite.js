@@ -1130,6 +1130,28 @@ async function runAllTests(logger = console.log) {
         assertEqual(app.syncStatus, 'modified', 'Probe response does not overwrite app sync status');
         assertEqual(midi.hardwareResponsive, true, 'Probe response marks hardware responsive');
         assertEqual(midi._isProbing, false, '_isProbing flag cleared after probe response');
+
+        // 7. Disconnection during fetch clears fetch timeout and resets fetching status
+        app.fetchActiveProgram(0);
+        assertEqual(app.syncStatus, 'fetching', 'syncStatus is fetching after fetchActiveProgram');
+        assert(app._fetchTimeout !== null, '_fetchTimeout is active');
+        assert(app._pendingProbe !== null, '_pendingProbe is active');
+
+        // Trigger connection-lost
+        midi.emit('connection-lost', { port: mockOut, type: 'output' });
+        assertEqual(app._fetchTimeout, null, '_fetchTimeout cleared on connection-lost');
+        assertEqual(app._pendingProbe, null, '_pendingProbe cleared on connection-lost');
+        assertEqual(app.syncStatus, 'modified', 'syncStatus restored from fetching to modified/synced');
+
+        // 8. Reconnection prompts sync dialog instead of blind premature auto-fetch
+        let reconnectPromptCalled = false;
+        app.promptReconnectSync = () => { reconnectPromptCalled = true; };
+        assert(app._hasDetectedMM2Once, '_hasDetectedMM2Once is set after first detection');
+
+        // Fire mm2-detected on reconnect
+        midi.emit('mm2-detected', { inPort: mockIn, outPort: mockOut });
+        assert(reconnectPromptCalled, 'promptReconnectSync called instead of blind auto-fetch on MM2 reconnect');
+        assertEqual(app._fetchTimeout, null, 'No lingering fetch timeout started on reconnect');
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }
