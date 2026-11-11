@@ -1042,6 +1042,65 @@ async function runAllTests(logger = console.log) {
 
         assert(midi.inPort !== null, 'inPort automatically re-bound on reconnection');
         assert(reconnectEventFired, 'connection-restored event emitted on port reconnection');
+
+        // 3. Downstream Router / Hardware Responsiveness Probe and Timeout
+        let responsivenessChangedFired = false;
+        let timeoutEventFired = false;
+        midi.on('hardware-responsiveness-changed', () => { responsivenessChangedFired = true; });
+        midi.on('hardware-timeout', () => { timeoutEventFired = true; });
+
+        // Simulate successful incoming packet marking hardware responsive
+        midi.markHardwareResponsive(true);
+        assertEqual(midi.hardwareResponsive, true, 'Hardware marked responsive on valid incoming packet');
+        assert(responsivenessChangedFired, 'hardware-responsiveness-changed event emitted');
+
+        // Trigger probe with short timeout to simulate downstream MM2 disconnected from router
+        let probeFetchSent = false;
+        mockOut.send = (bytes) => { probeFetchSent = true; };
+        midi.probeHardware(50);
+        assert(probeFetchSent, 'probeHardware dispatched fetch request to output port');
+
+        await new Promise(r => setTimeout(r, 80));
+        assertEqual(midi.hardwareResponsive, false, 'Hardware marked unresponsive after probe timeout');
+        assert(timeoutEventFired, 'hardware-timeout event emitted on probe timeout');
+
+        // Simulate incoming hardware message restoring responsiveness
+        midi.onMidiMessage({ data: new Uint8Array([0xBE, 74, 64]), timeStamp: Date.now() });
+        assertEqual(midi.hardwareResponsive, true, 'Incoming hardware tweak restores hardware responsiveness to true');
+
+        // 4. Periodic Hardware Health Check Setting
+        assertEqual(midi.periodicCheck, false, 'periodicCheck starts disabled by default');
+        midi.setPeriodicCheck(true);
+        assertEqual(midi.periodicCheck, true, 'setPeriodicCheck(true) enables periodic health checks');
+        assert(midi._periodicCheckInterval !== null, 'Periodic check timer is actively running');
+        midi.setPeriodicCheck(false);
+        assertEqual(midi.periodicCheck, false, 'setPeriodicCheck(false) disables periodic health checks');
+        assertEqual(midi._periodicCheckInterval, null, 'Periodic check timer is stopped');
+
+        // 5. Unresponsive-to-Connected transition detection
+        let transitionPromptCalled = false;
+        app.promptReconnectSync = () => { transitionPromptCalled = true; };
+        // Set to unresponsive first
+        midi.markHardwareResponsive(false);
+        assertEqual(midi.hardwareResponsive, false, 'Hardware set to unresponsive');
+        // Restore to responsive
+        midi.markHardwareResponsive(true);
+        assertEqual(midi.hardwareResponsive, true, 'Hardware transitioned to responsive');
+        assert(transitionPromptCalled, 'promptReconnectSync called when transitioning from unresponsive to responsive');
+
+        // 6. Normal polling / health probe response does not overwrite editor status or parameters
+        app.updateSyncStatus('modified');
+        app.timbreA.name = 'UNSAVED_';
+        // Send a probe
+        midi.probeHardware(1000);
+        assert(midi._isProbing, 'midi._isProbing is true during probe');
+        // Simulate incoming SysEx response with different patch name "INIT" from probe
+        const probeDump = new Uint8Array(INIT_PROGRAM_BYTES);
+        midi.onMidiMessage({ data: probeDump, timeStamp: Date.now() });
+        assertEqual(app.timbreA.name, 'UNSAVED_', 'Probe response does not overwrite active editor patch data');
+        assertEqual(app.syncStatus, 'modified', 'Probe response does not overwrite app sync status');
+        assertEqual(midi.hardwareResponsive, true, 'Probe response marks hardware responsive');
+        assertEqual(midi._isProbing, false, '_isProbing flag cleared after probe response');
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }

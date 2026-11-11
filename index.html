@@ -153,6 +153,8 @@
                         style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;">
                         <button class="btn btn-sm btn-primary" id="btn-reconnect-midi"
                             title="Scan and reconnect Web MIDI devices">🔄 Scan / Reconnect MIDI Devices</button>
+                        <button class="btn btn-sm btn-secondary" id="btn-probe-hardware"
+                            title="Send SysEx query to verify MicroMonsta 2 is responsive on selected ports">⚡ Test MM2 Connection</button>
                         <span id="midi-permission-text" class="setting-desc" style="margin: 0;"></span>
                     </div>
 
@@ -187,6 +189,14 @@
                             <option value="13">Channel 14 (Part A=Ch 14, Part B=Ch 15)</option>
                             <option value="14">Channel 15 (Part A=Ch 15, Part B=Ch 16)</option>
                         </select>
+                    </div>
+
+                    <div class="setting-item">
+                        <label class="setting-checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                            <input type="checkbox" id="settings-periodic-check">
+                            <span>Check hardware connection periodically</span>
+                        </label>
+                        <span class="setting-desc" style="margin-left: 24px;">Periodically pings MM2 when idle to detect disconnection behind MIDI routers or interfaces.</span>
                     </div>
 
                     <div class="setting-item">
@@ -246,6 +256,30 @@
             <form method="dialog" class="dialog-button-bar">
                 <button type="submit" value="cancel" class="btn btn-secondary" autofocus>Cancel</button>
                 <button type="submit" value="fetch" class="btn btn-primary">Fetch from MM2</button>
+                <button type="submit" value="push" class="btn btn-warning">Push to MM2</button>
+            </form>
+        </div>
+    </dialog>
+
+    <!-- Hardware Reconnection Sync Dialog -->
+    <dialog id="reconnect-sync-dialog" class="modal-dialog-native" aria-labelledby="reconnect-sync-title">
+        <div class="dialog-native-box">
+            <h3 id="reconnect-sync-title" class="dialog-title">🔄 MicroMonsta 2 Reconnected</h3>
+            <p class="dialog-desc">
+                Communication with your MicroMonsta 2 synthesizer has been restored.
+                Choose whether you want to pull parameters from the hardware or push this editor's parameters to the synth:
+            </p>
+            <div class="dialog-options-list">
+                <div class="dialog-option-item">
+                    <strong>Pull from MM2:</strong> Reads active edit buffer settings from the synth hardware into Part A and Part B.
+                </div>
+                <div class="dialog-option-item">
+                    <strong>Push from App:</strong> Transmits current patch parameters in the editor to the synth hardware.
+                </div>
+            </div>
+            <form method="dialog" class="dialog-button-bar">
+                <button type="submit" value="dismiss" class="btn btn-secondary" autofocus>Keep Existing (Dismiss)</button>
+                <button type="submit" value="pull" class="btn btn-primary">Pull from MM2</button>
                 <button type="submit" value="push" class="btn btn-warning">Push to MM2</button>
             </form>
         </div>

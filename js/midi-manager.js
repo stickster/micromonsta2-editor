@@ -22,7 +22,13 @@ class MidiManager {
         this.activeSlot = 0;  // 0 for Part A, 1 for Part B
         this.liveSync = false; // Configurable: Live Sync vs Staged Commit
         this.autoCapture = true; // Automatically loads incoming SysEx dumps
+        this.periodicCheck = false; // Periodic idle probe for downstream MM2 hardware
         this.lastFetchedSlot = 0; // Tracks most recently requested slot (0=Part A, 1=Part B)
+        this.hardwareResponsive = null; // null: unknown/untested, true: responding, false: unresponsive
+        this._probeTimeout = null;
+        this._isProbing = false;
+        this._periodicCheckInterval = null;
+        this._lastMidiActivity = Date.now();
 
         // SysEx multi-packet chunk accumulator
         this._sysexBuffer = [];
@@ -162,6 +168,7 @@ class MidiManager {
         }
         this.saveSettings();
         this.emit('port-change', { type: 'input', port: this.inPort });
+        this.resetHardwareResponsiveness();
         this.checkMM2Detection();
     }
 
@@ -178,6 +185,7 @@ class MidiManager {
         }
         this.saveSettings();
         this.emit('port-change', { type: 'output', port: this.outPort });
+        this.resetHardwareResponsiveness();
         this.checkMM2Detection();
     }
 
@@ -185,6 +193,79 @@ class MidiManager {
         if (!port || !port.name) return false;
         const n = port.name.toLowerCase();
         return n.includes('micromonsta');
+    }
+
+    setPeriodicCheck(enabled) {
+        this.periodicCheck = !!enabled;
+        this.saveSettings();
+        if (this.periodicCheck) {
+            this.startPeriodicCheck();
+        } else {
+            this.stopPeriodicCheck();
+        }
+    }
+
+    startPeriodicCheck(intervalMs = 15000) {
+        this.stopPeriodicCheck();
+        if (!this.periodicCheck) return;
+        this._periodicCheckInterval = setInterval(() => {
+            // Only probe if both ports are connected and synth has been idle for at least 10s
+            if (!this.inPort || !this.outPort) return;
+            const idleTime = Date.now() - (this._lastMidiActivity || 0);
+            if (idleTime >= 10000 && !this._probeTimeout) {
+                this.probeHardware(2500);
+            }
+        }, intervalMs);
+    }
+
+    stopPeriodicCheck() {
+        if (this._periodicCheckInterval) {
+            clearInterval(this._periodicCheckInterval);
+            this._periodicCheckInterval = null;
+        }
+    }
+
+    resetHardwareResponsiveness() {
+        if (!this.inPort || !this.outPort) {
+            this.hardwareResponsive = null;
+            if (this._probeTimeout) {
+                clearTimeout(this._probeTimeout);
+                this._probeTimeout = null;
+            }
+        }
+    }
+
+    markHardwareResponsive(responsive) {
+        const prev = this.hardwareResponsive;
+        const changed = prev !== responsive;
+        this.hardwareResponsive = responsive;
+        if (this._probeTimeout) {
+            clearTimeout(this._probeTimeout);
+            this._probeTimeout = null;
+        }
+        if (changed) {
+            this.emit('hardware-responsiveness-changed', { responsive, previous: prev });
+        }
+    }
+
+    /**
+     * Probes downstream MM2 reachability by requesting Part A.
+     * If no reply arrives within timeoutMs, marks hardware as unresponsive.
+     * Flagged as a probe so background health checks do not overwrite active editor patch data.
+     */
+    probeHardware(timeoutMs = 2000) {
+        if (!this.inPort || !this.outPort) return false;
+        if (this._probeTimeout) clearTimeout(this._probeTimeout);
+
+        this._isProbing = true;
+        this._probeTimeout = setTimeout(() => {
+            this._probeTimeout = null;
+            this._isProbing = false;
+            this.markHardwareResponsive(false);
+            this.emit('hardware-timeout', { inPort: this.inPort, outPort: this.outPort });
+        }, timeoutMs);
+
+        return this.fetchProgram(0);
     }
 
     checkMM2Detection() {
@@ -205,11 +286,13 @@ class MidiManager {
                     this.inPort.removeEventListener('midimessage', this.onMidiMessage);
                 } catch (e) {}
                 this.inPort = null;
+                this.hardwareResponsive = null;
                 this.emit('connection-lost', { port, type: 'input' });
                 this.emit('port-change', { type: 'input', port: null });
             }
             if (port.type === 'output' && this.outPort && (this.outPort.id === port.id || this.outPort === port)) {
                 this.outPort = null;
+                this.hardwareResponsive = null;
                 this.emit('connection-lost', { port, type: 'output' });
                 this.emit('port-change', { type: 'output', port: null });
             }
@@ -227,6 +310,7 @@ class MidiManager {
     }
 
     onMidiMessage(event) {
+        this._lastMidiActivity = Date.now();
         const data = event.data;
         if (!data || data.length === 0) return;
 
@@ -297,6 +381,7 @@ class MidiManager {
                     val = Math.round(ccVal * ccDef.scale);
                 }
                 const slot = (channel === (this.baseChannel + 1) % 16) ? 1 : 0;
+                this.markHardwareResponsive(true);
                 this.emit('parameter-received', {
                     paramKey: ccDef.key,
                     value: val,
@@ -324,11 +409,15 @@ class MidiManager {
             const slot = targetCmd === 2 ? 1 : (targetCmd === 1 ? 0 : (this.lastFetchedSlot || 0));
 
             console.log(`[MIDI In] MM2 Program received: "${program.name}" for Slot ${slot === 0 ? 'A' : 'B'} (${data.length} bytes)`);
+            const isProbe = this._isProbing;
+            this._isProbing = false;
+            this.markHardwareResponsive(true);
             this.emit('program-received', {
                 program,
                 slot,
                 rawBytes: normalized,
-                version
+                version,
+                isProbe
             });
         }
     }
@@ -349,6 +438,7 @@ class MidiManager {
         }
 
         const slot = (channel === (this.baseChannel + 1) % 16) ? 1 : 0;
+        this.markHardwareResponsive(true);
         this.emit('parameter-received', {
             paramKey: paramDef.key,
             value: val,
@@ -480,9 +570,13 @@ class MidiManager {
                 this.baseChannel = s.baseChannel !== undefined ? s.baseChannel : 14;
                 this.liveSync = s.liveSync ?? false;
                 this.autoCapture = s.autoCapture ?? true;
+                this.periodicCheck = s.periodicCheck ?? false;
             }
         } catch (e) {
             console.warn('Failed to parse MIDI settings from localStorage', e);
+        }
+        if (this.periodicCheck) {
+            this.startPeriodicCheck();
         }
     }
 
@@ -497,7 +591,8 @@ class MidiManager {
                 savedOutPortName: this.savedOutPortName,
                 baseChannel: this.baseChannel,
                 liveSync: this.liveSync,
-                autoCapture: this.autoCapture
+                autoCapture: this.autoCapture,
+                periodicCheck: this.periodicCheck
             };
             window.localStorage.setItem(MidiManager.SETTINGS_KEY, JSON.stringify(s));
         } catch (e) {

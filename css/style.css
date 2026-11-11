@@ -244,6 +244,11 @@ header.app-header {
     box-shadow: 0 0 6px var(--accent-green);
 }
 
+.status-dot.unresponsive {
+    background: #e67e22;
+    box-shadow: 0 0 6px #e67e22;
+}
+
 .status-dot.partial {
     background: var(--accent-orange);
     box-shadow: 0 0 6px var(--accent-orange);

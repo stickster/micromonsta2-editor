@@ -120,9 +120,15 @@ class App {
         });
 
         // MIDI Event Listeners
-        this.midi.on('program-received', ({ program, slot }) => {
+        this.midi.on('program-received', ({ program, slot, isProbe }) => {
             clearTimeout(this._fetchTimeout);
-            console.log(`Captured program from MM2: "${program.name}" for slot ${slot}`);
+            console.log(`Captured program from MM2: "${program.name}" for slot ${slot}${isProbe ? ' (probe response)' : ''}`);
+
+            // If this was a health check probe / periodic poll, do not overwrite editor or sync status
+            if (isProbe) {
+                return;
+            }
+
             let skipLoad = false;
             if (slot === 1) {
                 // A Part B reply means the MM2 has two active layers (bitimbral); no reply means monotimbral
@@ -171,6 +177,19 @@ class App {
             this.updateConnectionStatus();
             this.updateSettingsPortLists();
             this.updateMidiPermissionUI();
+        });
+
+        this.midi.on('hardware-responsiveness-changed', ({ responsive, previous }) => {
+            this.updateConnectionStatus();
+            // When moving specifically from unresponsive (false) to responsive (true)
+            if (responsive && previous === false) {
+                this.promptReconnectSync();
+            }
+        });
+
+        this.midi.on('hardware-timeout', ({ outPort }) => {
+            this.updateConnectionStatus();
+            this.showNotification(`Hardware timeout: No response from MM2 on ${outPort ? outPort.name : 'selected port'}. Check router or MIDI cables.`, 'warning');
         });
 
         this.midi.on('base-channel-changed', (ch) => {
@@ -292,9 +311,15 @@ class App {
         const outName = this.midi.outPort ? this.midi.outPort.name : 'None';
 
         if (this.midi.inPort && this.midi.outPort) {
-            dot.className = 'status-dot connected';
-            text.textContent = `Connected: ${outName}`;
-            text.title = `In: ${inName}\nOut: ${outName}`;
+            if (this.midi.hardwareResponsive === false) {
+                dot.className = 'status-dot unresponsive';
+                text.textContent = `Unresponsive: ${outName}`;
+                text.title = `Port connected (${outName}), but MicroMonsta 2 is not responding to queries.\nCheck MIDI cable or router connections.`;
+            } else {
+                dot.className = 'status-dot connected';
+                text.textContent = `Connected: ${outName}`;
+                text.title = `In: ${inName}\nOut: ${outName}`;
+            }
         } else if (this.midi.inPort || this.midi.outPort) {
             dot.className = 'status-dot partial';
             text.textContent = `Partial: ${outName || inName}`;
@@ -754,6 +779,8 @@ class App {
             this._pendingProbe = null;
             if (this.syncStatus === 'fetching') {
                 this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
+                this.midi.markHardwareResponsive(false);
+                this.updateConnectionStatus();
                 this.showNotification(`Fetch timed out: No response from MM2 on ${this.midi.outPort.name}. Check MIDI cable connections.`, 'warning');
             }
         }, 3000);
@@ -2291,6 +2318,62 @@ class App {
         }
     }
 
+    promptReconnectSync() {
+        if (typeof document === 'undefined') return;
+        const dialog = document.getElementById('reconnect-sync-dialog');
+        if (!dialog || typeof dialog.showModal !== 'function') {
+            this.showNotification('MicroMonsta 2 reconnected!', 'success');
+            return;
+        }
+
+        const onClose = () => {
+            dialog.removeEventListener('close', onClose);
+            const choice = dialog.returnValue;
+            if (choice === 'pull') {
+                this.showNotification('Pulling Part A and Part B from MM2...', 'info');
+                // Read Part A, probe and load Part B
+                this.fetchActiveProgram(0, { probe: 'load' });
+            } else if (choice === 'push') {
+                this.showNotification('Pushing patch settings from editor to MM2...', 'info');
+                this.pushAllPartsToHardware();
+            }
+        };
+
+        dialog.addEventListener('close', onClose);
+        try {
+            dialog.showModal();
+        } catch (e) {
+            // Already open or error
+        }
+    }
+
+    pushAllPartsToHardware() {
+        if (!this.midi.outPort) {
+            this.showNotification('No MIDI Output port selected.', 'error');
+            return;
+        }
+        try {
+            // Send Part A
+            this.midi.sendProgram(this.timbreA, 0);
+            this.originalSnapshotA = this.timbreA.clone();
+            // Send Part B if bitimbral/combi
+            if (this.synthTimbralMode !== 'monotimbral') {
+                setTimeout(() => {
+                    try {
+                        this.midi.sendProgram(this.timbreB, 1);
+                        this.originalSnapshotB = this.timbreB.clone();
+                    } catch (e) {
+                        console.warn('Failed to send Part B:', e);
+                    }
+                }, 100);
+            }
+            this.updateSyncStatus('synced');
+            this.showNotification('Successfully pushed settings to MicroMonsta 2!', 'success');
+        } catch (err) {
+            this.showNotification('Failed to push settings: ' + err.message, 'error');
+        }
+    }
+
     buildLibrarianUI() {
         const bankTabs = document.getElementById('bank-tabs');
         if (!bankTabs) return;
@@ -2655,9 +2738,21 @@ class App {
         const selChan = document.getElementById('settings-base-channel');
         const chkSafe = document.getElementById('settings-safe-mode');
         const btnReconnect = document.getElementById('btn-reconnect-midi');
+        const btnProbe = document.getElementById('btn-probe-hardware');
 
         this.updateSettingsPortLists();
         this.updateMidiPermissionUI();
+
+        if (btnProbe) {
+            btnProbe.onclick = () => {
+                if (!this.midi.inPort || !this.midi.outPort) {
+                    this.showNotification('Please select both MIDI Input and Output ports first.', 'warning');
+                    return;
+                }
+                this.showNotification(`Testing MM2 connection on ${this.midi.outPort.name}...`, 'info');
+                this.midi.probeHardware(2500);
+            };
+        }
 
         if (btnReconnect) {
             btnReconnect.onclick = async () => {
@@ -2696,6 +2791,19 @@ class App {
                 const val = parseInt(undoInput.value, 10);
                 if (!isNaN(val) && val >= 1 && val <= 100) {
                     this.setUndoLevels(val);
+                }
+            };
+        }
+
+        const chkPeriodic = document.getElementById('settings-periodic-check');
+        if (chkPeriodic) {
+            chkPeriodic.checked = !!this.midi.periodicCheck;
+            chkPeriodic.onchange = () => {
+                this.midi.setPeriodicCheck(chkPeriodic.checked);
+                if (chkPeriodic.checked) {
+                    this.showNotification('Periodic connection checks enabled.', 'info');
+                } else {
+                    this.showNotification('Periodic connection checks disabled.', 'info');
                 }
             };
         }
