@@ -2391,6 +2391,69 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    logger('\n--- [36] Follower Window Connection Status Inheritance Tests ---');
+    try {
+        const leaderApp = new App();
+        const followerApp = new App();
+
+        const leaderSync = new TabSyncManager(leaderApp, { tabId: 'tab_lead_36', channelName: 'test-chan-36' });
+        const followerSync = new TabSyncManager(followerApp, { tabId: 'tab_foll_36', channelName: 'test-chan-36' });
+        leaderApp.tabSync = leaderSync;
+        followerApp.tabSync = followerSync;
+
+        leaderSync.setLeadership(true);
+        followerSync.setLeadership(false);
+
+        // Setup leader with responsive hardware
+        leaderApp.midi.hardwareResponsive = true;
+        leaderApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
+        leaderApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+
+        // Setup follower DOM status dot and text elements
+        const statusDot = document.createElement('span');
+        statusDot.id = 'midi-status-dot';
+        const statusText = document.createElement('span');
+        statusText.id = 'midi-status-text';
+        document.registerMockElement('midi-status-dot', statusDot);
+        document.registerMockElement('midi-status-text', statusText);
+
+        followerApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
+        followerApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+
+        // 1. Follower resetHardwareResponsiveness preserves responsiveness because it is a follower
+        followerApp.midi.hardwareResponsive = true;
+        followerApp.midi.resetHardwareResponsiveness();
+        assertEqual(followerApp.midi.hardwareResponsive, true, 'Follower does not wipe hardware responsiveness to null on port reset');
+
+        // 2. Applying leader state immediately updates connection status UI without delay
+        followerApp.applyLeaderState({
+            mode: 'monotimbral',
+            timbreA: leaderApp.timbreA.rawData,
+            hardwareResponsive: true
+        });
+
+        assertEqual(statusDot.className, 'status-dot connected', 'Follower status dot immediately reflects connected');
+        assertEqual(statusText.textContent, 'Connected: MicroMonsta 2', 'Follower status text immediately displays Connected');
+
+        // 3. Remote hardware status update from leader immediately propagates to UI
+        followerApp.applyRemoteHardwareStatus(false);
+        assertEqual(statusDot.className, 'status-dot disconnected unresponsive', 'Follower status dot updates on remote unresponsive status');
+        assert(statusText.textContent.includes('No Response'), 'Follower status text reflects No Response');
+
+        followerApp.applyRemoteHardwareStatus(true);
+        assertEqual(statusDot.className, 'status-dot connected', 'Follower status dot returns to connected on remote responsive update');
+        assertEqual(statusText.textContent, 'Connected: MicroMonsta 2', 'Follower status text returns to Connected');
+
+        // Cleanup
+        document.registerMockElement('midi-status-dot', null);
+        document.registerMockElement('midi-status-text', null);
+        leaderSync.destroy();
+        followerSync.destroy();
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

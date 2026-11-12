@@ -137,6 +137,7 @@ class App {
             // Do not run a hardware fetch; sync from leader window instead.
             if (this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower)) {
                 this._hasDetectedMM2Once = true;
+                this.updateConnectionStatus();
                 this.tabSync.requestLeaderState();
                 return;
             }
@@ -3223,6 +3224,7 @@ class App {
     applyRemoteHardwareStatus(responsive) {
         if (this.midi) {
             this.midi.applyRemoteHardwareStatus(responsive);
+            this.updateConnectionStatus();
         }
     }
 
@@ -3252,6 +3254,7 @@ class App {
         this.updateSyncStatus('synced');
         this.refreshEditorControls();
         this.updateActivePartIndicator();
+        this.updateConnectionStatus();
         this.showNotification('Synchronized settings from leader window', 'info');
     }
 

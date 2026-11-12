@@ -249,6 +249,11 @@ class MidiManager {
     }
 
     resetHardwareResponsiveness() {
+        if (!this.isLeader) {
+            // In follower windows, hardware responsiveness is governed by leader sync.
+            // Do not wipe responsiveness to null when binding local ports.
+            return;
+        }
         this.hardwareResponsive = null;
         this.lastFetchedSlot = 0;
         if (this._probeTimeout) {

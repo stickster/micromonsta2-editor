@@ -151,6 +151,7 @@ class TabSyncManager {
 
     get isFollower() {
         if (this.isLeader === false) return true;
+        if (this.isLeader === true) return false;
         if (typeof window !== 'undefined' && window.localStorage) {
             try {
                 const currentLeader = window.localStorage.getItem(TabSyncManager.FALLBACK_LEASE_KEY_ID);
