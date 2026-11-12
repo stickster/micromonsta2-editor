@@ -12,6 +12,34 @@ if (!GEMINI_API_KEY) {
 }
 
 /**
+ * Sanitize raw LLM response text that may contain invalid JSON escape sequences
+ * (e.g., unescaped backslashes in code snippets like regexes \s, \d, or paths \a).
+ */
+function safeJsonParse(rawText) {
+  let text = rawText.trim();
+  // Strip code fences if present
+  text = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+
+  try {
+    return JSON.parse(text);
+  } catch (initialErr) {
+    // If syntax error due to bad escaped characters, sanitize invalid escape sequences
+    // Valid JSON escape sequences are: \", \\, \/, \b, \f, \n, \r, \t, or \uXXXX
+    const sanitized = text.replace(/\\([^"\\\/bfnrtu])/g, (match, ch) => {
+      return '\\\\' + ch;
+    });
+
+    try {
+      return JSON.parse(sanitized);
+    } catch (secondErr) {
+      console.error('Failed to parse JSON even after escape sequence sanitization.');
+      console.error('Initial parse error:', initialErr.message);
+      throw initialErr;
+    }
+  }
+}
+
+/**
  * Call Gemini API with system instructions and user prompt.
  * Retries up to MAX_ATTEMPTS (5 total tries) on transient errors (503, 429, etc.)
  * with exponential backoff and jitter.
@@ -55,14 +83,7 @@ export async function callGemini({ systemInstruction, prompt, temperature = 0.2 
           throw new Error('Gemini API returned empty or invalid response candidate.');
         }
 
-        const text = candidate.content.parts[0].text.trim();
-        try {
-          return JSON.parse(text);
-        } catch (err) {
-          // If wrapped in markdown blocks despite responseMimeType, strip it
-          const cleanText = text.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
-          return JSON.parse(cleanText);
-        }
+        return safeJsonParse(candidate.content.parts[0].text);
       }
 
       // Check if transient error eligible for retry
@@ -80,18 +101,17 @@ export async function callGemini({ systemInstruction, prompt, temperature = 0.2 
 
       const errorBody = await response.text();
       throw new Error(`Gemini API error (${response.status} ${response.statusText}): ${errorBody}`);
-    } catch (networkOrParseError) {
-      // If network fetch failed or transient error, retry unless attempts exhausted
-      if (attempt < MAX_ATTEMPTS && !networkOrParseError.message?.startsWith('Gemini API error (4')) {
+    } catch (networkError) {
+      if (attempt < MAX_ATTEMPTS && !networkError.message?.startsWith('Gemini API error (4')) {
         const backoffMs = Math.pow(2, attempt) * 1000 + Math.floor(Math.random() * 1000);
         console.warn(
-          `[Attempt ${attempt}/${MAX_ATTEMPTS}] Network or transient failure: ${networkOrParseError.message}. ` +
+          `[Attempt ${attempt}/${MAX_ATTEMPTS}] Network or transient failure: ${networkError.message}. ` +
           `Retrying in ${Math.round(backoffMs / 1000)}s...`
         );
         await new Promise(resolve => setTimeout(resolve, backoffMs));
         continue;
       }
-      throw networkOrParseError;
+      throw networkError;
     }
   }
 }
