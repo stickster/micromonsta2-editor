@@ -1,9 +1,10 @@
 import https from 'node:https';
+import { AGENT_CONFIG } from './agent-config.js';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
-const MAX_ATTEMPTS = 5;
-const RETRYABLE_STATUS_CODES = [429, 500, 502, 503, 504];
+const MODEL = AGENT_CONFIG.model;
+const MAX_ATTEMPTS = AGENT_CONFIG.maxAttempts;
+const RETRYABLE_STATUS_CODES = AGENT_CONFIG.retryableStatusCodes;
 
 if (!GEMINI_API_KEY) {
   console.error('Error: GEMINI_API_KEY environment variable is required.');
