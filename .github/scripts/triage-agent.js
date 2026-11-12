@@ -5,13 +5,26 @@ import { callGemini } from './gemini-client.js';
 
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
-  const issueTitle = process.env.ISSUE_TITLE || '';
-  const issueBody = process.env.ISSUE_BODY || '';
-  const issueAuthor = process.env.ISSUE_AUTHOR || '';
+  let issueTitle = process.env.ISSUE_TITLE || '';
+  let issueBody = process.env.ISSUE_BODY || '';
+  let issueAuthor = process.env.ISSUE_AUTHOR || '';
 
   if (!issueNumber) {
     console.error('Error: ISSUE_NUMBER is required.');
     process.exit(1);
+  }
+
+  // If invoked via comment or workflow_dispatch, fetch latest details if title is blank
+  if (!issueTitle) {
+    try {
+      const raw = execFileSync('gh', ['issue', 'view', issueNumber, '--json', 'title,body,author'], { encoding: 'utf8' });
+      const data = JSON.parse(raw);
+      issueTitle = data.title;
+      issueBody = data.body || '';
+      issueAuthor = data.author?.login || issueAuthor;
+    } catch (e) {
+      console.warn('Could not fetch issue details from gh CLI:', e.message);
+    }
   }
 
   console.log(`Triaging issue #${issueNumber}: "${issueTitle}" by @${issueAuthor}`);

@@ -11,10 +11,12 @@ permissions:
 jobs:
   clarification:
     runs-on: ubuntu-latest
-    # Loop prevention & ensure we only process comments on issues, not PRs
+    # Loop prevention & ensure we only process comments on issues, not PRs, and exclude explicit command triggers
     if: >
       github.event.comment.user.login != 'github-actions[bot]' &&
-      !github.event.issue.pull_request
+      !github.event.issue.pull_request &&
+      !contains(github.event.comment.body, '/triage') &&
+      !contains(github.event.comment.body, '/fix')
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
