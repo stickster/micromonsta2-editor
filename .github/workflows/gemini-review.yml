@@ -36,6 +36,26 @@ jobs:
         uses: google-github-actions/run-gemini-cli@v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          gemini_model: 'gemini-4-hydrogen'
+          settings: |
+            {
+              "modelConfigs": {
+                "overrides": [
+                  {
+                    "match": {
+                      "model": "gemini-4-hydrogen"
+                    },
+                    "modelConfig": {
+                      "generateContentConfig": {
+                        "thinkingConfig": {
+                          "thinkingLevel": "MEDIUM"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
           prompt: |
             Review this pull request against the guidelines in GEMINI.md.
             Verify adherence to Vanilla JS architecture (no bundlers/frameworks), MicroMonsta 2 SysEx/NRPN specifications, and test suite requirements (`node tests/cli-runner.js`).
