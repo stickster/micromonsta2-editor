@@ -447,31 +447,28 @@ class App {
     updateTimbralModeUI() {
         if (typeof document === 'undefined') return;
         const isMono = this.synthTimbralMode === 'monotimbral';
+        const btnPartA = document.getElementById('btn-part-a');
         const btnPartB = document.getElementById('btn-part-b');
         const btnCopyOther = document.getElementById('btn-prog-copy-other');
-        const modeIndicator = document.getElementById('synth-mode-indicator');
 
-        if (modeIndicator) {
-            const labels = {
-                monotimbral: 'Monotimbral (12V)',
-                bitimbral: 'Bitimbral (6+6V)',
-                combi: 'Combi'
-            };
-            modeIndicator.textContent = labels[this.synthTimbralMode] || 'Monotimbral (12V)';
-            modeIndicator.className = `mode-indicator-badge mode-${this.synthTimbralMode}`;
-            modeIndicator.title = 'Synth Timbral Mode (Display Only — must be adjusted on MM2 hardware)';
+        if (btnPartA) {
+            btnPartA.textContent = isMono ? 'Part A (12V)' : 'Part A (6V)';
+            btnPartA.title = isMono
+                ? 'Edit Part A (Monotimbral Mode — 12-voice polyphony)'
+                : 'Edit Part A (Layer A — 6-voice polyphony)';
         }
 
         if (btnPartB) {
             btnPartB.style.display = isMono ? 'none' : 'inline-block';
+            btnPartB.textContent = 'Part B (6V)';
+            btnPartB.title = 'Edit Part B (Layer B — 6-voice polyphony)';
         }
+
         if (btnCopyOther) {
             // When in monotimbral mode, Copy A/B settings should be hidden!
             btnCopyOther.style.display = isMono ? 'none' : 'inline-flex';
             this.updateCopyPartButtonUI();
         }
-
-        this.updateActivePartIndicator();
     }
 
     updateCopyPartButtonUI() {
@@ -515,6 +512,7 @@ class App {
         }
         this.refreshEditorControls();
         this.updateCopyPartButtonUI();
+        this.updateTimbralModeUI();
     }
 
     setUndoLevels(levels) {
