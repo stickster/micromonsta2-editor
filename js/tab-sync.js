@@ -149,12 +149,34 @@ class TabSyncManager {
         this._fallbackLeaseInterval = setInterval(checkLease, 5000);
     }
 
+    get isFollower() {
+        if (this.isLeader === false) return true;
+        if (typeof window !== 'undefined' && window.localStorage) {
+            try {
+                const currentLeader = window.localStorage.getItem(TabSyncManager.FALLBACK_LEASE_KEY_ID);
+                const currentTs = parseInt(window.localStorage.getItem(TabSyncManager.FALLBACK_LEASE_KEY_TS) || '0', 10);
+                if (currentLeader && currentLeader !== this.tabId && (Date.now() - currentTs) <= TabSyncManager.LEASE_TIMEOUT_MS) {
+                    return true;
+                }
+            } catch (e) {}
+        }
+        return false;
+    }
+
     setLeadership(isLeader) {
         if (this.isLeader === isLeader) return;
         this.isLeader = isLeader;
         if (this.app && this.app.midi && typeof this.app.midi.setLeaderStatus === 'function') {
             this.app.midi.setLeaderStatus(isLeader);
         }
+        if (!isLeader) {
+            this.requestLeaderState();
+        }
+    }
+
+    requestLeaderState() {
+        if (!this.enabled || this.isLeader) return;
+        this.broadcast('REQUEST_LEADER_STATE', {});
     }
 
     broadcast(type, payload = {}) {
@@ -219,6 +241,25 @@ class TabSyncManager {
                 case 'HARDWARE_STATUS':
                     if (this.app && typeof this.app.applyRemoteHardwareStatus === 'function') {
                         this.app.applyRemoteHardwareStatus(data.responsive);
+                    }
+                    break;
+                case 'REQUEST_LEADER_STATE':
+                    if (this.isLeader && this.app) {
+                        const payload = {
+                            targetTabId: data.senderTabId,
+                            mode: this.app.synthTimbralMode,
+                            timbreA: this.app.timbreA ? Array.from(this.app.timbreA.rawData) : null,
+                            timbreB: this.app.timbreB ? Array.from(this.app.timbreB.rawData) : null,
+                            hardwareResponsive: this.app.midi ? this.app.midi.hardwareResponsive : null
+                        };
+                        this.broadcast('SYNC_LEADER_STATE', payload);
+                    }
+                    break;
+                case 'SYNC_LEADER_STATE':
+                    if ((!data.targetTabId || data.targetTabId === this.tabId) && !this.isLeader) {
+                        if (this.app && typeof this.app.applyLeaderState === 'function') {
+                            this.app.applyLeaderState(data);
+                        }
                     }
                     break;
             }

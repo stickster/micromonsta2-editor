@@ -133,6 +133,13 @@ class App {
     bindEvents() {
         // MM2 Detection Listener
         this.midi.on('mm2-detected', ({ inPort }) => {
+            // When an additional window opens, it acts as a follower.
+            // Do not run a hardware fetch; sync from leader window instead.
+            if (this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower)) {
+                this._hasDetectedMM2Once = true;
+                this.tabSync.requestLeaderState();
+                return;
+            }
             if (!this._hasDetectedMM2Once) {
                 this._hasDetectedMM2Once = true;
                 this.showNotification(`MM2 detected on ${inPort.name}. Loading Patch A settings...`, 'info');
@@ -3149,6 +3156,35 @@ class App {
         if (this.midi) {
             this.midi.applyRemoteHardwareStatus(responsive);
         }
+    }
+
+    applyLeaderState(state) {
+        if (!state) return;
+        if (state.mode) {
+            this.synthTimbralMode = state.mode;
+            this.updateTimbralModeUI();
+        }
+        if (state.timbreA) {
+            const bytesA = (state.timbreA instanceof Uint8Array) ? state.timbreA : new Uint8Array(state.timbreA);
+            this.timbreA.rawData = bytesA;
+            this.originalSnapshotA = this.timbreA.clone();
+        }
+        if (state.timbreB) {
+            const bytesB = (state.timbreB instanceof Uint8Array) ? state.timbreB : new Uint8Array(state.timbreB);
+            this.timbreB.rawData = bytesB;
+            this.originalSnapshotB = this.timbreB.clone();
+        }
+        if (state.hardwareResponsive !== undefined && state.hardwareResponsive !== null && this.midi) {
+            this.midi.applyRemoteHardwareStatus(state.hardwareResponsive);
+        }
+        this._hasDetectedMM2Once = true;
+        this.undoStack = [];
+        this.redoStack = [];
+        this.updateUndoRedoUI();
+        this.updateSyncStatus('synced');
+        this.refreshEditorControls();
+        this.updateActivePartIndicator();
+        this.showNotification('Synchronized settings from leader window', 'info');
     }
 
     updateSettingsPortLists() {

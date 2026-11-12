@@ -2081,6 +2081,80 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    logger('\n--- [32] Follower Window Startup Sync without Hardware Fetch Tests ---');
+    try {
+        const leaderApp = new App();
+        const followerApp = new App();
+
+        // Setup leader state
+        leaderApp.synthTimbralMode = 'monotimbral';
+        leaderApp.timbreA.name = 'LEAD_PAT';
+        leaderApp.timbreA.category = 1; // Lead
+        leaderApp.timbreB.name = 'PAD_PAT';
+        leaderApp.midi.hardwareResponsive = true;
+
+        const leaderSync = new TabSyncManager(leaderApp, { tabId: 'tab_leader_1' });
+        leaderSync.setLeadership(true);
+
+        const followerSync = new TabSyncManager(followerApp, { tabId: 'tab_follower_2' });
+        followerSync.setLeadership(false);
+        followerApp.tabSync = followerSync;
+        leaderApp.tabSync = leaderSync;
+
+        // Verify follower is marked as follower
+        assertEqual(followerSync.isLeader, false, 'Follower tab is not leader');
+        assertEqual(followerSync.isFollower, true, 'isFollower returns true for follower tab');
+
+        // Verify follower tab does not run fetch on MM2 detection
+        let followerFetchSent = false;
+        followerApp.midi.outPort = {
+            id: 'mock_out',
+            name: 'MicroMonsta 2',
+            send: () => { followerFetchSent = true; }
+        };
+        followerApp.midi.inPort = {
+            id: 'mock_in',
+            name: 'MicroMonsta 2'
+        };
+
+        // Simulate MM2 detection in follower window
+        followerApp.midi.emit('mm2-detected', { inPort: followerApp.midi.inPort });
+
+        assertEqual(followerFetchSent, false, 'Follower tab did not dispatch MIDI fetch request on MM2 detection');
+        assertEqual(followerApp._hasDetectedMM2Once, true, '_hasDetectedMM2Once flagged to prevent future fetches');
+
+        // Leader responds to REQUEST_LEADER_STATE by broadcasting SYNC_LEADER_STATE
+        let syncMessageSent = null;
+        leaderSync.broadcast = (type, payload) => {
+            if (type === 'SYNC_LEADER_STATE') syncMessageSent = payload;
+        };
+
+        leaderSync.handleIncomingMessage({
+            type: 'REQUEST_LEADER_STATE',
+            senderTabId: 'tab_follower_2'
+        });
+
+        assert(syncMessageSent !== null, 'Leader broadcasted SYNC_LEADER_STATE payload');
+        assertEqual(syncMessageSent.mode, 'monotimbral', 'Leader sent monotimbral mode');
+        assertEqual(syncMessageSent.targetTabId, 'tab_follower_2', 'Target tab is follower tab');
+
+        // Follower applies SYNC_LEADER_STATE
+        followerApp.applyLeaderState(syncMessageSent);
+
+        assertEqual(followerApp.synthTimbralMode, 'monotimbral', 'Follower timbral mode is monotimbral matching leader');
+        assertEqual(followerApp.timbreA.name, 'LEAD_PAT', 'Follower timbreA synchronized from leader');
+        assertEqual(followerApp.timbreA.category, 1, 'Follower timbreA category synchronized from leader');
+        assertEqual(followerApp.timbreB.name, 'PAD_PAT', 'Follower timbreB synchronized from leader');
+        assertEqual(followerApp.midi.hardwareResponsive, true, 'Follower hardware responsiveness synchronized from leader');
+
+        // Cleanup
+        leaderSync.destroy();
+        followerSync.destroy();
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
