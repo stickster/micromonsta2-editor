@@ -17,6 +17,12 @@
             <div class="brand-title">MicroMonsta <span>2</span></div>
             <div class="brand-badge">FW v3.x</div>
             <div class="brand-badge app-version-badge" id="app-version-badge" title="Editor Version">v0.1</div>
+            <div class="undo-redo-group" title="Undo / Redo">
+                <button class="btn btn-sm btn-subtle" id="btn-prog-undo" title="Undo change (Ctrl+Z)"
+                    disabled>↶</button>
+                <button class="btn btn-sm btn-subtle" id="btn-prog-redo" title="Redo change (Ctrl+Y)"
+                    disabled>↷</button>
+            </div>
         </div>
 
         <div class="header-center">
@@ -61,13 +67,6 @@
                 </div>
 
                 <div class="program-actions">
-                    <div class="undo-redo-group">
-                        <button class="btn btn-sm btn-subtle" id="btn-prog-undo" title="Undo change (Ctrl+Z)"
-                            disabled>↶</button>
-                        <button class="btn btn-sm btn-subtle" id="btn-prog-redo" title="Redo change (Ctrl+Y)"
-                            disabled>↷</button>
-                    </div>
-
                     <label class="live-sync-switch" title="Real-time NRPN parameter streaming to MM2 hardware">
                         <input type="checkbox" id="chk-prog-live-sync">
                         <span class="live-sync-label">Live Sync</span>
