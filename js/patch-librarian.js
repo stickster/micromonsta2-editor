@@ -191,6 +191,15 @@ class PatchLibrarian {
         return newBank;
     }
 
+    renameBank(index, newName) {
+        if (index < 0 || index >= this.banks.length) return false;
+        const trimmed = (newName || '').trim();
+        if (!trimmed) return false;
+        this.banks[index].name = trimmed;
+        this.saveAllBanks();
+        return true;
+    }
+
     removeBank(index) {
         if (this.banks.length <= 1) return false;
         if (index < 0 || index >= this.banks.length) return false;

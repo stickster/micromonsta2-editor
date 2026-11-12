@@ -34,6 +34,28 @@ if (typeof document === 'undefined') {
         set id(v) { this.attributes.set('id', String(v)); }
         get type() { return this.attributes.get('type') || ''; }
         set type(v) { this.attributes.set('type', String(v)); }
+        get innerHTML() { return this._innerHTML || ''; }
+        set innerHTML(html) {
+            this._innerHTML = html;
+            this.children = [];
+            if (!html) return;
+            const tagRegex = /<([a-z0-9]+)([^>]*)>([^<]*)<\/\1>|<([a-z0-9]+)([^>]*)\/>/gi;
+            let m;
+            while ((m = tagRegex.exec(html)) !== null) {
+                const tag = m[1] || m[4];
+                const attrs = m[2] || m[5] || '';
+                const text = m[3] || '';
+                const child = new MockElement(tag);
+                child.textContent = text;
+                const classMatch = attrs.match(/class=["']([^"']*)["']/);
+                if (classMatch) child.className = classMatch[1];
+                const idMatch = attrs.match(/id=["']([^"']*)["']/);
+                if (idMatch) child.id = idMatch[1];
+                const titleMatch = attrs.match(/title=["']([^"']*)["']/);
+                if (titleMatch) child.title = titleMatch[1];
+                this.children.push(child);
+            }
+        }
         get className() {
             return Array.from(this.classList._classes).join(' ');
         }
@@ -2187,6 +2209,108 @@ async function runAllTests(logger = console.log) {
         monoApp.midi.lastFetchedSlot = 1;
         monoApp.midi.handleCompleteSysEx(hwDump);
         assertEqual(monoApp.midi.lastFetchedSlot, 0, 'lastFetchedSlot consumed and reset to 0');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    logger('\n--- [34] Librarian Bank Renaming Tests ---');
+    try {
+        const lib = new PatchLibrarian();
+        lib.banks = [
+            new MM2Bank('Bank 1', 0),
+            new MM2Bank('Bank 2', 1)
+        ];
+
+        // 1. renameBank validation
+        const outOfBounds = lib.renameBank(5, 'Invalid');
+        assertEqual(outOfBounds, false, 'renameBank returns false for out-of-bounds index');
+
+        const negativeIndex = lib.renameBank(-1, 'Invalid');
+        assertEqual(negativeIndex, false, 'renameBank returns false for negative index');
+
+        const emptyName = lib.renameBank(0, '   ');
+        assertEqual(emptyName, false, 'renameBank returns false for empty or whitespace-only name');
+        assertEqual(lib.banks[0].name, 'Bank 1', 'Bank name untouched when invalid name provided');
+
+        // 2. Successful renaming in librarian
+        let saved = false;
+        lib.saveAllBanks = () => { saved = true; };
+        const okRename = lib.renameBank(0, '  My Custom Bank  ');
+        assertEqual(okRename, true, 'renameBank succeeds with valid trimmed name');
+        assertEqual(lib.banks[0].name, 'My Custom Bank', 'Bank name updated with trimmed string');
+        assertEqual(saved, true, 'saveAllBanks triggered on bank rename');
+
+        // 3. App.renameBank() user flow
+        const app = new App();
+        app.librarian.banks = [new MM2Bank('Original Name', 0)];
+        app.librarian.activeBankIndex = 0;
+
+        // User cancels prompt
+        global.prompt = () => null;
+        let notifType = null;
+        app.showNotification = (msg, type) => { notifType = type; };
+        app.renameBank();
+        assertEqual(app.librarian.banks[0].name, 'Original Name', 'Bank not renamed when prompt is cancelled');
+
+        // User provides empty string
+        global.prompt = () => '   ';
+        app.renameBank();
+        assertEqual(notifType, 'warning', 'Warning notification shown when new name is empty');
+        assertEqual(app.librarian.banks[0].name, 'Original Name', 'Bank not renamed on empty prompt');
+
+        // User provides same name
+        notifType = null;
+        global.prompt = () => 'Original Name';
+        app.renameBank();
+        assertEqual(notifType, null, 'No notification or change when name is unchanged');
+
+        // User provides valid new name
+        let renderCalled = false;
+        app.renderLibrarianBank = () => { renderCalled = true; };
+        global.prompt = () => 'Studio Favorites';
+        app.renameBank();
+        assertEqual(app.librarian.banks[0].name, 'Studio Favorites', 'Bank renamed via App.renameBank()');
+        assertEqual(notifType, 'success', 'Success notification shown on rename');
+        assertEqual(renderCalled, true, 'renderLibrarianBank called after rename');
+
+        // Cleanup global.prompt
+        delete global.prompt;
+
+        // 4. Test UI double click and toolbar button
+        const btnRename = document.createElement('button');
+        btnRename.id = 'btn-rename-bank';
+        document.registerMockElement('btn-rename-bank', btnRename);
+
+        const btnDelete = document.createElement('button');
+        btnDelete.id = 'btn-delete-bank';
+        document.registerMockElement('btn-delete-bank', btnDelete);
+
+        const bankTabs = document.createElement('div');
+        bankTabs.id = 'bank-tabs';
+        document.registerMockElement('bank-tabs', bankTabs);
+
+        const progList = document.createElement('tbody');
+        progList.id = 'librarian-prog-list';
+        document.registerMockElement('librarian-prog-list', progList);
+
+        // Restore real renderLibrarianBank
+        delete app.renderLibrarianBank;
+        app.renderLibrarianBank();
+
+        assertEqual(btnRename.disabled, false, 'Rename button enabled when banks exist');
+
+        // Check rendered tab has double-click handler
+        const renderedTitle = bankTabs.querySelector('.bank-tab-title');
+        assert(renderedTitle !== null, 'Rendered bank tab title exists');
+        assertEqual(renderedTitle.title, 'Double-click to rename', 'Bank tab title has rename tooltip');
+        assert(typeof renderedTitle.ondblclick === 'function', 'Bank tab title has ondblclick handler');
+
+        // Triggering ondblclick triggers renameBank
+        let renamedIdx = null;
+        app.renameBank = (idx) => { renamedIdx = idx; };
+        renderedTitle.ondblclick({ stopPropagation: () => {} });
+        assertEqual(renamedIdx, 0, 'Double clicking tab title invokes renameBank for that bank index');
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;
