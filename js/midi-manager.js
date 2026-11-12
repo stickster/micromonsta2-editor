@@ -321,18 +321,34 @@ class MidiManager {
         let hasSysEx = false;
         for (let i = 0; i < data.length; i++) {
             const byte = data[i];
+            if (byte >= 0xF8) {
+                // Ignore MIDI real-time clock/active-sensing bytes (0xF8..0xFF)
+                continue;
+            }
             if (byte === 0xF0) {
                 this._sysexBuffer = [0xF0];
                 this._isReceivingSysEx = true;
                 hasSysEx = true;
             } else if (this._isReceivingSysEx) {
-                this._sysexBuffer.push(byte);
-                hasSysEx = true;
                 if (byte === 0xF7) {
+                    this._sysexBuffer.push(0xF7);
                     this._isReceivingSysEx = false;
                     const fullSysEx = new Uint8Array(this._sysexBuffer);
                     this._sysexBuffer = [];
+                    hasSysEx = true;
                     this.handleCompleteSysEx(fullSysEx);
+                } else if (byte > 0x7F) {
+                    // Non-SysEx status byte (0x80..0xF6) aborts incomplete SysEx reception
+                    this._sysexBuffer = [];
+                    this._isReceivingSysEx = false;
+                } else {
+                    this._sysexBuffer.push(byte);
+                    hasSysEx = true;
+                    if (this._sysexBuffer.length > SYSEX_V3_LEN) {
+                        // Overflow guard: MM2 dumps never exceed 216 bytes
+                        this._sysexBuffer = [];
+                        this._isReceivingSysEx = false;
+                    }
                 }
             }
         }
