@@ -174,6 +174,9 @@ class App {
                     skipLoad = !this._modeProbe.loadPartB;
                     this._modeProbe = null;
                 }
+                if (this.midi) {
+                    this.midi.lastFetchedSlot = 0;
+                }
             }
             if (skipLoad) {
                 // Mode probe only: leave the editor's Part B untouched
@@ -895,6 +898,9 @@ class App {
         clearTimeout(this._fetchTimeout);
         this._fetchTimeout = setTimeout(() => {
             this._pendingProbe = null;
+            if (this.midi) {
+                this.midi.lastFetchedSlot = 0;
+            }
             if (this.syncStatus === 'fetching') {
                 this.updateSyncStatus('failed');
                 this.midi.markHardwareResponsive(false);
@@ -919,6 +925,9 @@ class App {
         this._modeProbe = { loadPartB };
         this._modeProbeTimeout = setTimeout(() => {
             this._modeProbe = null;
+            if (this.midi) {
+                this.midi.lastFetchedSlot = 0;
+            }
             this.setTimbralMode('monotimbral');
         }, this.modeProbeTimeoutMs);
         this.midi.fetchProgram(1);

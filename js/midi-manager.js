@@ -250,6 +250,7 @@ class MidiManager {
 
     resetHardwareResponsiveness() {
         this.hardwareResponsive = null;
+        this.lastFetchedSlot = 0;
         if (this._probeTimeout) {
             clearTimeout(this._probeTimeout);
             this._probeTimeout = null;
@@ -461,6 +462,7 @@ class MidiManager {
             console.log(`[MIDI In] MM2 Program received: "${program.name}" for Slot ${slot === 0 ? 'A' : 'B'} (${data.length} bytes)`);
             const isProbe = this._isProbing;
             this._isProbing = false;
+            this.lastFetchedSlot = 0; // Consume fetch target slot so subsequent dumps default to Slot A
             this.markHardwareResponsive(true);
             this.emit('program-received', {
                 program,

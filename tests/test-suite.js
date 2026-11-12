@@ -2155,6 +2155,43 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    logger('\n--- [33] Timbral Mode Monotimbral Protection Tests ---');
+    try {
+        const monoApp = new App();
+        monoApp.setTimbralMode('monotimbral');
+        assertEqual(monoApp.synthTimbralMode, 'monotimbral', 'App initialized in monotimbral mode');
+
+        // 1. Probing Part B sets lastFetchedSlot to 1, but timeout resets lastFetchedSlot to 0
+        monoApp.midi.outPort = { name: 'Mock MM2', send: () => {} };
+        monoApp.modeProbeTimeoutMs = 30;
+        monoApp.probeTimbralMode();
+        assertEqual(monoApp.midi.lastFetchedSlot, 1, 'lastFetchedSlot set to 1 during mode probe');
+        assert(monoApp._modeProbe !== null, '_modeProbe active');
+
+        // Wait for probe timeout
+        await new Promise(r => setTimeout(r, 50));
+        assertEqual(monoApp._modeProbe, null, '_modeProbe cleared after timeout');
+        assertEqual(monoApp.synthTimbralMode, 'monotimbral', 'Mode remains monotimbral after probe timeout');
+        assertEqual(monoApp.midi.lastFetchedSlot, 0, 'lastFetchedSlot reset to 0 after probe timeout');
+
+        // 2. Incoming hardware dump with targetCmd=3 after timeout is routed to slot 0
+        const hwDump = new Uint8Array(INIT_PROGRAM_BYTES);
+        let receivedSlot = null;
+        monoApp.midi.on('program-received', ({ slot }) => { receivedSlot = slot; });
+        monoApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
+
+        assertEqual(receivedSlot, 0, 'Subsequent incoming dump routed to slot 0, not stuck on slot 1');
+        assertEqual(monoApp.synthTimbralMode, 'monotimbral', 'Mode remains monotimbral');
+
+        // 3. Consuming a Part B fetch resets lastFetchedSlot to 0
+        monoApp.midi.lastFetchedSlot = 1;
+        monoApp.midi.handleCompleteSysEx(hwDump);
+        assertEqual(monoApp.midi.lastFetchedSlot, 0, 'lastFetchedSlot consumed and reset to 0');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
