@@ -4,6 +4,14 @@ A browser-based hardware editor, patch librarian, and duplicate manager for the 
 
 > This is an unofficial community project. It is not affiliated with or endorsed by Audiothingies.
 
+## RUN IT LIVE!
+
+[https://stickster.github.io/micromonsta2-editor]
+
+This page runs on your system only. No data is shared or sent to me or GitHub. Feel free to bookmark and use it anytime, without using GitHub. Instructions below only matter if you want to tinker with the code yourself.
+
+(The live editor here runs off the `main` branch only. Some features may not be released yet. To use them, you must get the code as shown below and `git switch devel` before loading in your browser.)
+
 ## Screenshots
 
 _Coming soon._
@@ -86,7 +94,7 @@ Contributions are welcome.
 3. Write commit messages as `<type>(<optional-scope>): <summary>`. Allowed types are `feat`, `fix`, `refactor`, `style`, `test`, `docs`, `chore`, `perf`, `ci`, and `build`. Example: `feat(ui): add compact voice panel`.
 4. Add or update tests in `tests/test-suite.js` for behavior changes.
 5. Keep the stack simple: vanilla JS, HTML, and CSS, with no frameworks or build tooling.
-6. Open a pull request describing the change.
+6. Open a pull request against `devel` branch, describing the change.
 
 ## License
 
