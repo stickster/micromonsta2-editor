@@ -1,0 +1,55 @@
+name: Gemini Assistant
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  assist:
+    # Trigger on comments mentioning @gemini-cli, /gemini, or /fix (excluding bot comments and dedicated commands)
+    if: >
+      github.event.comment.user.login != 'github-actions[bot]' &&
+      (contains(github.event.comment.body, '@gemini-cli') ||
+       contains(github.event.comment.body, '/gemini') ||
+       contains(github.event.comment.body, '/fix')) &&
+      !contains(github.event.comment.body, '/review') &&
+      !contains(github.event.comment.body, '/triage')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run Gemini CLI Assistant
+        uses: google-github-actions/run-gemini-cli@v0
+        with:
+          prompt: |
+            Respond to comment by @${{ github.event.comment.user.login }}:
+            "${{ github.event.comment.body }}"
+
+            Context:
+            Issue/PR #${{ github.event.issue.number }}: "${{ github.event.issue.title }}"
+            Is PR: ${{ github.event.issue.pull_request != null }}
+
+            Follow all GEMINI.md guidelines.
+            If a bug fix or code proposal is requested:
+            1. Verify changes against the vanilla JS architecture (no bundlers or external dependencies).
+            2. Run `node tests/cli-runner.js` to ensure 100% test pass rate with 0 failures.
+            3. Make surgical, minimal edits.
+            4. Post clear explanations or commit/branch proposals.
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_CLI_TRUST_WORKSPACE: 'true'

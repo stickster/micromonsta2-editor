@@ -1,2 +1,6 @@
 __pycache__/
 references/
+
+# Gemini CLI
+.gemini/
+gha-creds-*.json
