@@ -244,6 +244,11 @@ class TabSyncManager {
                         this.app.applyRemoteHardwareStatus(data.responsive);
                     }
                     break;
+                case 'LIVE_SYNC_CHANGED':
+                    if (this.app && typeof this.app.applyRemoteLiveSync === 'function') {
+                        this.app.applyRemoteLiveSync(data.liveSync);
+                    }
+                    break;
                 case 'HARDWARE_PROBE_START':
                     if (this.app && this.app.midi && !this.isLeader) {
                         this.app.midi._isProbing = true;
@@ -268,7 +273,8 @@ class TabSyncManager {
                             mode: this.app.synthTimbralMode,
                             timbreA: this.app.timbreA ? Array.from(this.app.timbreA.rawData) : null,
                             timbreB: this.app.timbreB ? Array.from(this.app.timbreB.rawData) : null,
-                            hardwareResponsive: this.app.midi ? this.app.midi.hardwareResponsive : null
+                            hardwareResponsive: this.app.midi ? this.app.midi.hardwareResponsive : null,
+                            liveSync: this.app.midi ? this.app.midi.liveSync : false
                         };
                         this.broadcast('SYNC_LEADER_STATE', payload);
                     }
