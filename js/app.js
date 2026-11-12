@@ -2262,7 +2262,9 @@ class App {
         const btnInit = document.getElementById('btn-prog-init');
         if (btnInit) {
             btnInit.onclick = () => {
-                if (confirm(`Reset Part ${this.activeSlot === 0 ? 'A' : 'B'} (${this.activeTimbre.name}) to default INIT values?`)) {
+                const partLabel = `Part ${this.activeSlot === 0 ? 'A' : 'B'}`;
+                const liveSyncNote = this.midi.liveSync ? ' and will immediately synchronize with connected MicroMonsta 2 hardware' : '';
+                if (confirm(`Reset ${partLabel} (${this.activeTimbre.name}) to default INIT values${liveSyncNote}?`)) {
                     this.activeTimbre.rawData = new MM2Program().rawData;
                     if (this.activeSlot === 0) {
                         this.originalSnapshotA = this.activeTimbre.clone();
@@ -2272,9 +2274,19 @@ class App {
                     this.undoStack = [];
                     this.redoStack = [];
                     this.updateUndoRedoUI();
-                    this.updateSyncStatus('modified');
+                    this.updateSyncStatus(this.midi.liveSync && this.isConnectionGood ? 'synced' : 'modified');
                     this.refreshEditorControls();
-                    this.showNotification('Program initialized to defaults.', 'info');
+
+                    if (this.midi.liveSync && this.isConnectionGood) {
+                        try {
+                            this.midi.sendProgram(this.activeTimbre, this.activeSlot, true);
+                            this.showNotification(`Initialized ${partLabel} and synced with hardware.`, 'success');
+                        } catch (err) {
+                            this.showNotification(`Initialized ${partLabel}, but hardware sync failed: ${err.message}`, 'warning');
+                        }
+                    } else {
+                        this.showNotification(`Program initialized to defaults (${partLabel}).`, 'info');
+                    }
                 }
             };
         }
