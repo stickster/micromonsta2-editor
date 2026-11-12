@@ -41,6 +41,26 @@ jobs:
         uses: google-github-actions/run-gemini-cli@v0
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
+          gemini_model: 'gemini-4-hydrogen'
+          settings: |
+            {
+              "modelConfigs": {
+                "overrides": [
+                  {
+                    "match": {
+                      "model": "gemini-4-hydrogen"
+                    },
+                    "modelConfig": {
+                      "generateContentConfig": {
+                        "thinkingConfig": {
+                          "thinkingLevel": "MEDIUM"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
           prompt: |
             Respond to comment by @${{ github.event.comment.user.login }}:
             "${{ github.event.comment.body }}"
