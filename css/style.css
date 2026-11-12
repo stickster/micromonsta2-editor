@@ -115,24 +115,37 @@ header.app-header {
 
 .part-btn {
     background: transparent;
-    border: none;
+    border: 1px solid transparent;
     color: var(--text-secondary);
     font-weight: 700;
-    padding: 6px 16px;
+    padding: 6px 14px;
     border-radius: 4px;
     cursor: pointer;
     font-size: 12px;
     transition: all 0.15s ease;
+    white-space: nowrap;
 }
 
-.part-btn:hover {
-    color: #fff;
+.part-btn.part-a-btn:hover {
+    color: var(--accent-cyan);
 }
 
-.part-btn.active {
-    background: var(--accent-cyan);
-    color: #000;
+.part-btn.part-b-btn:hover {
+    color: var(--accent-orange);
+}
+
+.part-btn.part-a-btn.active {
+    background: rgba(0, 210, 255, 0.18);
+    color: var(--accent-cyan);
+    border-color: rgba(0, 210, 255, 0.6);
     box-shadow: 0 0 10px var(--accent-cyan-glow);
+}
+
+.part-btn.part-b-btn.active {
+    background: rgba(255, 159, 67, 0.18);
+    color: var(--accent-orange);
+    border-color: rgba(255, 159, 67, 0.6);
+    box-shadow: 0 0 10px rgba(255, 159, 67, 0.3);
 }
 
 .mode-box {
