@@ -2,9 +2,9 @@
  * Central configuration for Gemini AI GitHub Actions agents.
  */
 export const AGENT_CONFIG = {
-  name: 'Gemini Agent',
-  email: 'gemini-agent[bot]@users.noreply.github.com',
-  model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+  name: 'Google Gemini',
+  email: 'gemini@google.com',
+  model: process.env.GEMINI_MODEL || 'gemini-3.7-flash-lite',
   maxAttempts: 5,
   retryableStatusCodes: [429, 500, 502, 503, 504],
   labels: {
