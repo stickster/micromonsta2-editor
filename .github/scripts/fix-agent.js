@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { callGemini } from './gemini-client.js';
+import { AGENT_CONFIG, getAgentGitTrailer } from './agent-config.js';
 
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
@@ -130,8 +131,8 @@ Analyze the problem, formulate the solution, and generate the JSON payload conta
     }
 
     // Configure git user to reflect Gemini AI authorship
-    execFileSync('git', ['config', 'user.name', 'Gemini Agent']);
-    execFileSync('git', ['config', 'user.email', 'gemini-agent[bot]@users.noreply.github.com']);
+    execFileSync('git', ['config', 'user.name', AGENT_CONFIG.name]);
+    execFileSync('git', ['config', 'user.email', AGENT_CONFIG.email]);
 
     // Apply file changes
     for (const f of result.files) {
@@ -164,7 +165,7 @@ Analyze the problem, formulate the solution, and generate the JSON payload conta
       const targetEntity = isPR ? 'pr' : 'issue';
       try {
         if (!isPR) {
-          execFileSync('gh', ['issue', 'edit', issueNumber, '--add-label', 'agent:fix-failed']);
+          execFileSync('gh', ['issue', 'edit', issueNumber, '--add-label', AGENT_CONFIG.labels.fixFailed]);
         }
         execFileSync('gh', [targetEntity, 'comment', issueNumber, '--body', '⚠️ Agent attempted changes but tests failed. Human review requested.']);
       } catch (e) {}
@@ -174,8 +175,8 @@ Analyze the problem, formulate the solution, and generate the JSON payload conta
     // Commit changes
     execFileSync('git', ['add', '-A']);
     const commitMsg = isPR
-      ? `fix: address review feedback\n\n${commentBody ? `Feedback addressed: ${commentBody.slice(0, 100)}\n\n` : ''}Co-authored-by: Gemini Agent <gemini-agent[bot]@users.noreply.github.com>`
-      : (result.commit_message || `fix: resolve issue #${issueNumber}\n\nCo-authored-by: Gemini Agent <gemini-agent[bot]@users.noreply.github.com>`);
+      ? `fix: address review feedback\n\n${commentBody ? `Feedback addressed: ${commentBody.slice(0, 100)}\n\n` : ''}${getAgentGitTrailer()}`
+      : (result.commit_message || `fix: resolve issue #${issueNumber}\n\n${getAgentGitTrailer()}`);
 
     execFileSync('git', ['commit', '-m', commitMsg]);
 

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { callGemini } from './gemini-client.js';
+import { AGENT_CONFIG } from './agent-config.js';
 
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
@@ -58,7 +59,7 @@ Evaluate this issue against the rubric and output the triage JSON decision.
     console.log('Triage decision:', JSON.stringify(result, null, 2));
 
     const isReady = result.status === 'ready-for-fix';
-    const targetLabel = isReady ? 'triage:ready-for-fix' : 'triage:needs-info';
+    const targetLabel = isReady ? AGENT_CONFIG.labels.readyForFix : AGENT_CONFIG.labels.needsInfo;
 
     // Apply label using gh CLI
     try {

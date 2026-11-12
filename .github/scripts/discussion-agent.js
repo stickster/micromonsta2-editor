@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { callGemini } from './gemini-client.js';
+import { AGENT_CONFIG, isBotUser } from './agent-config.js';
 
 async function main() {
   const issueNumber = process.env.ISSUE_NUMBER;
@@ -13,8 +14,8 @@ async function main() {
     process.exit(1);
   }
 
-  // Loop guard: ignore comments from github-actions[bot] or similar automation
-  if (commentAuthor?.includes('[bot]') || commentAuthor === 'github-actions') {
+  // Loop guard: ignore comments from bot automation
+  if (isBotUser(commentAuthor)) {
     console.log(`Skipping bot comment from ${commentAuthor}.`);
     return;
   }
@@ -29,9 +30,9 @@ async function main() {
     process.exit(1);
   }
 
-  const hasNeedsInfo = issueData.labels?.some(l => l.name === 'triage:needs-info');
+  const hasNeedsInfo = issueData.labels?.some(l => l.name === AGENT_CONFIG.labels.needsInfo);
   if (!hasNeedsInfo) {
-    console.log(`Issue #${issueNumber} does not have triage:needs-info. Skipping clarification.`);
+    console.log(`Issue #${issueNumber} does not have ${AGENT_CONFIG.labels.needsInfo}. Skipping clarification.`);
     return;
   }
 
@@ -64,8 +65,8 @@ Evaluate if the issue is now complete and actionable or if more info is needed.
     if (result.status === 'ready-for-fix') {
       // Swap label: remove triage:needs-info and add triage:ready-for-fix
       try {
-        execFileSync('gh', ['issue', 'edit', issueNumber, '--remove-label', 'triage:needs-info', '--add-label', 'triage:ready-for-fix']);
-        console.log(`Swapped labels on #${issueNumber} to triage:ready-for-fix`);
+        execFileSync('gh', ['issue', 'edit', issueNumber, '--remove-label', AGENT_CONFIG.labels.needsInfo, '--add-label', AGENT_CONFIG.labels.readyForFix]);
+        console.log(`Swapped labels on #${issueNumber} to ${AGENT_CONFIG.labels.readyForFix}`);
       } catch (e) {
         console.warn('Could not update labels:', e.message);
       }
