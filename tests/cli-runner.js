@@ -14,6 +14,7 @@ const scriptFiles = [
     'js/mm2-specs.js',
     'js/sysex-parser.js',
     'js/patch-librarian.js',
+    'js/tab-sync.js',
     'js/midi-manager.js',
     'js/ui-controls.js',
     'js/app.js',

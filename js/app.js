@@ -10,6 +10,7 @@ class App {
     constructor() {
         this.midi = new MidiManager();
         this.librarian = new PatchLibrarian();
+        this.tabSync = (typeof TabSyncManager !== 'undefined') ? new TabSyncManager(this) : null;
 
         this.timbreA = new MM2Program();
         this.timbreB = new MM2Program();
@@ -186,6 +187,13 @@ class App {
             if (this.currentView === 'librarian') {
                 this.librarian.handleIncomingProgram(program);
             }
+            if (this.tabSync) {
+                this.tabSync.broadcast('PATCH_LOADED', {
+                    slot,
+                    rawData: Array.from(program.rawData),
+                    source: 'hardware'
+                });
+            }
             this.refreshEditorControls();
             this.updateActivePartIndicator();
             this.updateSyncStatus('synced');
@@ -205,8 +213,11 @@ class App {
             this.updateMidiPermissionUI();
         });
 
-        this.midi.on('hardware-responsiveness-changed', ({ responsive, previous }) => {
+        this.midi.on('hardware-responsiveness-changed', ({ responsive, previous, isRemote }) => {
             this.updateConnectionStatus();
+            if (!isRemote && this.tabSync && this.tabSync.isLeader) {
+                this.tabSync.broadcast('HARDWARE_STATUS', { responsive });
+            }
         });
 
         this.midi.on('hardware-timeout', ({ outPort }) => {
@@ -313,8 +324,11 @@ class App {
         });
 
         // Librarian Listeners
-        this.librarian.on('update', () => {
+        this.librarian.on('update', (data) => {
             this.renderLibrarianBank();
+            if (data && data.type === 'save' && this.tabSync) {
+                this.tabSync.broadcast('LIBRARIAN_CHANGED');
+            }
         });
     }
 
@@ -442,6 +456,9 @@ class App {
             this.selectPart(0);
         }
         this.updateTimbralModeUI();
+        if (this.tabSync) {
+            this.tabSync.broadcast('TIMBRAL_MODE_CHANGED', { mode });
+        }
     }
 
     updateTimbralModeUI() {
@@ -580,6 +597,13 @@ class App {
         }
         this.activeTimbre.setValue(key, val);
         this.refreshVisualizerFor(key);
+        if (this.tabSync) {
+            this.tabSync.broadcast('PARAM_CHANGE', {
+                key,
+                val,
+                slot: this.activeSlot
+            });
+        }
 
         if (this.midi.liveSync) {
             this.midi.sendParameter(key, val);
@@ -2145,6 +2169,13 @@ class App {
             nameInput.onchange = () => {
                 this.activeTimbre.name = nameInput.value;
                 this.onParameterChanged('LAY_NAME_1', 0); // triggers sync
+                if (this.tabSync) {
+                    this.tabSync.broadcast('PATCH_META_CHANGE', {
+                        slot: this.activeSlot,
+                        name: this.activeTimbre.name,
+                        category: this.activeTimbre.category
+                    });
+                }
             };
         }
 
@@ -2161,6 +2192,13 @@ class App {
             catSelect.onchange = () => {
                 this.activeTimbre.category = parseInt(catSelect.value, 10);
                 this.onParameterChanged('LAY_CATEGORY', this.activeTimbre.category);
+                if (this.tabSync) {
+                    this.tabSync.broadcast('PATCH_META_CHANGE', {
+                        slot: this.activeSlot,
+                        name: this.activeTimbre.name,
+                        category: this.activeTimbre.category
+                    });
+                }
             };
         }
 
@@ -2274,6 +2312,13 @@ class App {
                     this.updateUndoRedoUI();
                     this.updateSyncStatus(this.midi.liveSync && this.isConnectionGood ? 'synced' : 'modified');
                     this.refreshEditorControls();
+                    if (this.tabSync) {
+                        this.tabSync.broadcast('PATCH_LOADED', {
+                            slot: this.activeSlot,
+                            rawData: Array.from(this.activeTimbre.rawData),
+                            source: 'init'
+                        });
+                    }
 
                     if (this.midi.liveSync && this.isConnectionGood) {
                         try {
@@ -2321,6 +2366,13 @@ class App {
                     this.updateUndoRedoUI();
                     this.updateSyncStatus('synced');
                     this.refreshEditorControls();
+                    if (this.tabSync) {
+                        this.tabSync.broadcast('PATCH_LOADED', {
+                            slot: this.activeSlot,
+                            rawData: Array.from(this.activeTimbre.rawData),
+                            source: 'file'
+                        });
+                    }
                     this.showNotification(`Loaded program "${this.activeTimbre.name}" from ${file.name}`, 'success');
                 } catch (err) {
                     alert('Error loading SysEx file: ' + err.message);
@@ -2355,6 +2407,7 @@ class App {
         const btnCopyOther = document.getElementById('btn-prog-copy-other');
         if (btnCopyOther) {
             btnCopyOther.onclick = () => {
+                const targetSlot = this.activeSlot === 0 ? 1 : 0;
                 if (this.activeSlot === 0) {
                     this.timbreB.rawData = this.timbreA.rawData;
                     this.originalSnapshotB = this.timbreB.clone();
@@ -2365,6 +2418,14 @@ class App {
                     this.showNotification(`Copied Part B "${this.timbreB.name}" to Part A`, 'success');
                 }
                 this.refreshEditorControls();
+                if (this.tabSync) {
+                    const targetTimbre = targetSlot === 1 ? this.timbreB : this.timbreA;
+                    this.tabSync.broadcast('PATCH_LOADED', {
+                        slot: targetSlot,
+                        rawData: Array.from(targetTimbre.rawData),
+                        source: 'copy'
+                    });
+                }
             };
         }
     }
@@ -2902,6 +2963,19 @@ class App {
             };
         }
 
+        const chkTabSync = document.getElementById('settings-tab-sync');
+        if (chkTabSync && this.tabSync) {
+            chkTabSync.checked = !!this.tabSync.enabled;
+            chkTabSync.onchange = () => {
+                this.tabSync.setEnabled(chkTabSync.checked);
+                if (chkTabSync.checked) {
+                    this.showNotification('Cross-tab synchronization enabled.', 'info');
+                } else {
+                    this.showNotification('Cross-tab synchronization disabled.', 'info');
+                }
+            };
+        }
+
         const settingsVer = document.getElementById('settings-app-version');
         if (settingsVer) {
             settingsVer.textContent = `v${App.VERSION}`;
@@ -2910,6 +2984,95 @@ class App {
         const headerVer = document.getElementById('app-version-badge');
         if (headerVer) {
             headerVer.textContent = `v${App.VERSION}`;
+        }
+    }
+
+    applyRemoteParamChange(key, val, slot = 0) {
+        const targetTimbre = (slot === 1) ? this.timbreB : this.timbreA;
+        targetTimbre.setValue(key, val);
+
+        if (slot === this.activeSlot) {
+            this.refreshVisualizerFor(key);
+
+            const oscMatch = key.match(/^OSC(\d)_/);
+            const envMatch = key.match(/^ENV(\d)_/);
+            let envNum = envMatch ? parseInt(envMatch[1], 10) : 0;
+            if (!envNum && (key === 'ENV1_VCA_VEL_SENS' || key === 'ENV1_RESET')) envNum = 1;
+            if (!envNum && (key === 'ENV2_FLT_VEL_SENS' || key === 'ENV2_RESET')) envNum = 2;
+            if (!envNum && key === 'ENV3_RESET') envNum = 3;
+
+            if (typeof document !== 'undefined') {
+                if (oscMatch) {
+                    const oscCard = document.querySelector('.osc-unified-card');
+                    if (oscCard && oscCard.refresh) oscCard.refresh();
+                }
+                if (envNum) {
+                    const envCard = document.querySelector('.env-unified-card');
+                    if (envCard && envCard.refresh) envCard.refresh();
+                }
+
+                const el = (this._paramControlMap && this._paramControlMap.get(key)) ||
+                    document.querySelector(`.editor-grid [data-param="${key}"], #prog-tempo-container [data-param="${key}"]`);
+                if (el && el.refresh) {
+                    el.refresh();
+                }
+            }
+        }
+    }
+
+    applyRemoteMetaChange(slot, name, category) {
+        const targetTimbre = (slot === 1) ? this.timbreB : this.timbreA;
+        if (name !== undefined) targetTimbre.name = name;
+        if (category !== undefined) targetTimbre.category = category;
+
+        if (slot === this.activeSlot && typeof document !== 'undefined') {
+            const nameInput = document.getElementById('prog-name-input');
+            if (nameInput && name !== undefined) nameInput.value = name;
+            const catSelect = document.getElementById('prog-category-select');
+            if (catSelect && category !== undefined) catSelect.value = category;
+        }
+    }
+
+    applyRemotePatchLoaded(slot, rawData, source) {
+        const targetTimbre = (slot === 1) ? this.timbreB : this.timbreA;
+        const bytes = (rawData instanceof Uint8Array) ? rawData : new Uint8Array(rawData);
+        targetTimbre.rawData = bytes;
+
+        if (slot === 1) {
+            this.originalSnapshotB = this.timbreB.clone();
+        } else {
+            this.originalSnapshotA = this.timbreA.clone();
+        }
+
+        if (slot === this.activeSlot) {
+            this.undoStack = [];
+            this.redoStack = [];
+            this.updateUndoRedoUI();
+            this.updateSyncStatus('synced');
+            this.refreshEditorControls();
+        }
+    }
+
+    async applyRemoteLibrarianChange() {
+        await this.librarian.loadAllBanks();
+        if (typeof document !== 'undefined') {
+            this.renderLibrarianBank();
+        }
+    }
+
+    applyRemoteTimbralMode(mode) {
+        const validModes = ['monotimbral', 'bitimbral', 'combi'];
+        if (!validModes.includes(mode)) return;
+        this.synthTimbralMode = mode;
+        if (mode === 'monotimbral' && this.activeSlot !== 0) {
+            this.selectPart(0);
+        }
+        this.updateTimbralModeUI();
+    }
+
+    applyRemoteHardwareStatus(responsive) {
+        if (this.midi) {
+            this.midi.applyRemoteHardwareStatus(responsive);
         }
     }
 

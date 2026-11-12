@@ -1734,6 +1734,136 @@ async function runAllTests(logger = console.log) {
         logger(`  Error: ${e.message}`);
     }
 
+    logger('\n--- [28] Cross-Tab Synchronization & Single Hardware Polling Tests ---');
+    try {
+        const app1 = new App();
+        const app2 = new App();
+
+        const testLockName = `mm2_poll_leader_test_${Date.now()}`;
+        const testChanName = `mm2_tab_sync_test_${Date.now()}`;
+        if (app1.tabSync) app1.tabSync.destroy();
+        if (app2.tabSync) app2.tabSync.destroy();
+        app1.tabSync = new TabSyncManager(app1, { lockName: testLockName, channelName: testChanName });
+        await new Promise(r => setTimeout(r, 40));
+        app2.tabSync = new TabSyncManager(app2, { lockName: testLockName, channelName: testChanName });
+        await new Promise(r => setTimeout(r, 40));
+
+        // 1. Default Condition is ON
+        assert(app1.tabSync !== null, 'TabSyncManager initialized on App');
+        assertEqual(app1.tabSync.enabled, true, 'Default cross-tab sync condition is ON');
+        assertEqual(app1.tabSync.loadSetting(), true, 'loadSetting returns true by default');
+
+        // 2. Settings Toggle
+        app1.tabSync.setEnabled(false);
+        assertEqual(app1.tabSync.enabled, false, 'setEnabled(false) disables sync');
+        assertEqual(window.localStorage.getItem('mm2_tab_sync_enabled'), 'false', 'Persists disabled setting to localStorage');
+        app1.tabSync.setEnabled(true);
+        assertEqual(app1.tabSync.enabled, true, 'setEnabled(true) re-enables sync');
+        assertEqual(window.localStorage.getItem('mm2_tab_sync_enabled'), 'true', 'Persists enabled setting to localStorage');
+
+        // 3. Loop / Echo Prevention
+        const initialVal = app1.timbreA.getValue('OSC1_SHAPE');
+        app1.tabSync.handleIncomingMessage({
+            type: 'PARAM_CHANGE',
+            key: 'OSC1_SHAPE',
+            val: 99,
+            slot: 0,
+            senderTabId: app1.tabSync.tabId
+        });
+        assertEqual(app1.timbreA.getValue('OSC1_SHAPE'), initialVal, 'Incoming message with matching senderTabId is ignored (no echo loop)');
+
+        // 4. Remote Parameter Change
+        app2.applyRemoteParamChange('OSC1_SHAPE', 42, 0);
+        assertEqual(app2.timbreA.getValue('OSC1_SHAPE'), 42, 'applyRemoteParamChange updates target timbre parameter');
+
+        // 5. Independent Part Viewing Isolation
+        app1.setTimbralMode('bitimbral');
+        app2.setTimbralMode('bitimbral');
+        app1.selectPart(0);
+        app2.selectPart(1);
+        assertEqual(app1.activeSlot, 0, 'App1 is viewing Part A');
+        assertEqual(app2.activeSlot, 1, 'App2 is viewing Part B');
+        app1.onParameterChanged('OSC1_SHAPE', 75);
+        assertEqual(app1.timbreA.getValue('OSC1_SHAPE'), 75, 'App1 Part A updated locally');
+        app2.applyRemoteParamChange('OSC1_SHAPE', 75, 0);
+        assertEqual(app2.timbreA.getValue('OSC1_SHAPE'), 75, 'App2 Part A updated in memory');
+        assertEqual(app2.activeSlot, 1, 'App2 remains on Part B without forced view switch');
+
+        // 6. Patch Metadata Sync
+        app2.applyRemoteMetaChange(0, 'SYNCSND', 5);
+        assertEqual(app2.timbreA.name, 'SYNCSND', 'applyRemoteMetaChange updates patch name');
+        assertEqual(app2.timbreA.category, 5, 'applyRemoteMetaChange updates patch category');
+
+        // 7. Patch Load / Init Sync
+        const newProg = new MM2Program();
+        newProg.name = 'NEWPATCH';
+        newProg.setValue('FILTER_FREQ', 215);
+        app2.applyRemotePatchLoaded(0, Array.from(newProg.rawData), 'init');
+        assertEqual(app2.timbreA.name, 'NEWPATCH', 'applyRemotePatchLoaded sets patch name');
+        assertEqual(app2.timbreA.getValue('FILTER_FREQ'), 215, 'applyRemotePatchLoaded sets rawData parameters');
+
+        // 8. Timbral Mode Sync
+        app2.applyRemoteTimbralMode('bitimbral');
+        assertEqual(app2.synthTimbralMode, 'bitimbral', 'applyRemoteTimbralMode updates mode to bitimbral');
+        app2.applyRemoteTimbralMode('monotimbral');
+        assertEqual(app2.synthTimbralMode, 'monotimbral', 'applyRemoteTimbralMode updates mode to monotimbral');
+
+        // 9. Librarian Sync
+        let loadedFromStorage = false;
+        app2.librarian.loadAllBanks = async () => { loadedFromStorage = true; };
+        await app2.applyRemoteLibrarianChange();
+        assert(loadedFromStorage, 'applyRemoteLibrarianChange reloads all banks from storage');
+
+        // 10. Single Hardware Poller Leader Election & Hardware Status Sync
+        await new Promise(r => setTimeout(r, 60));
+
+        assert(app1.tabSync.isLeader !== app2.tabSync.isLeader, 'Exactly one tab is elected Poller Leader');
+        const leader = app1.tabSync.isLeader ? app1.tabSync : app2.tabSync;
+        const follower = app1.tabSync.isLeader ? app2.tabSync : app1.tabSync;
+        const leaderApp = leader === app1.tabSync ? app1 : app2;
+        const followerApp = follower === app2.tabSync ? app2 : app1;
+
+        assert(leader.isLeader === true, 'Leader tab holds exclusive polling leadership');
+        assert(follower.isLeader === false, 'Follower tab is not poller');
+
+        // Follower does not start periodic check timer
+        followerApp.midi.setPeriodicCheck(true);
+        followerApp.midi.startPeriodicCheck(15000);
+        assertEqual(followerApp.midi._periodicCheckInterval, null, 'Follower tab does not run periodic check timer');
+
+        // Leader does start periodic check timer
+        leaderApp.midi.setPeriodicCheck(true);
+        leaderApp.midi.startPeriodicCheck(15000);
+        assert(leaderApp.midi._periodicCheckInterval !== null, 'Leader tab runs periodic check timer');
+        leaderApp.midi.stopPeriodicCheck();
+
+        // Hardware Status Broadcast & Sync without probe
+        followerApp.applyRemoteHardwareStatus(true);
+        assertEqual(followerApp.midi.hardwareResponsive, true, 'Follower tab applies remote hardware responsiveness');
+        assertEqual(followerApp.midi._isProbing, false, 'Follower tab did not execute MIDI probe');
+
+        // BroadcastChannel end-to-end test (both tabs active)
+        let messageReceived = null;
+        const receiverApp = (leader === app1.tabSync) ? app2 : app1;
+        const sender = (leader === app1.tabSync) ? app1.tabSync : app2.tabSync;
+        receiverApp.applyRemoteParamChange = (k, v, s) => { messageReceived = { k, v, s }; };
+
+        sender.broadcast('PARAM_CHANGE', { key: 'OSC1_SHAPE', val: 105, slot: 0 });
+        await new Promise(r => setTimeout(r, 60));
+        assert(messageReceived !== null && messageReceived.k === 'OSC1_SHAPE' && messageReceived.v === 105, 'End-to-end broadcast delivered via BroadcastChannel');
+
+        // Leader release / failover
+        leader.destroy();
+        await new Promise(r => setTimeout(r, 60));
+        assert(follower.isLeader === true, 'Follower promoted to leader upon leader termination');
+
+        // Cleanup
+        follower.destroy();
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
