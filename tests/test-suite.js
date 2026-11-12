@@ -2454,6 +2454,92 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    logger('\n--- [37] Cross-Tab Live Sync Control Synchronization Tests ---');
+    try {
+        const leaderApp = new App();
+        const followerApp = new App();
+
+        const leaderSync = new TabSyncManager(leaderApp, { tabId: 'tab_lead_37', channelName: 'test-chan-37' });
+        const followerSync = new TabSyncManager(followerApp, { tabId: 'tab_foll_37', channelName: 'test-chan-37' });
+        leaderApp.tabSync = leaderSync;
+        followerApp.tabSync = followerSync;
+
+        leaderSync.setLeadership(true);
+        followerSync.setLeadership(false);
+
+        // Both apps have verified MM2 connections
+        leaderApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
+        leaderApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+        leaderApp.midi.hardwareResponsive = true;
+
+        followerApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
+        followerApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+        followerApp.midi.hardwareResponsive = true;
+
+        // Track broadcast messages between tabs
+        const sentMessages = [];
+        const origLeaderBroadcast = leaderSync.broadcast.bind(leaderSync);
+        leaderSync.broadcast = (type, payload) => {
+            sentMessages.push({ from: 'leader', type, payload });
+            origLeaderBroadcast(type, payload);
+            followerSync.handleIncomingMessage({ type, senderTabId: leaderSync.tabId, ...payload });
+        };
+        const origFollowerBroadcast = followerSync.broadcast.bind(followerSync);
+        followerSync.broadcast = (type, payload) => {
+            sentMessages.push({ from: 'follower', type, payload });
+            origFollowerBroadcast(type, payload);
+            leaderSync.handleIncomingMessage({ type, senderTabId: followerSync.tabId, ...payload });
+        };
+
+        // Mock Live Sync checkbox and dialog to verify no dialog is shown on remote sync
+        const chkLiveSync = document.createElement('input');
+        chkLiveSync.type = 'checkbox';
+        chkLiveSync.id = 'chk-prog-live-sync';
+        document.registerMockElement('chk-prog-live-sync', chkLiveSync);
+
+        let dialogShownCount = 0;
+        const mockDialog = {
+            showModal: () => { dialogShownCount++; }
+        };
+        document.registerMockElement('live-sync-dialog', mockDialog);
+
+        // 1. Leader enables Live Sync -> Follower inherits state & UI without dialog
+        leaderApp._setLiveSyncState(true);
+        assertEqual(leaderApp.midi.liveSync, true, 'Leader liveSync is true');
+        assertEqual(followerApp.midi.liveSync, true, 'Follower liveSync synced to true');
+        assertEqual(chkLiveSync.checked, true, 'Live sync checkbox updated to checked');
+        assertEqual(dialogShownCount, 0, 'Follower did not show live-sync confirmation dialog');
+
+        // 2. Follower disables Live Sync -> Leader inherits state
+        followerApp._setLiveSyncState(false);
+        assertEqual(followerApp.midi.liveSync, false, 'Follower liveSync is false');
+        assertEqual(leaderApp.midi.liveSync, false, 'Leader liveSync synced to false when toggled from follower');
+        assertEqual(chkLiveSync.checked, false, 'Live sync checkbox updated to unchecked');
+
+        // 3. Follower enables Live Sync -> Leader inherits state
+        followerApp._setLiveSyncState(true);
+        assertEqual(leaderApp.midi.liveSync, true, 'Leader liveSync synced to true when toggled from follower');
+
+        // 4. REQUEST_LEADER_STATE includes liveSync and applyLeaderState restores it
+        followerApp.midi.liveSync = false;
+        chkLiveSync.checked = false;
+        leaderSync.handleIncomingMessage({
+            type: 'REQUEST_LEADER_STATE',
+            senderTabId: followerSync.tabId
+        });
+        assertEqual(followerApp.midi.liveSync, true, 'New follower inherits liveSync=true from SYNC_LEADER_STATE');
+        assertEqual(chkLiveSync.checked, true, 'New follower checkbox checked after SYNC_LEADER_STATE');
+
+        // Cleanup
+        document.registerMockElement('chk-prog-live-sync', null);
+        document.registerMockElement('live-sync-dialog', null);
+        leaderSync.destroy();
+        followerSync.destroy();
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

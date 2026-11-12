@@ -2265,39 +2265,26 @@ class App {
                             dialog.removeEventListener('close', onClose);
                             const choice = dialog.returnValue;
                             if (choice === 'fetch') {
-                                this.midi.liveSync = true;
-                                chkLiveSync.checked = true;
-                                this.midi.saveSettings();
-                                this.updateLiveSyncUI();
+                                this._setLiveSyncState(true);
                                 this.fetchActiveProgram();
                                 this.showNotification('Live Sync ENABLED (Fetched MM2 hardware settings)', 'success');
                             } else if (choice === 'push') {
-                                this.midi.liveSync = true;
-                                chkLiveSync.checked = true;
-                                this.midi.saveSettings();
-                                this.updateLiveSyncUI();
+                                this._setLiveSyncState(true);
                                 this.confirmAndSendProgram();
                                 this.showNotification('Live Sync ENABLED (Pushed patch to MM2)', 'success');
                             } else {
-                                this.midi.liveSync = false;
-                                chkLiveSync.checked = false;
-                                this.midi.saveSettings();
-                                this.updateLiveSyncUI();
+                                this._setLiveSyncState(false, { broadcast: false });
                             }
                         };
                         dialog.addEventListener('close', onClose);
                         dialog.showModal();
                     } else {
                         // Fallback if dialog.showModal not supported
-                        this.midi.liveSync = true;
-                        this.midi.saveSettings();
-                        this.updateLiveSyncUI();
+                        this._setLiveSyncState(true);
                         this.updateSyncStatus('synced');
                     }
                 } else {
-                    this.midi.liveSync = false;
-                    this.midi.saveSettings();
-                    this.updateLiveSyncUI();
+                    this._setLiveSyncState(false);
                     this.updateSyncStatus('modified');
                     this.showNotification('Live Parameter Sync DISABLED (Staged Commit)', 'info');
                 }
@@ -3228,6 +3215,23 @@ class App {
         }
     }
 
+    _setLiveSyncState(enabled, { broadcast = true } = {}) {
+        const isEnabled = !!enabled;
+        if (this.midi) {
+            this.midi.liveSync = isEnabled;
+            this.midi.saveSettings();
+        }
+        this.updateLiveSyncUI();
+        if (broadcast && this.tabSync) {
+            this.tabSync.broadcast('LIVE_SYNC_CHANGED', { liveSync: isEnabled });
+        }
+    }
+
+    applyRemoteLiveSync(enabled) {
+        this._setLiveSyncState(enabled, { broadcast: false });
+        this.updateSyncStatus(enabled && this.isConnectionGood ? 'synced' : 'modified');
+    }
+
     applyLeaderState(state) {
         if (!state) return;
         if (state.mode) {
@@ -3246,6 +3250,10 @@ class App {
         }
         if (state.hardwareResponsive !== undefined && state.hardwareResponsive !== null && this.midi) {
             this.midi.applyRemoteHardwareStatus(state.hardwareResponsive);
+        }
+        if (state.liveSync !== undefined && this.midi) {
+            this.midi.liveSync = !!state.liveSync;
+            this.midi.saveSettings();
         }
         this._hasDetectedMM2Once = true;
         this.undoStack = [];
