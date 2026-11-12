@@ -243,6 +243,23 @@ class TabSyncManager {
                         this.app.applyRemoteHardwareStatus(data.responsive);
                     }
                     break;
+                case 'HARDWARE_PROBE_START':
+                    if (this.app && this.app.midi && !this.isLeader) {
+                        this.app.midi._isProbing = true;
+                        clearTimeout(this.app.midi._remoteProbeTimeout);
+                        this.app.midi._remoteProbeTimeout = setTimeout(() => {
+                            if (this.app && this.app.midi) {
+                                this.app.midi._isProbing = false;
+                            }
+                        }, (data && data.timeoutMs) || 3000);
+                    }
+                    break;
+                case 'HARDWARE_PROBE_END':
+                    if (this.app && this.app.midi && !this.isLeader) {
+                        clearTimeout(this.app.midi._remoteProbeTimeout);
+                        this.app.midi._isProbing = false;
+                    }
+                    break;
                 case 'REQUEST_LEADER_STATE':
                     if (this.isLeader && this.app) {
                         const payload = {

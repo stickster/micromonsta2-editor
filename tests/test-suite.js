@@ -2316,6 +2316,81 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    logger('\n--- [35] Follower Window Poll Message Suppression Tests ---');
+    try {
+        const leaderApp = new App();
+        const followerApp = new App();
+
+        const leaderSync = new TabSyncManager(leaderApp, { tabId: 'tab_lead_35', channelName: 'test-chan-35' });
+        const followerSync = new TabSyncManager(followerApp, { tabId: 'tab_foll_35', channelName: 'test-chan-35' });
+        leaderApp.tabSync = leaderSync;
+        followerApp.tabSync = followerSync;
+
+        leaderSync.setLeadership(true);
+        followerSync.setLeadership(false);
+
+        leaderApp.timbreA.name = 'LEAD_A';
+        followerApp.timbreA.name = 'FOLL_A';
+
+        let followerNotifications = [];
+        followerApp.showNotification = (msg, type) => {
+            followerNotifications.push({ msg, type });
+        };
+
+        let leaderNotifications = [];
+        leaderApp.showNotification = (msg, type) => {
+            leaderNotifications.push({ msg, type });
+        };
+
+        // 1. Leader starts probeHardware(): emits probe-start and broadcasts HARDWARE_PROBE_START
+        leaderApp.midi.outPort = { name: 'MM2 Mock', send: () => {} };
+        leaderApp.midi.inPort = { name: 'MM2 Mock' };
+        followerApp.midi.outPort = { name: 'MM2 Mock', send: () => {} };
+        followerApp.midi.inPort = { name: 'MM2 Mock' };
+
+        leaderApp.midi.probeHardware(2000);
+        assertEqual(leaderApp.midi._isProbing, true, 'Leader midi._isProbing is true during probe');
+
+        // Allow microtask / BroadcastChannel delivery
+        await new Promise(r => setTimeout(r, 40));
+        assertEqual(followerApp.midi._isProbing, true, 'Follower midi._isProbing set to true via HARDWARE_PROBE_START broadcast');
+
+        // Incoming dump from hardware arrived at both tabs
+        const fetchedProg = new MM2Program();
+        fetchedProg.name = 'POLL_PAT';
+        const hwDump = fetchedProg.toSysEx(0);
+
+        leaderApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
+        followerApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
+
+        assertEqual(leaderNotifications.length, 0, 'Leader window showed no notification during probe');
+        assertEqual(followerNotifications.length, 0, 'Follower window showed no notification during probe');
+        assertEqual(followerApp.timbreA.name, 'FOLL_A', 'Follower timbreA not overwritten by probe dump');
+
+        // 2. Unprompted dump when follower did not receive probe broadcast (fallback guard)
+        followerApp.midi._isProbing = false;
+        followerApp.syncStatus = 'synced';
+        followerApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
+
+        assertEqual(followerNotifications.length, 0, 'Follower window suppresses Loaded notification on unprompted hardware dump');
+        assertEqual(followerApp.timbreA.name, 'FOLL_A', 'Follower timbreA preserved without overwrite');
+
+        // 3. User in follower window explicitly clicks Fetch (syncStatus === 'fetching')
+        followerApp.syncStatus = 'fetching';
+        followerApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
+
+        assertEqual(followerNotifications.length, 1, 'Follower window shows Loaded notification when actively fetching');
+        assert(followerNotifications[0].msg.includes('Loaded MM2 hardware Patch A'), 'Notification message mentions loaded patch');
+        assertEqual(followerApp.syncStatus, 'synced', 'Follower syncStatus updated to synced');
+        assertEqual(followerApp.timbreA.name, 'POLL_PAT', 'Follower timbreA updated with fetched program');
+
+        leaderSync.destroy();
+        followerSync.destroy();
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

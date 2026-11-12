@@ -163,6 +163,13 @@ class App {
                 return;
             }
 
+            // In follower windows, do not process unprompted hardware dumps (e.g. from leader polls or leader fetches).
+            // State is synchronized from the leader window via TabSync.
+            const isFollowerTab = this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower);
+            if (isFollowerTab && this.syncStatus !== 'fetching' && !this._modeProbe) {
+                return;
+            }
+
             let skipLoad = false;
             if (slot === 1) {
                 // A Part B reply means the MM2 has two active layers (bitimbral); no reply means monotimbral
@@ -233,6 +240,18 @@ class App {
         this.midi.on('hardware-timeout', ({ outPort }) => {
             this.updateConnectionStatus();
             this.showNotification(`Hardware timeout: No response from MM2 on ${outPort ? outPort.name : 'selected port'}. Check router or MIDI cables.`, 'warning');
+        });
+
+        this.midi.on('probe-start', ({ timeoutMs }) => {
+            if (this.tabSync && this.tabSync.isLeader) {
+                this.tabSync.broadcast('HARDWARE_PROBE_START', { timeoutMs });
+            }
+        });
+
+        this.midi.on('probe-end', ({ success }) => {
+            if (this.tabSync && this.tabSync.isLeader) {
+                this.tabSync.broadcast('HARDWARE_PROBE_END', { success });
+            }
         });
 
         this.midi.on('base-channel-changed', (ch) => {
