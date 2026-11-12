@@ -141,6 +141,10 @@ function extractSysExMessages(rawBytes) {
     return messages;
 }
 
+const SHARED_TEXT_DECODER = new TextDecoder();
+const SHARED_TEXT_ENCODER = new TextEncoder();
+let INIT_SOUND_FINGERPRINT = null;
+
 /**
  * Represents a single MicroMonsta 2 sound program (Firmware v3, 216 bytes)
  */
@@ -158,6 +162,7 @@ class MM2Program {
             this._data.set(INIT_PROGRAM_BYTES);
         }
         this._selected = false;
+        this._soundFingerprint = null;
     }
 
     get rawData() {
@@ -168,16 +173,17 @@ class MM2Program {
         const norm = normalizeProgram(bytes);
         if (!norm) throw new Error('Invalid MicroMonsta 2 SysEx program data');
         this._data.set(norm);
+        this._soundFingerprint = null;
     }
 
     get name() {
         const slice = this._data.subarray(OFFSET_NAME, OFFSET_NAME + 8);
-        return new TextDecoder().decode(slice).trimEnd();
+        return SHARED_TEXT_DECODER.decode(slice).trimEnd();
     }
 
     set name(str) {
         const clean = (str || '').padEnd(8, ' ').slice(0, 8);
-        const encoded = new TextEncoder().encode(clean);
+        const encoded = SHARED_TEXT_ENCODER.encode(clean);
         this._data.set(encoded, OFFSET_NAME);
     }
 
@@ -187,6 +193,7 @@ class MM2Program {
 
     set category(catIndex) {
         this._data[OFFSET_CAT] = clamp(catIndex, 0, 15);
+        this._soundFingerprint = null;
     }
 
     get selected() {
@@ -220,6 +227,7 @@ class MM2Program {
         } else {
             this._data[def.sysEx] = clamped & 127;
         }
+        this._soundFingerprint = null;
     }
 
     /**
@@ -251,11 +259,15 @@ class MM2Program {
      * Two patches with identical sound parameter fingerprints will sound identical regardless of name.
      */
     computeSoundFingerprint() {
+        if (this._soundFingerprint !== null) {
+            return this._soundFingerprint;
+        }
         const soundBytes = this._data.subarray(16, SYSEX_V3_LEN - 1);
         let hex = '';
         for (let i = 0; i < soundBytes.length; i++) {
             hex += soundBytes[i].toString(16).padStart(2, '0');
         }
+        this._soundFingerprint = hex;
         return hex;
     }
 
@@ -270,8 +282,10 @@ class MM2Program {
      * Checks if this program is an INIT/default program
      */
     isInit() {
-        const initProg = new MM2Program(INIT_PROGRAM_BYTES);
-        return this.computeSoundFingerprint() === initProg.computeSoundFingerprint();
+        if (INIT_SOUND_FINGERPRINT === null) {
+            INIT_SOUND_FINGERPRINT = new MM2Program(INIT_PROGRAM_BYTES).computeSoundFingerprint();
+        }
+        return this.computeSoundFingerprint() === INIT_SOUND_FINGERPRINT;
     }
 }
 
