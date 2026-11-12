@@ -57,7 +57,7 @@ jobs:
               }
             }
           prompt: |
-            Review this pull request against the guidelines in GEMINI.md.
+            Review this pull request against the guidelines in AGENTS.md, .agents/rules/, and GEMINI.md.
             Verify adherence to Vanilla JS architecture (no bundlers/frameworks), MicroMonsta 2 SysEx/NRPN specifications, and test suite requirements (`node tests/cli-runner.js`).
             Provide clear, actionable feedback or approve if ready.
         env:

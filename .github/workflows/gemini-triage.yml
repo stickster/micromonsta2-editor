@@ -61,7 +61,7 @@ jobs:
             }
           prompt: |
             Triage issue #${{ github.event.inputs.issue_number || github.event.issue.number }}: "${{ github.event.issue.title }}".
-            Evaluate the issue against GEMINI.md:
+            Evaluate the issue against AGENTS.md, .agents/rules/, and GEMINI.md:
             1. Check if the issue involves hardware limitations that cannot be handled over MIDI (such as combi parameters or global system settings). If so, politely explain this limitation to the user.
             2. Classify the issue (bug, enhancement, question) and apply relevant labels using the GitHub CLI (`gh issue edit`).
             3. If the bug report is missing essential reproduction steps or firmware details, post a helpful comment requesting the missing information.
