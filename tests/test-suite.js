@@ -1681,6 +1681,43 @@ async function runAllTests(logger = console.log) {
         logger(`  Error: ${e.message}`);
     }
 
+    logger('\n--- [27] Fingerprint Memoization & SysEx Stream Guard Tests ---');
+    try {
+        const p = new MM2Program();
+        assert(p.isInit(), 'Fresh MM2Program is recognized as INIT');
+        const fp1 = p.computeSoundFingerprint();
+        assertEqual(p._soundFingerprint, fp1, 'Sound fingerprint is cached on program instance');
+
+        p.setValue('FILTER_FREQ', 100);
+        assertEqual(p._soundFingerprint, null, 'Mutating parameter invalidates cached fingerprint');
+        assert(!p.isInit(), 'Modified program is no longer INIT');
+        const fp2 = p.computeSoundFingerprint();
+        assert(fp1 !== fp2, 'Updated parameter produces distinct sound fingerprint');
+
+        // SysEx stream guard: interleaved 0xF8 MIDI clock bytes are ignored during SysEx dump
+        const midi = new MidiManager();
+        let receivedProg = null;
+        midi.on('program-received', ({ program }) => { receivedProg = program; });
+
+        const part1 = INIT_PROGRAM_BYTES.subarray(0, 100);
+        const part2 = INIT_PROGRAM_BYTES.subarray(100);
+        midi.onMidiMessage({ data: part1, timeStamp: Date.now() });
+        midi.onMidiMessage({ data: new Uint8Array([0xF8]), timeStamp: Date.now() }); // MIDI Timing Clock
+        midi.onMidiMessage({ data: part2, timeStamp: Date.now() });
+        assert(receivedProg !== null, 'SysEx dump succeeds despite interleaved 0xF8 clock byte');
+
+        // SysEx stream guard: non-SysEx status byte aborts incomplete SysEx and processes CC
+        midi.onMidiMessage({ data: new Uint8Array([0xF0, 0x00, 0x21, 0x22]), timeStamp: Date.now() });
+        assert(midi._isReceivingSysEx, 'SysEx reception started');
+        let ccReceived = false;
+        midi.on('parameter-received', () => { ccReceived = true; });
+        midi.onMidiMessage({ data: new Uint8Array([0xBE, 74, 64]), timeStamp: Date.now() });
+        assertEqual(midi._isReceivingSysEx, false, 'Interrupted SysEx reception aborted cleanly on status byte');
+        assert(ccReceived, 'Subsequent CC message processed normally after aborted SysEx');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
