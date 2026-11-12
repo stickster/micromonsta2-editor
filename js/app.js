@@ -2778,13 +2778,17 @@ class App {
             row.className = `prog-row ${isDup ? 'is-duplicate' : ''}`;
             row.setAttribute('draggable', 'true');
 
-            const catName = LOOKUPS.categories[program.category] || 'Misc';
+            const catOptions = LOOKUPS.categories.map((cat, cIdx) =>
+                `<option value="${cIdx}" ${cIdx === program.category ? 'selected' : ''}>${cat}</option>`
+            ).join('');
 
             row.innerHTML = `
                 <div class="prog-drag-handle" title="Drag to reorder or swap">⋮⋮</div>
                 <div class="prog-slot-num">#${(originalIndex + 1).toString().padStart(2, '0')}</div>
                 <div class="prog-name">${program.name}</div>
-                <div class="prog-cat-badge">${catName}</div>
+                <select class="prog-cat-badge prog-cat-select" data-prog-index="${originalIndex}" title="Edit category">
+                    ${catOptions}
+                </select>
                 ${isDup ? '<div class="prog-dup-badge" title="Identical sound parameters detected">Duplicate</div>' : ''}
                 <div class="prog-actions">
                     <button class="btn btn-sm btn-action" data-action="load-a" title="Load into Part A">Part A</button>
@@ -2793,6 +2797,38 @@ class App {
                     <button class="btn btn-sm btn-danger" data-action="delete" title="Delete">✕</button>
                 </div>
             `;
+
+            // Category change handler
+            const catSelect = row.querySelector('.prog-cat-select');
+            if (catSelect) {
+                catSelect.onclick = (e) => e.stopPropagation();
+                catSelect.onmousedown = (e) => e.stopPropagation();
+                catSelect.onchange = (e) => {
+                    e.stopPropagation();
+                    const newCat = parseInt(e.target.value, 10);
+                    program.category = newCat;
+                    this.librarian.saveAllBanks();
+
+                    // If this patch is loaded in the editor, update the editor category select
+                    if (this.timbreA && (this.timbreA.name === program.name || this.timbreA.computeSoundFingerprint() === program.computeSoundFingerprint())) {
+                        this.timbreA.category = newCat;
+                        if (this.activeSlot === 0) {
+                            const edCat = document.getElementById('prog-category-select');
+                            if (edCat) edCat.value = newCat;
+                        }
+                    }
+                    if (this.timbreB && (this.timbreB.name === program.name || this.timbreB.computeSoundFingerprint() === program.computeSoundFingerprint())) {
+                        this.timbreB.category = newCat;
+                        if (this.activeSlot === 1) {
+                            const edCat = document.getElementById('prog-category-select');
+                            if (edCat) edCat.value = newCat;
+                        }
+                    }
+
+                    const catLabel = LOOKUPS.categories[newCat] || 'Misc';
+                    this.showNotification(`Updated category for "${program.name}" to ${catLabel}`, 'success');
+                };
+            }
 
             // Action button handlers
             row.querySelector('[data-action="load-a"]').onclick = () => {

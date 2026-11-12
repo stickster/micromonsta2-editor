@@ -1717,6 +1717,28 @@ main.app-main {
     text-align: center;
 }
 
+select.prog-cat-badge,
+.prog-cat-select {
+    cursor: pointer;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.15s ease;
+    width: 100%;
+}
+
+select.prog-cat-badge:hover,
+select.prog-cat-badge:focus,
+.prog-cat-select:hover,
+.prog-cat-select:focus {
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 4px rgba(0, 210, 255, 0.25);
+}
+
+select.prog-cat-badge option {
+    background: var(--bg-card);
+    color: var(--text-primary);
+}
+
 .prog-dup-badge {
     background: rgba(255, 159, 67, 0.2);
     border: 1px solid var(--accent-orange);

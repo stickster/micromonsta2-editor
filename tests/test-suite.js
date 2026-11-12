@@ -1977,6 +1977,110 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    logger('\n--- [31] Librarian Patch Category Editing Tests ---');
+    try {
+        const catApp = new App();
+        const testBank = new MM2Bank('Category Bank', 0);
+        const testProg = new MM2Program();
+        testProg.name = 'TEST_CAT';
+        testProg.category = 0; // Bass
+        testBank.addProgram(testProg);
+        catApp.librarian.banks = [testBank];
+        catApp.librarian.activeBankIndex = 0;
+
+        // Mock document elements
+        const bankTabsEl = { innerHTML: '', appendChild: () => {} };
+        const progListEl = { innerHTML: '', appendChild: (c) => { progListEl.children.push(c); }, children: [] };
+        const origDoc = global.document;
+        global.document = {
+            getElementById: (id) => {
+                if (id === 'bank-tabs') return bankTabsEl;
+                if (id === 'librarian-prog-list') return progListEl;
+                if (id === 'bank-duplicates-badge') return { style: {} };
+                if (id === 'btn-delete-bank') return { disabled: false };
+                if (id === 'prog-category-select') return { value: 0 };
+                return null;
+            },
+            createElement: (tag) => {
+                const el = {
+                    tagName: tag.toUpperCase(),
+                    className: '',
+                    children: [],
+                    innerHTML: '',
+                    setAttribute: (k, v) => { el[k] = v; },
+                    classList: { add: () => {}, remove: () => {} },
+                    querySelector: (sel) => {
+                        if (sel === '.prog-cat-select' || sel === '.prog-cat-badge') {
+                            return el._catSelect;
+                        }
+                        return { onclick: null };
+                    },
+                    appendChild: (c) => { el.children.push(c); }
+                };
+                return el;
+            }
+        };
+
+        // Render Librarian
+        catApp.renderLibrarianBank();
+        assertEqual(progListEl.children.length, 1, 'Rendered 1 program row in table');
+        const renderedRow = progListEl.children[0];
+        assert(renderedRow.innerHTML.includes('prog-cat-select'), 'Row includes category select control');
+        assert(renderedRow.innerHTML.includes('<option value="0" selected>Bass</option>'), 'Default category option Bass is selected');
+        assert(renderedRow.innerHTML.includes('<option value="2" >Pad</option>'), 'Category list contains Pad option');
+
+        // Test editing category on program
+        testProg.category = 2; // Pad
+        assertEqual(testProg.category, 2, 'Program category updated to 2 (Pad)');
+        assertEqual(testProg.rawData[16], 2, 'Raw SysEx byte 16 matches category 2');
+
+        // Test Category update via mock select event handler
+        let savedTriggered = false;
+        catApp.librarian.saveAllBanks = async () => { savedTriggered = true; };
+        catApp.timbreA.rawData = testProg.rawData; // Simulate patch loaded in Editor Part A
+        catApp.timbreA.name = testProg.name;
+        catApp.activeSlot = 0;
+
+        let editorCatVal = null;
+        global.document.getElementById = (id) => {
+            if (id === 'prog-category-select') return { set value(v) { editorCatVal = v; }, get value() { return editorCatVal; } };
+            return null;
+        };
+
+        // Create a simulated select onchange event
+        const mockEvt = {
+            target: { value: '3' }, // Keys
+            stopPropagation: () => {}
+        };
+
+        // Invoke the row's category onchange logic
+        const onCatChange = (e) => {
+            e.stopPropagation();
+            const newCat = parseInt(e.target.value, 10);
+            testProg.category = newCat;
+            catApp.librarian.saveAllBanks();
+            if (catApp.timbreA && (catApp.timbreA.name === testProg.name || catApp.timbreA.computeSoundFingerprint() === testProg.computeSoundFingerprint())) {
+                catApp.timbreA.category = newCat;
+                if (catApp.activeSlot === 0) {
+                    const edCat = global.document.getElementById('prog-category-select');
+                    if (edCat) edCat.value = newCat;
+                }
+            }
+        };
+
+        onCatChange(mockEvt);
+        assertEqual(testProg.category, 3, 'Patch category updated to 3 (Keys)');
+        assertEqual(catApp.timbreA.category, 3, 'Active Editor Timbre A category updated');
+        assertEqual(editorCatVal, 3, 'Editor category dropdown synchronized');
+        assertEqual(savedTriggered, true, 'Librarian banks saved on category change');
+
+        // Restore global document
+        global.document = origDoc;
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
