@@ -6,7 +6,7 @@
 // The pre-commit hook automatically keeps package.json in sync with this value.
 // ============================================================================
 
-const APP_VERSION = '0.1.1';
+const APP_VERSION = '0.1.2';
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { APP_VERSION };
