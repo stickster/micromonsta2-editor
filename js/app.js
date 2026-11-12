@@ -58,6 +58,7 @@ class App {
         this._modeProbe = null;
         this._pendingProbe = null;
         this._hasDetectedMM2Once = false;
+        this._paramControlMap = new Map();
 
         this.bindEvents();
     }
@@ -257,28 +258,14 @@ class App {
                         if (envCard && envCard.refresh) envCard.refresh();
                     }
 
-                    // Refresh the specific control in the UI
-                    const el = document.querySelector(`.editor-grid [data-param="${paramKey}"], #prog-tempo-container [data-param="${paramKey}"]`);
+                    // Refresh the specific control in the UI via O(1) cache (with DOM fallback)
+                    const el = (this._paramControlMap && this._paramControlMap.get(paramKey)) ||
+                        document.querySelector(`.editor-grid [data-param="${paramKey}"], #prog-tempo-container [data-param="${paramKey}"]`);
                     if (el && el.refresh) {
                         el.refresh();
                     }
 
-                    if (paramKey === 'ARP_PTN_LENGTH') this.refreshVisualizerFor(paramKey);
-
-                    // Refresh visualizers if affected
-                    if (paramKey.startsWith('ENV')) {
-                        const eNum = paramKey.charAt(3);
-                        const viz = document.querySelector(`.adsr-visualizer[data-env="${eNum}"]`);
-                        if (viz && viz.refresh) viz.refresh();
-                    } else if (paramKey.startsWith('FILTER_') || paramKey === 'DRIVE_VOICE') {
-                        const viz = document.querySelector('.filter-visualizer');
-                        if (viz && viz.refresh) viz.refresh();
-                    } else if (paramKey.startsWith('LFO')) {
-                        const lfoNum = paramKey.charAt(3);
-                        const viz = document.querySelector(`.lfo-visualizer[data-lfo="${lfoNum}"]`);
-                        if (viz && viz.refresh) viz.refresh();
-                    }
-
+                    this.refreshVisualizerFor(paramKey);
                     this.updateSyncStatus('synced');
                 }
             }
@@ -511,8 +498,7 @@ class App {
                 btn.classList.toggle('active', parseInt(btn.dataset.slot, 10) === slot);
             });
         }
-        this.buildEditorUI();
-        this.updateActivePartIndicator();
+        this.refreshEditorControls();
         this.updateCopyPartButtonUI();
     }
 
@@ -2102,6 +2088,18 @@ class App {
 
         // Hook up Program Bar controls
         this.setupProgramBar();
+
+        // Populate O(1) parameter control lookup cache
+        this._paramControlMap.clear();
+        grid.querySelectorAll('[data-param]').forEach(el => {
+            this._paramControlMap.set(el.getAttribute('data-param'), el);
+        });
+        const tempoContainer = document.getElementById('prog-tempo-container');
+        if (tempoContainer) {
+            tempoContainer.querySelectorAll('[data-param]').forEach(el => {
+                this._paramControlMap.set(el.getAttribute('data-param'), el);
+            });
+        }
     }
 
     setupProgramBar() {
@@ -2313,7 +2311,7 @@ class App {
                     this.originalSnapshotA = this.timbreA.clone();
                     this.showNotification(`Copied Part B "${this.timbreB.name}" to Part A`, 'success');
                 }
-                this.buildEditorUI();
+                this.refreshEditorControls();
             };
         }
     }
