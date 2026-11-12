@@ -1,0 +1,34 @@
+name: Issue Clarification Agent
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  clarification:
+    runs-on: ubuntu-latest
+    # Loop prevention & ensure we only process comments on issues, not PRs
+    if: >
+      github.event.comment.user.login != 'github-actions[bot]' &&
+      !github.event.issue.pull_request
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run Clarification Agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_AUTHOR: ${{ github.event.comment.user.login }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: node .github/scripts/discussion-agent.js
