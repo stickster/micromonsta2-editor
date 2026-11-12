@@ -58,6 +58,7 @@ class App {
         this._modeProbe = null;
         this._pendingProbe = null;
         this._hasDetectedMM2Once = false;
+        this._isPromptingSync = false;
         this._paramControlMap = new Map();
 
         this.bindEvents();
@@ -206,10 +207,6 @@ class App {
 
         this.midi.on('hardware-responsiveness-changed', ({ responsive, previous }) => {
             this.updateConnectionStatus();
-            // When moving specifically from unresponsive (false) to responsive (true)
-            if (responsive && previous === false) {
-                this.promptReconnectSync();
-            }
         });
 
         this.midi.on('hardware-timeout', ({ outPort }) => {
@@ -2401,11 +2398,13 @@ class App {
 
     promptReconnectSync() {
         if (typeof document === 'undefined') return;
+        if (this._isPromptingSync) return;
         const dialog = document.getElementById('reconnect-sync-dialog');
-        if (!dialog || typeof dialog.showModal !== 'function') {
+        if (!dialog || typeof dialog.showModal !== 'function' || dialog.open) {
             this.showNotification('MicroMonsta 2 reconnected!', 'success');
             return;
         }
+        this._isPromptingSync = true;
 
         const onClose = () => {
             dialog.removeEventListener('close', onClose);
@@ -2418,6 +2417,9 @@ class App {
                 this.showNotification('Pushing patch settings from editor to MM2...', 'info');
                 this.pushAllPartsToHardware();
             }
+            setTimeout(() => {
+                this._isPromptingSync = false;
+            }, 300);
         };
 
         dialog.addEventListener('close', onClose);
@@ -2425,6 +2427,7 @@ class App {
             dialog.showModal();
         } catch (e) {
             // Already open or error
+            this._isPromptingSync = false;
         }
     }
 

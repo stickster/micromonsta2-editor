@@ -236,12 +236,13 @@ class MidiManager {
     }
 
     resetHardwareResponsiveness() {
-        if (!this.inPort || !this.outPort) {
-            this.hardwareResponsive = null;
-            if (this._probeTimeout) {
-                clearTimeout(this._probeTimeout);
-                this._probeTimeout = null;
-            }
+        this.hardwareResponsive = null;
+        if (this._probeTimeout) {
+            clearTimeout(this._probeTimeout);
+            this._probeTimeout = null;
+        }
+        if (this._isProbing) {
+            this._isProbing = false;
         }
     }
 
@@ -279,9 +280,13 @@ class MidiManager {
     }
 
     checkMM2Detection() {
-        if (this.inPort && this.outPort && this.isMM2Port(this.inPort) && this.isMM2Port(this.outPort)) {
+        const isDetected = !!(this.inPort && this.outPort && this.isMM2Port(this.inPort) && this.isMM2Port(this.outPort));
+        if (isDetected && !this._mm2DetectedState) {
+            this._mm2DetectedState = true;
             console.log('[MidiManager] MM2 Hardware Detected on', this.inPort.name);
             this.emit('mm2-detected', { inPort: this.inPort, outPort: this.outPort });
+        } else if (!isDetected) {
+            this._mm2DetectedState = false;
         }
     }
 

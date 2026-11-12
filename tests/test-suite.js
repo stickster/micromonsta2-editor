@@ -1136,17 +1136,6 @@ async function runAllTests(logger = console.log) {
         assertEqual(midi.periodicCheck, false, 'setPeriodicCheck(false) disables periodic health checks');
         assertEqual(midi._periodicCheckInterval, null, 'Periodic check timer is stopped');
 
-        // 5. Unresponsive-to-Connected transition detection
-        let transitionPromptCalled = false;
-        app.promptReconnectSync = () => { transitionPromptCalled = true; };
-        // Set to unresponsive first
-        midi.markHardwareResponsive(false);
-        assertEqual(midi.hardwareResponsive, false, 'Hardware set to unresponsive');
-        // Restore to responsive
-        midi.markHardwareResponsive(true);
-        assertEqual(midi.hardwareResponsive, true, 'Hardware transitioned to responsive');
-        assert(transitionPromptCalled, 'promptReconnectSync called when transitioning from unresponsive to responsive');
-
         // 6. Normal polling / health probe response does not overwrite editor status or parameters
         app.updateSyncStatus('modified');
         app.timbreA.name = 'UNSAVED_';
