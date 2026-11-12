@@ -4,6 +4,7 @@ You MUST follow strict Git commit hygiene on every task in this repository:
 
 ## 1. Atomic, Single-Purpose Commits
 - **One Logical Change Per Commit**: Never bundle unrelated features, bug fixes, refactors, layout redesigns, and build/test updates into a single "catch-all" commit.
+- **Minimal Diffs**: Make surgical, minimal edits directly relevant to the issue; avoid unrelated refactorings or unnecessary whitespace adjustments.
 - **Stage Selectively**: Stage only the files or hunks (`git add <file>` / `git add -p`) that belong to the specific logical change being committed.
 - **Commit As You Go**: When completing a multi-part request, create a separate commit for each distinct feature or fix once its tests pass, rather than waiting to commit everything at the end.
 - **Always Pass Tests**: Every commit must leave the repository in a working state where `node tests/cli-runner.js` passes with zero failures.
@@ -37,6 +38,7 @@ All commit messages MUST follow the [Conventional Commits](https://www.conventio
 - `editor`: Main synth rack layout, section cards, and app controller (`js/app.js`, `index.html`)
 - `chorder`: Firmware v3 Chorder & Scaler engine and audition keyboard integration
 - `tests`: Automated test suite and CLI runner (`tests/`)
+- `release`: General release tools, or version bumps (`js/version.js`)
 
 ### Subject Line Rules
 1. Use the **imperative, present tense** ("add", "fix", "refactor", not "added", "fixed", "changes").
