@@ -11,9 +11,10 @@ permissions:
 
 jobs:
   assist:
-    # Trigger on comments mentioning @gemini-cli, /gemini, or /fix (excluding bot comments and dedicated commands)
+    # Trigger on authorized comments mentioning @gemini-cli, /gemini, or /fix (excluding bot comments and dedicated commands)
     if: >
       github.event.comment.user.login != 'github-actions[bot]' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
       (contains(github.event.comment.body, '@gemini-cli') ||
        contains(github.event.comment.body, '/gemini') ||
        contains(github.event.comment.body, '/fix')) &&
@@ -31,6 +32,11 @@ jobs:
         with:
           node-version: 24
 
+      - name: Configure Git
+        run: |
+          git config user.name "Google Gemini"
+          git config user.email "gemini@google.com"
+
       - name: Run Gemini CLI Assistant
         uses: google-github-actions/run-gemini-cli@v0
         with:
@@ -43,12 +49,19 @@ jobs:
             Issue/PR #${{ github.event.issue.number }}: "${{ github.event.issue.title }}"
             Is PR: ${{ github.event.issue.pull_request != null }}
 
-            Follow all GEMINI.md guidelines.
-            If a bug fix or code proposal is requested:
-            1. Verify changes against the vanilla JS architecture (no bundlers or external dependencies).
-            2. Run `node tests/cli-runner.js` to ensure 100% test pass rate with 0 failures.
-            3. Make surgical, minimal edits.
-            4. Post clear explanations or commit/branch proposals.
+            First, inspect the full issue or PR details using `gh issue view ${{ github.event.issue.number }}` (or `gh pr view ${{ github.event.issue.number }}` if Is PR is true) and follow all guidelines in GEMINI.md.
+
+            If a bug fix, feature, or code change is requested (e.g. via `/fix` or `/gemini`):
+            1. If Is PR is false: create and check out a new branch `fix/issue-${{ github.event.issue.number }}` (or `feat/issue-${{ github.event.issue.number }}` if it is a feature). If Is PR is true: check out the PR branch with `gh pr checkout ${{ github.event.issue.number }}`.
+            2. Implement surgical, minimal edits adhering to the Vanilla JS architecture (no bundlers or external dependencies) and add regression tests in `tests/test-suite.js`.
+            3. Run `node tests/cli-runner.js` and verify all tests pass with 0 failures.
+            4. Stage and commit the changes using Conventional Commits (`<type>(<scope>): <summary>`, under 72 chars, no trailing period) and include `Co-authored-by: Google Gemini <gemini@google.com>`.
+            5. Push the branch to `origin` (`git push -u origin HEAD`).
+            6. If Is PR is false: create a Pull Request targeting `main` using `gh pr create --base main --title "<commit subject>" --body "Closes #${{ github.event.issue.number }}\n\n<summary of fix and test results>"`, then post a comment on issue #${{ github.event.issue.number }} via `gh issue comment` with the link to the new PR.
+            7. If Is PR is true: post a comment on PR #${{ github.event.issue.number }} via `gh pr comment` summarizing the pushed changes.
+
+            If only a question or explanation is requested (no code changes):
+            Post a clear, concise response as a comment using `gh issue comment ${{ github.event.issue.number }} --body "..."`.
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
