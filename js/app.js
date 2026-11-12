@@ -765,18 +765,22 @@ class App {
 
         const btnFetch = document.getElementById('btn-prog-fetch');
         if (btnFetch) {
-            btnFetch.disabled = isLive;
+            btnFetch.disabled = !connGood || isLive;
             btnFetch.title = isLive
                 ? 'Fetch disabled while Live Sync is streaming parameters directly'
-                : 'Fetch current sound patch directly from MM2 hardware';
+                : (!connGood
+                    ? 'Fetch disabled: MicroMonsta 2 hardware connection is offline or unverified'
+                    : 'Fetch current sound patch directly from MM2 hardware');
         }
 
         const btnPush = document.getElementById('btn-prog-push');
         if (btnPush) {
-            btnPush.disabled = isLive;
+            btnPush.disabled = !connGood || isLive;
             btnPush.title = isLive
                 ? 'Push disabled while Live Sync is streaming parameters directly'
-                : 'Send patch to MicroMonsta 2 hardware';
+                : (!connGood
+                    ? 'Push disabled: MicroMonsta 2 hardware connection is offline or unverified'
+                    : 'Send patch to MicroMonsta 2 hardware');
         }
     }
 
@@ -2235,7 +2239,7 @@ class App {
         const btnFetch = document.getElementById('btn-prog-fetch');
         if (btnFetch) {
             btnFetch.onclick = () => {
-                if (this.midi && this.midi.liveSync) return;
+                if (!this.isConnectionGood || (this.midi && this.midi.liveSync)) return;
                 this.fetchActiveProgram();
             };
         }
@@ -2321,7 +2325,7 @@ class App {
         const btnPush = document.getElementById('btn-prog-push');
         if (btnPush) {
             btnPush.onclick = () => {
-                if (this.midi && this.midi.liveSync) return;
+                if (!this.isConnectionGood || (this.midi && this.midi.liveSync)) return;
                 this.confirmAndSendProgram();
             };
         }

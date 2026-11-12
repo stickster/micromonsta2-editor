@@ -1645,8 +1645,10 @@ async function runAllTests(logger = console.log) {
         btnPush.id = 'btn-prog-push';
         document.registerMockElement('btn-prog-push', btnPush);
 
-        // When disconnected / unverified, Live Sync toggle is disabled
+        // When disconnected / unverified, Live Sync toggle and Fetch/Push buttons are disabled
         testApp.updateLiveSyncUI();
+        assertEqual(btnFetch.disabled, true, 'Fetch button disabled when hardware is disconnected');
+        assertEqual(btnPush.disabled, true, 'Push button disabled when hardware is disconnected');
         assertEqual(chkLiveSync.disabled, true, 'Live sync checkbox is disabled when hardware is disconnected');
         assertEqual(chkLiveSync.checked, false, 'Live sync checkbox remains unchecked when disconnected');
 
@@ -1674,6 +1676,8 @@ async function runAllTests(logger = console.log) {
         testApp.midi.hardwareResponsive = false;
         testApp.updateConnectionStatus();
         assertEqual(testApp.midi.liveSync, false, 'Live Sync automatically turns off if hardware becomes unresponsive');
+        assertEqual(btnFetch.disabled, true, 'Fetch button disables when hardware becomes unresponsive');
+        assertEqual(btnPush.disabled, true, 'Push button disables when hardware becomes unresponsive');
         assertEqual(chkLiveSync.disabled, true, 'Live sync checkbox disables when hardware becomes unresponsive');
         assertEqual(chkLiveSync.checked, false, 'Live sync checkbox unchecks when hardware becomes unresponsive');
     } catch (e) {
