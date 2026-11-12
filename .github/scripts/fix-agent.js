@@ -28,12 +28,14 @@ async function main() {
   // Collect key files for context
   const filesToInclude = [
     'package.json',
-    'js/constants.js',
-    'js/sysex.js',
-    'js/program.js',
-    'js/midi.js',
-    'js/librarian.js',
-    'js/ui.js',
+    'index.html',
+    'css/style.css',
+    'js/version.js',
+    'js/mm2-specs.js',
+    'js/sysex-parser.js',
+    'js/patch-librarian.js',
+    'js/midi-manager.js',
+    'js/ui-controls.js',
     'js/app.js'
   ];
 
@@ -77,9 +79,9 @@ Analyze the problem, formulate the solution, and generate the JSON payload conta
 
     const branchName = `fix/issue-${issueNumber}`;
 
-    // Configure git user
-    execFileSync('git', ['config', 'user.name', 'github-actions[bot]']);
-    execFileSync('git', ['config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com']);
+    // Configure git user to reflect Gemini AI authorship
+    execFileSync('git', ['config', 'user.name', 'Gemini Agent']);
+    execFileSync('git', ['config', 'user.email', 'gemini-agent[bot]@users.noreply.github.com']);
 
     // Check out new branch
     execFileSync('git', ['checkout', '-B', branchName]);
