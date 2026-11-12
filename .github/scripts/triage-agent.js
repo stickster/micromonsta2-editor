@@ -95,6 +95,14 @@ The fix workflow has been queued.`;
       } catch (e) {
         console.warn(`Warning: Could not post comment via gh CLI: ${e.message}`);
       }
+
+      // Dispatch the fix workflow directly
+      try {
+        execFileSync('gh', ['workflow', 'run', 'propose-fix-pr.yml', '-f', `issue_number=${issueNumber}`]);
+        console.log(`Dispatched propose-fix-pr.yml for issue #${issueNumber}`);
+      } catch (e) {
+        console.warn(`Warning: Could not dispatch propose-fix-pr.yml via gh CLI: ${e.message}`);
+      }
     }
   } catch (err) {
     console.error('Triage agent failed:', err);

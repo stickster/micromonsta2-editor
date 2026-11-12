@@ -76,6 +76,14 @@ Evaluate if the issue is now complete and actionable or if more info is needed.
       } catch (e) {
         console.warn('Could not post comment:', e.message);
       }
+
+      // Dispatch the fix workflow directly
+      try {
+        execFileSync('gh', ['workflow', 'run', 'propose-fix-pr.yml', '-f', `issue_number=${issueNumber}`]);
+        console.log(`Dispatched propose-fix-pr.yml for issue #${issueNumber}`);
+      } catch (e) {
+        console.warn(`Warning: Could not dispatch propose-fix-pr.yml via gh CLI: ${e.message}`);
+      }
     } else {
       // Still needs info
       if (result.follow_up_comment) {
