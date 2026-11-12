@@ -249,7 +249,13 @@ class MidiManager {
     }
 
     resetHardwareResponsiveness() {
+        if (!this.isLeader) {
+            // In follower windows, hardware responsiveness is governed by leader sync.
+            // Do not wipe responsiveness to null when binding local ports.
+            return;
+        }
         this.hardwareResponsive = null;
+        this.lastFetchedSlot = 0;
         if (this._probeTimeout) {
             clearTimeout(this._probeTimeout);
             this._probeTimeout = null;
@@ -286,11 +292,15 @@ class MidiManager {
         if (this._probeTimeout) clearTimeout(this._probeTimeout);
 
         this._isProbing = true;
+        this.emit('probe-start', { timeoutMs });
         this._probeTimeout = setTimeout(() => {
             this._probeTimeout = null;
-            this._isProbing = false;
+            // Mark unresponsive, but preserve _isProbing so any late-arriving SysEx response
+            // to this probe is still recognized as a probe response (isProbe=true) and does
+            // not leak as an unsolicited dump into active banks or overwrite editor data.
             this.markHardwareResponsive(false);
             this.emit('hardware-timeout', { inPort: this.inPort, outPort: this.outPort });
+            this.emit('probe-end', { success: false });
         }, timeoutMs);
 
         return this.fetchProgram(0);
@@ -459,6 +469,10 @@ class MidiManager {
             console.log(`[MIDI In] MM2 Program received: "${program.name}" for Slot ${slot === 0 ? 'A' : 'B'} (${data.length} bytes)`);
             const isProbe = this._isProbing;
             this._isProbing = false;
+            this.lastFetchedSlot = 0; // Consume fetch target slot so subsequent dumps default to Slot A
+            if (isProbe) {
+                this.emit('probe-end', { success: true });
+            }
             this.markHardwareResponsive(true);
             this.emit('program-received', {
                 program,

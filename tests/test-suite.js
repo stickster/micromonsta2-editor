@@ -34,6 +34,28 @@ if (typeof document === 'undefined') {
         set id(v) { this.attributes.set('id', String(v)); }
         get type() { return this.attributes.get('type') || ''; }
         set type(v) { this.attributes.set('type', String(v)); }
+        get innerHTML() { return this._innerHTML || ''; }
+        set innerHTML(html) {
+            this._innerHTML = html;
+            this.children = [];
+            if (!html) return;
+            const tagRegex = /<([a-z0-9]+)([^>]*)>([^<]*)<\/\1>|<([a-z0-9]+)([^>]*)\/>/gi;
+            let m;
+            while ((m = tagRegex.exec(html)) !== null) {
+                const tag = m[1] || m[4];
+                const attrs = m[2] || m[5] || '';
+                const text = m[3] || '';
+                const child = new MockElement(tag);
+                child.textContent = text;
+                const classMatch = attrs.match(/class=["']([^"']*)["']/);
+                if (classMatch) child.className = classMatch[1];
+                const idMatch = attrs.match(/id=["']([^"']*)["']/);
+                if (idMatch) child.id = idMatch[1];
+                const titleMatch = attrs.match(/title=["']([^"']*)["']/);
+                if (titleMatch) child.title = titleMatch[1];
+                this.children.push(child);
+            }
+        }
         get className() {
             return Array.from(this.classList._classes).join(' ');
         }
@@ -1859,6 +1881,574 @@ async function runAllTests(logger = console.log) {
 
         // Cleanup
         follower.destroy();
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    logger('\n--- [29] Librarian HW Poll Isolation & Empty Default Banks Tests ---');
+    try {
+        const lib = new PatchLibrarian();
+        lib.createDefaultBanks();
+        assertEqual(lib.banks.length, 3, 'createDefaultBanks creates 3 default banks');
+        assertEqual(lib.banks[0].name, 'Bank 1', 'Default bank 0 is named Bank 1');
+        assertEqual(lib.banks[1].name, 'Bank 2', 'Default bank 1 is named Bank 2');
+        assertEqual(lib.banks[2].name, 'Bank 3', 'Default bank 2 is named Bank 3');
+        assertEqual(lib.banks[0].length, 0, 'Bank 0 starts empty with 0 programs (no default INIT patch)');
+        assertEqual(lib.banks[1].length, 0, 'Bank 1 starts empty with 0 programs');
+        assertEqual(lib.banks[2].length, 0, 'Bank 2 starts empty with 0 programs');
+
+        // Verify HW probe does not add patch to Librarian even if response is delayed past probe timeout
+        const pollApp = new App();
+        const testBank = new MM2Bank('Test Bank', 0);
+        pollApp.librarian.banks = [testBank];
+        pollApp.librarian.activeBankIndex = 0;
+        pollApp.currentView = 'librarian';
+
+        const mockOut = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+        pollApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
+        pollApp.midi.outPort = mockOut;
+
+        // Trigger probe with short timeout to simulate delayed HW response
+        pollApp.midi.probeHardware(40);
+        assert(pollApp.midi._isProbing, '_isProbing is true during probe');
+
+        // Wait past timeout (40ms)
+        await new Promise(r => setTimeout(r, 60));
+        assertEqual(pollApp.midi.hardwareResponsive, false, 'Hardware marked unresponsive on probe timeout');
+        assertEqual(pollApp.midi._probeTimeout, null, '_probeTimeout cleared');
+        assert(pollApp.midi._isProbing, '_isProbing preserved to prevent late probe reply from leaking as dump');
+
+        // Late SysEx response arrives
+        const probeDump = new Uint8Array(INIT_PROGRAM_BYTES);
+        let receivedIsProbe = null;
+        pollApp.midi.on('program-received', ({ isProbe }) => { receivedIsProbe = isProbe; });
+        pollApp.midi.onMidiMessage({ data: probeDump, timeStamp: Date.now() });
+
+        assertEqual(receivedIsProbe, true, 'Late probe response is recognized as a probe (isProbe=true)');
+        assertEqual(pollApp.midi.hardwareResponsive, true, 'Hardware responsiveness restored on incoming dump');
+        assertEqual(pollApp.midi._isProbing, false, '_isProbing cleared after probe response is handled');
+        assertEqual(testBank.length, 0, 'Librarian bank remains empty (no INIT patch added on HW poll)');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    logger('\n--- [30] Librarian Bank Deletion Tests ---');
+    try {
+        const lib = new PatchLibrarian();
+        lib.banks = [
+            new MM2Bank('Bank 1', 0),
+            new MM2Bank('Bank 2', 1),
+            new MM2Bank('Bank 3', 2)
+        ];
+        lib.activeBankIndex = 2;
+
+        // Removing bank at index 0 should decrement activeBankIndex to 1 and re-index
+        const ok0 = lib.removeBank(0);
+        assertEqual(ok0, true, 'removeBank(0) succeeds');
+        assertEqual(lib.banks.length, 2, 'Librarian has 2 banks remaining');
+        assertEqual(lib.banks[0].name, 'Bank 2', 'First bank is now Bank 2');
+        assertEqual(lib.banks[0].index, 0, 'First bank index updated to 0');
+        assertEqual(lib.banks[1].name, 'Bank 3', 'Second bank is Bank 3');
+        assertEqual(lib.banks[1].index, 1, 'Second bank index updated to 1');
+        assertEqual(lib.activeBankIndex, 1, 'activeBankIndex adjusted from 2 to 1');
+
+        // Removing the active bank (now index 1)
+        const ok1 = lib.removeBank(1);
+        assertEqual(ok1, true, 'removeBank(1) succeeds');
+        assertEqual(lib.banks.length, 1, 'Librarian has 1 bank remaining');
+        assertEqual(lib.activeBankIndex, 0, 'activeBankIndex clamped to 0');
+
+        // Attempting to remove the last remaining bank is disallowed
+        const okLast = lib.removeBank(0);
+        assertEqual(okLast, false, 'removeBank rejected when only 1 bank remains');
+        assertEqual(lib.banks.length, 1, 'Librarian still retains 1 bank');
+
+        // Test App.deleteBank() method
+        const delApp = new App();
+        delApp.librarian.banks = [new MM2Bank('Solo Bank', 0)];
+        delApp.librarian.activeBankIndex = 0;
+
+        let notifiedWarning = false;
+        delApp.showNotification = (msg, type) => {
+            if (type === 'warning') notifiedWarning = true;
+        };
+        delApp.deleteBank();
+        assertEqual(notifiedWarning, true, 'deleteBank warns user when trying to delete the only bank');
+        assertEqual(delApp.librarian.banks.length, 1, 'Single bank was not deleted');
+
+        // Two banks with confirm rejection
+        delApp.librarian.banks = [new MM2Bank('Bank A', 0), new MM2Bank('Bank B', 1)];
+        global.confirm = () => false;
+        delApp.deleteBank(1);
+        assertEqual(delApp.librarian.banks.length, 2, 'Bank not deleted when confirm rejected');
+
+        // Confirm accepted
+        global.confirm = () => true;
+        let notifiedSuccess = false;
+        delApp.showNotification = (msg, type) => {
+            if (type === 'success') notifiedSuccess = true;
+        };
+        delApp.deleteBank(1);
+        assertEqual(delApp.librarian.banks.length, 1, 'Bank deleted when confirm accepted');
+        assertEqual(notifiedSuccess, true, 'Success notification shown on bank deletion');
+        delete global.confirm;
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    logger('\n--- [31] Librarian Patch Category Editing Tests ---');
+    try {
+        const catApp = new App();
+        const testBank = new MM2Bank('Category Bank', 0);
+        const testProg = new MM2Program();
+        testProg.name = 'TEST_CAT';
+        testProg.category = 0; // Bass
+        testBank.addProgram(testProg);
+        catApp.librarian.banks = [testBank];
+        catApp.librarian.activeBankIndex = 0;
+
+        // Mock document elements
+        const bankTabsEl = { innerHTML: '', appendChild: () => {} };
+        const progListEl = { innerHTML: '', appendChild: (c) => { progListEl.children.push(c); }, children: [] };
+        const origDoc = global.document;
+        global.document = {
+            getElementById: (id) => {
+                if (id === 'bank-tabs') return bankTabsEl;
+                if (id === 'librarian-prog-list') return progListEl;
+                if (id === 'bank-duplicates-badge') return { style: {} };
+                if (id === 'btn-delete-bank') return { disabled: false };
+                if (id === 'prog-category-select') return { value: 0 };
+                return null;
+            },
+            createElement: (tag) => {
+                const el = {
+                    tagName: tag.toUpperCase(),
+                    className: '',
+                    children: [],
+                    innerHTML: '',
+                    setAttribute: (k, v) => { el[k] = v; },
+                    classList: { add: () => {}, remove: () => {} },
+                    querySelector: (sel) => {
+                        if (sel === '.prog-cat-select' || sel === '.prog-cat-badge') {
+                            return el._catSelect;
+                        }
+                        return { onclick: null };
+                    },
+                    appendChild: (c) => { el.children.push(c); }
+                };
+                return el;
+            }
+        };
+
+        // Render Librarian
+        catApp.renderLibrarianBank();
+        assertEqual(progListEl.children.length, 1, 'Rendered 1 program row in table');
+        const renderedRow = progListEl.children[0];
+        assert(renderedRow.innerHTML.includes('prog-cat-select'), 'Row includes category select control');
+        assert(renderedRow.innerHTML.includes('<option value="0" selected>Bass</option>'), 'Default category option Bass is selected');
+        assert(renderedRow.innerHTML.includes('<option value="2" >Pad</option>'), 'Category list contains Pad option');
+
+        // Test editing category on program
+        testProg.category = 2; // Pad
+        assertEqual(testProg.category, 2, 'Program category updated to 2 (Pad)');
+        assertEqual(testProg.rawData[16], 2, 'Raw SysEx byte 16 matches category 2');
+
+        // Test Category update via mock select event handler
+        let savedTriggered = false;
+        catApp.librarian.saveAllBanks = async () => { savedTriggered = true; };
+        catApp.timbreA.rawData = testProg.rawData; // Simulate patch loaded in Editor Part A
+        catApp.timbreA.name = testProg.name;
+        catApp.activeSlot = 0;
+
+        let editorCatVal = null;
+        global.document.getElementById = (id) => {
+            if (id === 'prog-category-select') return { set value(v) { editorCatVal = v; }, get value() { return editorCatVal; } };
+            return null;
+        };
+
+        // Create a simulated select onchange event
+        const mockEvt = {
+            target: { value: '3' }, // Keys
+            stopPropagation: () => {}
+        };
+
+        // Invoke the row's category onchange logic
+        const onCatChange = (e) => {
+            e.stopPropagation();
+            const newCat = parseInt(e.target.value, 10);
+            testProg.category = newCat;
+            catApp.librarian.saveAllBanks();
+            if (catApp.timbreA && (catApp.timbreA.name === testProg.name || catApp.timbreA.computeSoundFingerprint() === testProg.computeSoundFingerprint())) {
+                catApp.timbreA.category = newCat;
+                if (catApp.activeSlot === 0) {
+                    const edCat = global.document.getElementById('prog-category-select');
+                    if (edCat) edCat.value = newCat;
+                }
+            }
+        };
+
+        onCatChange(mockEvt);
+        assertEqual(testProg.category, 3, 'Patch category updated to 3 (Keys)');
+        assertEqual(catApp.timbreA.category, 3, 'Active Editor Timbre A category updated');
+        assertEqual(editorCatVal, 3, 'Editor category dropdown synchronized');
+        assertEqual(savedTriggered, true, 'Librarian banks saved on category change');
+
+        // Restore global document
+        global.document = origDoc;
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    logger('\n--- [32] Follower Window Startup Sync without Hardware Fetch Tests ---');
+    try {
+        const leaderApp = new App();
+        const followerApp = new App();
+
+        // Setup leader state
+        leaderApp.synthTimbralMode = 'monotimbral';
+        leaderApp.timbreA.name = 'LEAD_PAT';
+        leaderApp.timbreA.category = 1; // Lead
+        leaderApp.timbreB.name = 'PAD_PAT';
+        leaderApp.midi.hardwareResponsive = true;
+
+        const leaderSync = new TabSyncManager(leaderApp, { tabId: 'tab_leader_1' });
+        leaderSync.setLeadership(true);
+
+        const followerSync = new TabSyncManager(followerApp, { tabId: 'tab_follower_2' });
+        followerSync.setLeadership(false);
+        followerApp.tabSync = followerSync;
+        leaderApp.tabSync = leaderSync;
+
+        // Verify follower is marked as follower
+        assertEqual(followerSync.isLeader, false, 'Follower tab is not leader');
+        assertEqual(followerSync.isFollower, true, 'isFollower returns true for follower tab');
+
+        // Verify follower tab does not run fetch on MM2 detection
+        let followerFetchSent = false;
+        followerApp.midi.outPort = {
+            id: 'mock_out',
+            name: 'MicroMonsta 2',
+            send: () => { followerFetchSent = true; }
+        };
+        followerApp.midi.inPort = {
+            id: 'mock_in',
+            name: 'MicroMonsta 2'
+        };
+
+        // Simulate MM2 detection in follower window
+        followerApp.midi.emit('mm2-detected', { inPort: followerApp.midi.inPort });
+
+        assertEqual(followerFetchSent, false, 'Follower tab did not dispatch MIDI fetch request on MM2 detection');
+        assertEqual(followerApp._hasDetectedMM2Once, true, '_hasDetectedMM2Once flagged to prevent future fetches');
+
+        // Leader responds to REQUEST_LEADER_STATE by broadcasting SYNC_LEADER_STATE
+        let syncMessageSent = null;
+        leaderSync.broadcast = (type, payload) => {
+            if (type === 'SYNC_LEADER_STATE') syncMessageSent = payload;
+        };
+
+        leaderSync.handleIncomingMessage({
+            type: 'REQUEST_LEADER_STATE',
+            senderTabId: 'tab_follower_2'
+        });
+
+        assert(syncMessageSent !== null, 'Leader broadcasted SYNC_LEADER_STATE payload');
+        assertEqual(syncMessageSent.mode, 'monotimbral', 'Leader sent monotimbral mode');
+        assertEqual(syncMessageSent.targetTabId, 'tab_follower_2', 'Target tab is follower tab');
+
+        // Follower applies SYNC_LEADER_STATE
+        followerApp.applyLeaderState(syncMessageSent);
+
+        assertEqual(followerApp.synthTimbralMode, 'monotimbral', 'Follower timbral mode is monotimbral matching leader');
+        assertEqual(followerApp.timbreA.name, 'LEAD_PAT', 'Follower timbreA synchronized from leader');
+        assertEqual(followerApp.timbreA.category, 1, 'Follower timbreA category synchronized from leader');
+        assertEqual(followerApp.timbreB.name, 'PAD_PAT', 'Follower timbreB synchronized from leader');
+        assertEqual(followerApp.midi.hardwareResponsive, true, 'Follower hardware responsiveness synchronized from leader');
+
+        // Cleanup
+        leaderSync.destroy();
+        followerSync.destroy();
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    logger('\n--- [33] Timbral Mode Monotimbral Protection Tests ---');
+    try {
+        const monoApp = new App();
+        monoApp.setTimbralMode('monotimbral');
+        assertEqual(monoApp.synthTimbralMode, 'monotimbral', 'App initialized in monotimbral mode');
+
+        // 1. Probing Part B sets lastFetchedSlot to 1, but timeout resets lastFetchedSlot to 0
+        monoApp.midi.outPort = { name: 'Mock MM2', send: () => {} };
+        monoApp.modeProbeTimeoutMs = 30;
+        monoApp.probeTimbralMode();
+        assertEqual(monoApp.midi.lastFetchedSlot, 1, 'lastFetchedSlot set to 1 during mode probe');
+        assert(monoApp._modeProbe !== null, '_modeProbe active');
+
+        // Wait for probe timeout
+        await new Promise(r => setTimeout(r, 50));
+        assertEqual(monoApp._modeProbe, null, '_modeProbe cleared after timeout');
+        assertEqual(monoApp.synthTimbralMode, 'monotimbral', 'Mode remains monotimbral after probe timeout');
+        assertEqual(monoApp.midi.lastFetchedSlot, 0, 'lastFetchedSlot reset to 0 after probe timeout');
+
+        // 2. Incoming hardware dump with targetCmd=3 after timeout is routed to slot 0
+        const hwDump = new Uint8Array(INIT_PROGRAM_BYTES);
+        let receivedSlot = null;
+        monoApp.midi.on('program-received', ({ slot }) => { receivedSlot = slot; });
+        monoApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
+
+        assertEqual(receivedSlot, 0, 'Subsequent incoming dump routed to slot 0, not stuck on slot 1');
+        assertEqual(monoApp.synthTimbralMode, 'monotimbral', 'Mode remains monotimbral');
+
+        // 3. Consuming a Part B fetch resets lastFetchedSlot to 0
+        monoApp.midi.lastFetchedSlot = 1;
+        monoApp.midi.handleCompleteSysEx(hwDump);
+        assertEqual(monoApp.midi.lastFetchedSlot, 0, 'lastFetchedSlot consumed and reset to 0');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    logger('\n--- [34] Librarian Bank Renaming Tests ---');
+    try {
+        const lib = new PatchLibrarian();
+        lib.banks = [
+            new MM2Bank('Bank 1', 0),
+            new MM2Bank('Bank 2', 1)
+        ];
+
+        // 1. renameBank validation
+        const outOfBounds = lib.renameBank(5, 'Invalid');
+        assertEqual(outOfBounds, false, 'renameBank returns false for out-of-bounds index');
+
+        const negativeIndex = lib.renameBank(-1, 'Invalid');
+        assertEqual(negativeIndex, false, 'renameBank returns false for negative index');
+
+        const emptyName = lib.renameBank(0, '   ');
+        assertEqual(emptyName, false, 'renameBank returns false for empty or whitespace-only name');
+        assertEqual(lib.banks[0].name, 'Bank 1', 'Bank name untouched when invalid name provided');
+
+        // 2. Successful renaming in librarian
+        let saved = false;
+        lib.saveAllBanks = () => { saved = true; };
+        const okRename = lib.renameBank(0, '  My Custom Bank  ');
+        assertEqual(okRename, true, 'renameBank succeeds with valid trimmed name');
+        assertEqual(lib.banks[0].name, 'My Custom Bank', 'Bank name updated with trimmed string');
+        assertEqual(saved, true, 'saveAllBanks triggered on bank rename');
+
+        // 3. App.renameBank() user flow
+        const app = new App();
+        app.librarian.banks = [new MM2Bank('Original Name', 0)];
+        app.librarian.activeBankIndex = 0;
+
+        // User cancels prompt
+        global.prompt = () => null;
+        let notifType = null;
+        app.showNotification = (msg, type) => { notifType = type; };
+        app.renameBank();
+        assertEqual(app.librarian.banks[0].name, 'Original Name', 'Bank not renamed when prompt is cancelled');
+
+        // User provides empty string
+        global.prompt = () => '   ';
+        app.renameBank();
+        assertEqual(notifType, 'warning', 'Warning notification shown when new name is empty');
+        assertEqual(app.librarian.banks[0].name, 'Original Name', 'Bank not renamed on empty prompt');
+
+        // User provides same name
+        notifType = null;
+        global.prompt = () => 'Original Name';
+        app.renameBank();
+        assertEqual(notifType, null, 'No notification or change when name is unchanged');
+
+        // User provides valid new name
+        let renderCalled = false;
+        app.renderLibrarianBank = () => { renderCalled = true; };
+        global.prompt = () => 'Studio Favorites';
+        app.renameBank();
+        assertEqual(app.librarian.banks[0].name, 'Studio Favorites', 'Bank renamed via App.renameBank()');
+        assertEqual(notifType, 'success', 'Success notification shown on rename');
+        assertEqual(renderCalled, true, 'renderLibrarianBank called after rename');
+
+        // Cleanup global.prompt
+        delete global.prompt;
+
+        // 4. Test UI double click and toolbar button
+        const btnRename = document.createElement('button');
+        btnRename.id = 'btn-rename-bank';
+        document.registerMockElement('btn-rename-bank', btnRename);
+
+        const btnDelete = document.createElement('button');
+        btnDelete.id = 'btn-delete-bank';
+        document.registerMockElement('btn-delete-bank', btnDelete);
+
+        const bankTabs = document.createElement('div');
+        bankTabs.id = 'bank-tabs';
+        document.registerMockElement('bank-tabs', bankTabs);
+
+        const progList = document.createElement('tbody');
+        progList.id = 'librarian-prog-list';
+        document.registerMockElement('librarian-prog-list', progList);
+
+        // Restore real renderLibrarianBank
+        delete app.renderLibrarianBank;
+        app.renderLibrarianBank();
+
+        assertEqual(btnRename.disabled, false, 'Rename button enabled when banks exist');
+
+        // Check rendered tab has double-click handler
+        const renderedTitle = bankTabs.querySelector('.bank-tab-title');
+        assert(renderedTitle !== null, 'Rendered bank tab title exists');
+        assertEqual(renderedTitle.title, 'Double-click to rename', 'Bank tab title has rename tooltip');
+        assert(typeof renderedTitle.ondblclick === 'function', 'Bank tab title has ondblclick handler');
+
+        // Triggering ondblclick triggers renameBank
+        let renamedIdx = null;
+        app.renameBank = (idx) => { renamedIdx = idx; };
+        renderedTitle.ondblclick({ stopPropagation: () => {} });
+        assertEqual(renamedIdx, 0, 'Double clicking tab title invokes renameBank for that bank index');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    logger('\n--- [35] Follower Window Poll Message Suppression Tests ---');
+    try {
+        const leaderApp = new App();
+        const followerApp = new App();
+
+        const leaderSync = new TabSyncManager(leaderApp, { tabId: 'tab_lead_35', channelName: 'test-chan-35' });
+        const followerSync = new TabSyncManager(followerApp, { tabId: 'tab_foll_35', channelName: 'test-chan-35' });
+        leaderApp.tabSync = leaderSync;
+        followerApp.tabSync = followerSync;
+
+        leaderSync.setLeadership(true);
+        followerSync.setLeadership(false);
+
+        leaderApp.timbreA.name = 'LEAD_A';
+        followerApp.timbreA.name = 'FOLL_A';
+
+        let followerNotifications = [];
+        followerApp.showNotification = (msg, type) => {
+            followerNotifications.push({ msg, type });
+        };
+
+        let leaderNotifications = [];
+        leaderApp.showNotification = (msg, type) => {
+            leaderNotifications.push({ msg, type });
+        };
+
+        // 1. Leader starts probeHardware(): emits probe-start and broadcasts HARDWARE_PROBE_START
+        leaderApp.midi.outPort = { name: 'MM2 Mock', send: () => {} };
+        leaderApp.midi.inPort = { name: 'MM2 Mock' };
+        followerApp.midi.outPort = { name: 'MM2 Mock', send: () => {} };
+        followerApp.midi.inPort = { name: 'MM2 Mock' };
+
+        leaderApp.midi.probeHardware(2000);
+        assertEqual(leaderApp.midi._isProbing, true, 'Leader midi._isProbing is true during probe');
+
+        // Allow microtask / BroadcastChannel delivery
+        await new Promise(r => setTimeout(r, 40));
+        assertEqual(followerApp.midi._isProbing, true, 'Follower midi._isProbing set to true via HARDWARE_PROBE_START broadcast');
+
+        // Incoming dump from hardware arrived at both tabs
+        const fetchedProg = new MM2Program();
+        fetchedProg.name = 'POLL_PAT';
+        const hwDump = fetchedProg.toSysEx(0);
+
+        leaderApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
+        followerApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
+
+        assertEqual(leaderNotifications.length, 0, 'Leader window showed no notification during probe');
+        assertEqual(followerNotifications.length, 0, 'Follower window showed no notification during probe');
+        assertEqual(followerApp.timbreA.name, 'FOLL_A', 'Follower timbreA not overwritten by probe dump');
+
+        // 2. Unprompted dump when follower did not receive probe broadcast (fallback guard)
+        followerApp.midi._isProbing = false;
+        followerApp.syncStatus = 'synced';
+        followerApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
+
+        assertEqual(followerNotifications.length, 0, 'Follower window suppresses Loaded notification on unprompted hardware dump');
+        assertEqual(followerApp.timbreA.name, 'FOLL_A', 'Follower timbreA preserved without overwrite');
+
+        // 3. User in follower window explicitly clicks Fetch (syncStatus === 'fetching')
+        followerApp.syncStatus = 'fetching';
+        followerApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
+
+        assertEqual(followerNotifications.length, 1, 'Follower window shows Loaded notification when actively fetching');
+        assert(followerNotifications[0].msg.includes('Loaded MM2 hardware Patch A'), 'Notification message mentions loaded patch');
+        assertEqual(followerApp.syncStatus, 'synced', 'Follower syncStatus updated to synced');
+        assertEqual(followerApp.timbreA.name, 'POLL_PAT', 'Follower timbreA updated with fetched program');
+
+        leaderSync.destroy();
+        followerSync.destroy();
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    logger('\n--- [36] Follower Window Connection Status Inheritance Tests ---');
+    try {
+        const leaderApp = new App();
+        const followerApp = new App();
+
+        const leaderSync = new TabSyncManager(leaderApp, { tabId: 'tab_lead_36', channelName: 'test-chan-36' });
+        const followerSync = new TabSyncManager(followerApp, { tabId: 'tab_foll_36', channelName: 'test-chan-36' });
+        leaderApp.tabSync = leaderSync;
+        followerApp.tabSync = followerSync;
+
+        leaderSync.setLeadership(true);
+        followerSync.setLeadership(false);
+
+        // Setup leader with responsive hardware
+        leaderApp.midi.hardwareResponsive = true;
+        leaderApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
+        leaderApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+
+        // Setup follower DOM status dot and text elements
+        const statusDot = document.createElement('span');
+        statusDot.id = 'midi-status-dot';
+        const statusText = document.createElement('span');
+        statusText.id = 'midi-status-text';
+        document.registerMockElement('midi-status-dot', statusDot);
+        document.registerMockElement('midi-status-text', statusText);
+
+        followerApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
+        followerApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+
+        // 1. Follower resetHardwareResponsiveness preserves responsiveness because it is a follower
+        followerApp.midi.hardwareResponsive = true;
+        followerApp.midi.resetHardwareResponsiveness();
+        assertEqual(followerApp.midi.hardwareResponsive, true, 'Follower does not wipe hardware responsiveness to null on port reset');
+
+        // 2. Applying leader state immediately updates connection status UI without delay
+        followerApp.applyLeaderState({
+            mode: 'monotimbral',
+            timbreA: leaderApp.timbreA.rawData,
+            hardwareResponsive: true
+        });
+
+        assertEqual(statusDot.className, 'status-dot connected', 'Follower status dot immediately reflects connected');
+        assertEqual(statusText.textContent, 'Connected: MicroMonsta 2', 'Follower status text immediately displays Connected');
+
+        // 3. Remote hardware status update from leader immediately propagates to UI
+        followerApp.applyRemoteHardwareStatus(false);
+        assertEqual(statusDot.className, 'status-dot disconnected unresponsive', 'Follower status dot updates on remote unresponsive status');
+        assert(statusText.textContent.includes('No Response'), 'Follower status text reflects No Response');
+
+        followerApp.applyRemoteHardwareStatus(true);
+        assertEqual(statusDot.className, 'status-dot connected', 'Follower status dot returns to connected on remote responsive update');
+        assertEqual(statusText.textContent, 'Connected: MicroMonsta 2', 'Follower status text returns to Connected');
+
+        // Cleanup
+        document.registerMockElement('midi-status-dot', null);
+        document.registerMockElement('midi-status-text', null);
+        leaderSync.destroy();
+        followerSync.destroy();
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;

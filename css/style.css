@@ -1593,6 +1593,27 @@ main.app-main {
     color: var(--text-muted);
 }
 
+.bank-tab-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 0 4px;
+    margin-left: 4px;
+    cursor: pointer;
+    border-radius: 3px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.bank-tab-close:hover {
+    color: var(--accent-red);
+    background: rgba(255, 68, 68, 0.15);
+}
+
 @keyframes pulse {
     0% { opacity: 1; }
     50% { opacity: 0.5; }
@@ -1694,6 +1715,28 @@ main.app-main {
     padding: 2px 6px;
     border-radius: 4px;
     text-align: center;
+}
+
+select.prog-cat-badge,
+.prog-cat-select {
+    cursor: pointer;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.15s ease;
+    width: 100%;
+}
+
+select.prog-cat-badge:hover,
+select.prog-cat-badge:focus,
+.prog-cat-select:hover,
+.prog-cat-select:focus {
+    border-color: var(--accent-cyan);
+    box-shadow: 0 0 4px rgba(0, 210, 255, 0.25);
+}
+
+select.prog-cat-badge option {
+    background: var(--bg-card);
+    color: var(--text-primary);
 }
 
 .prog-dup-badge {

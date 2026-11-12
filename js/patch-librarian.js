@@ -80,12 +80,10 @@ class PatchLibrarian {
 
     createDefaultBanks() {
         this.banks = [
-            new MM2Bank('Bank A', 0),
-            new MM2Bank('Bank B', 1),
-            new MM2Bank('Bank C', 2)
+            new MM2Bank('Bank 1', 0),
+            new MM2Bank('Bank 2', 1),
+            new MM2Bank('Bank 3', 2)
         ];
-        // Populate Bank A with a starter INIT program
-        this.banks[0].addProgram(new MM2Program());
     }
 
     async loadAllBanks() {
@@ -193,13 +191,25 @@ class PatchLibrarian {
         return newBank;
     }
 
+    renameBank(index, newName) {
+        if (index < 0 || index >= this.banks.length) return false;
+        const trimmed = (newName || '').trim();
+        if (!trimmed) return false;
+        this.banks[index].name = trimmed;
+        this.saveAllBanks();
+        return true;
+    }
+
     removeBank(index) {
         if (this.banks.length <= 1) return false;
+        if (index < 0 || index >= this.banks.length) return false;
         this.banks.splice(index, 1);
         for (let i = 0; i < this.banks.length; i++) {
             this.banks[i].index = i;
         }
-        if (this.activeBankIndex >= this.banks.length) {
+        if (this.activeBankIndex > index) {
+            this.activeBankIndex--;
+        } else if (this.activeBankIndex >= this.banks.length) {
             this.activeBankIndex = this.banks.length - 1;
         }
         this.saveAllBanks();

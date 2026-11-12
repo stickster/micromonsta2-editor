@@ -133,6 +133,14 @@ class App {
     bindEvents() {
         // MM2 Detection Listener
         this.midi.on('mm2-detected', ({ inPort }) => {
+            // When an additional window opens, it acts as a follower.
+            // Do not run a hardware fetch; sync from leader window instead.
+            if (this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower)) {
+                this._hasDetectedMM2Once = true;
+                this.updateConnectionStatus();
+                this.tabSync.requestLeaderState();
+                return;
+            }
             if (!this._hasDetectedMM2Once) {
                 this._hasDetectedMM2Once = true;
                 this.showNotification(`MM2 detected on ${inPort.name}. Loading Patch A settings...`, 'info');
@@ -156,6 +164,13 @@ class App {
                 return;
             }
 
+            // In follower windows, do not process unprompted hardware dumps (e.g. from leader polls or leader fetches).
+            // State is synchronized from the leader window via TabSync.
+            const isFollowerTab = this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower);
+            if (isFollowerTab && this.syncStatus !== 'fetching' && !this._modeProbe) {
+                return;
+            }
+
             let skipLoad = false;
             if (slot === 1) {
                 // A Part B reply means the MM2 has two active layers (bitimbral); no reply means monotimbral
@@ -166,6 +181,9 @@ class App {
                     clearTimeout(this._modeProbeTimeout);
                     skipLoad = !this._modeProbe.loadPartB;
                     this._modeProbe = null;
+                }
+                if (this.midi) {
+                    this.midi.lastFetchedSlot = 0;
                 }
             }
             if (skipLoad) {
@@ -223,6 +241,18 @@ class App {
         this.midi.on('hardware-timeout', ({ outPort }) => {
             this.updateConnectionStatus();
             this.showNotification(`Hardware timeout: No response from MM2 on ${outPort ? outPort.name : 'selected port'}. Check router or MIDI cables.`, 'warning');
+        });
+
+        this.midi.on('probe-start', ({ timeoutMs }) => {
+            if (this.tabSync && this.tabSync.isLeader) {
+                this.tabSync.broadcast('HARDWARE_PROBE_START', { timeoutMs });
+            }
+        });
+
+        this.midi.on('probe-end', ({ success }) => {
+            if (this.tabSync && this.tabSync.isLeader) {
+                this.tabSync.broadcast('HARDWARE_PROBE_END', { success });
+            }
         });
 
         this.midi.on('base-channel-changed', (ch) => {
@@ -888,6 +918,9 @@ class App {
         clearTimeout(this._fetchTimeout);
         this._fetchTimeout = setTimeout(() => {
             this._pendingProbe = null;
+            if (this.midi) {
+                this.midi.lastFetchedSlot = 0;
+            }
             if (this.syncStatus === 'fetching') {
                 this.updateSyncStatus('failed');
                 this.midi.markHardwareResponsive(false);
@@ -912,6 +945,9 @@ class App {
         this._modeProbe = { loadPartB };
         this._modeProbeTimeout = setTimeout(() => {
             this._modeProbe = null;
+            if (this.midi) {
+                this.midi.lastFetchedSlot = 0;
+            }
             this.setTimbralMode('monotimbral');
         }, this.modeProbeTimeoutMs);
         this.midi.fetchProgram(1);
@@ -2646,7 +2682,58 @@ class App {
             };
         }
 
+        // Rename the bank itself
+        const btnRenameBank = document.getElementById('btn-rename-bank');
+        if (btnRenameBank) {
+            btnRenameBank.onclick = () => this.renameBank();
+        }
+
+        // Delete the bank itself
+        const btnDeleteBank = document.getElementById('btn-delete-bank');
+        if (btnDeleteBank) {
+            btnDeleteBank.onclick = () => this.deleteBank();
+        }
+
         // Dumps from MM2 are always appended to the currently selected bank (no separate target toggle)
+    }
+
+    renameBank(index = this.librarian.activeBankIndex) {
+        const bank = this.librarian.banks[index];
+        if (!bank) return;
+        const currentName = bank.name;
+        const newName = prompt(`Enter new name for bank "${currentName}":`, currentName);
+        if (newName === null) return;
+        const trimmed = newName.trim();
+        if (!trimmed) {
+            this.showNotification('Bank name cannot be empty.', 'warning');
+            return;
+        }
+        if (trimmed === currentName) return;
+
+        const ok = this.librarian.renameBank(index, trimmed);
+        if (ok) {
+            this.renderLibrarianBank();
+            this.showNotification(`Renamed bank to "${trimmed}".`, 'success');
+        }
+    }
+
+    deleteBank(index = this.librarian.activeBankIndex) {
+        const bank = this.librarian.banks[index];
+        if (!bank) return;
+        if (this.librarian.banks.length <= 1) {
+            this.showNotification('Cannot delete the only bank. At least one bank is required.', 'warning');
+            return;
+        }
+        const patchNote = bank.length > 0 ? ` and all of its ${bank.length} patch(es)` : '';
+        const confirmed = confirm(`Delete bank "${bank.name}"${patchNote}?\n\nThis cannot be undone.`);
+        if (confirmed) {
+            const bankName = bank.name;
+            const ok = this.librarian.removeBank(index);
+            if (ok) {
+                this.renderLibrarianBank();
+                this.showNotification(`Deleted bank "${bankName}".`, 'success');
+            }
+        }
     }
 
     renderLibrarianBank() {
@@ -2654,8 +2741,18 @@ class App {
         const bankTabs = document.getElementById('bank-tabs');
         const progList = document.getElementById('librarian-prog-list');
         const dupBadge = document.getElementById('bank-duplicates-badge');
+        const btnRenameBank = document.getElementById('btn-rename-bank');
+        const btnDeleteBank = document.getElementById('btn-delete-bank');
 
         if (!bankTabs || !progList) return;
+
+        if (btnRenameBank) {
+            btnRenameBank.disabled = this.librarian.banks.length === 0;
+        }
+
+        if (btnDeleteBank) {
+            btnDeleteBank.disabled = this.librarian.banks.length <= 1;
+        }
 
         // Render Bank Tabs with Drag-and-Drop Reordering
         bankTabs.innerHTML = '';
@@ -2667,12 +2764,30 @@ class App {
                 <span class="bank-tab-drag" title="Drag to reorder banks">⋮⋮</span>
                 <span class="bank-tab-title">${bank.name}</span>
                 <span class="bank-tab-count">(${bank.length})</span>
+                ${this.librarian.banks.length > 1 ? `<button class="bank-tab-close" data-index="${idx}" title="Delete bank ${bank.name}">✕</button>` : ''}
             `;
 
             tab.onclick = () => {
                 this.librarian.activeBankIndex = idx;
                 this.renderLibrarianBank();
             };
+
+            const tabTitle = tab.querySelector('.bank-tab-title');
+            if (tabTitle) {
+                tabTitle.title = 'Double-click to rename';
+                tabTitle.ondblclick = (e) => {
+                    e.stopPropagation();
+                    this.renameBank(idx);
+                };
+            }
+
+            const closeBtn = tab.querySelector('.bank-tab-close');
+            if (closeBtn) {
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.deleteBank(idx);
+                };
+            }
 
             // Drag to reorder banks
             tab.ondragstart = (e) => {
@@ -2739,13 +2854,17 @@ class App {
             row.className = `prog-row ${isDup ? 'is-duplicate' : ''}`;
             row.setAttribute('draggable', 'true');
 
-            const catName = LOOKUPS.categories[program.category] || 'Misc';
+            const catOptions = LOOKUPS.categories.map((cat, cIdx) =>
+                `<option value="${cIdx}" ${cIdx === program.category ? 'selected' : ''}>${cat}</option>`
+            ).join('');
 
             row.innerHTML = `
                 <div class="prog-drag-handle" title="Drag to reorder or swap">⋮⋮</div>
                 <div class="prog-slot-num">#${(originalIndex + 1).toString().padStart(2, '0')}</div>
                 <div class="prog-name">${program.name}</div>
-                <div class="prog-cat-badge">${catName}</div>
+                <select class="prog-cat-badge prog-cat-select" data-prog-index="${originalIndex}" title="Edit category">
+                    ${catOptions}
+                </select>
                 ${isDup ? '<div class="prog-dup-badge" title="Identical sound parameters detected">Duplicate</div>' : ''}
                 <div class="prog-actions">
                     <button class="btn btn-sm btn-action" data-action="load-a" title="Load into Part A">Part A</button>
@@ -2754,6 +2873,38 @@ class App {
                     <button class="btn btn-sm btn-danger" data-action="delete" title="Delete">✕</button>
                 </div>
             `;
+
+            // Category change handler
+            const catSelect = row.querySelector('.prog-cat-select');
+            if (catSelect) {
+                catSelect.onclick = (e) => e.stopPropagation();
+                catSelect.onmousedown = (e) => e.stopPropagation();
+                catSelect.onchange = (e) => {
+                    e.stopPropagation();
+                    const newCat = parseInt(e.target.value, 10);
+                    program.category = newCat;
+                    this.librarian.saveAllBanks();
+
+                    // If this patch is loaded in the editor, update the editor category select
+                    if (this.timbreA && (this.timbreA.name === program.name || this.timbreA.computeSoundFingerprint() === program.computeSoundFingerprint())) {
+                        this.timbreA.category = newCat;
+                        if (this.activeSlot === 0) {
+                            const edCat = document.getElementById('prog-category-select');
+                            if (edCat) edCat.value = newCat;
+                        }
+                    }
+                    if (this.timbreB && (this.timbreB.name === program.name || this.timbreB.computeSoundFingerprint() === program.computeSoundFingerprint())) {
+                        this.timbreB.category = newCat;
+                        if (this.activeSlot === 1) {
+                            const edCat = document.getElementById('prog-category-select');
+                            if (edCat) edCat.value = newCat;
+                        }
+                    }
+
+                    const catLabel = LOOKUPS.categories[newCat] || 'Misc';
+                    this.showNotification(`Updated category for "${program.name}" to ${catLabel}`, 'success');
+                };
+            }
 
             // Action button handlers
             row.querySelector('[data-action="load-a"]').onclick = () => {
@@ -3073,7 +3224,38 @@ class App {
     applyRemoteHardwareStatus(responsive) {
         if (this.midi) {
             this.midi.applyRemoteHardwareStatus(responsive);
+            this.updateConnectionStatus();
         }
+    }
+
+    applyLeaderState(state) {
+        if (!state) return;
+        if (state.mode) {
+            this.synthTimbralMode = state.mode;
+            this.updateTimbralModeUI();
+        }
+        if (state.timbreA) {
+            const bytesA = (state.timbreA instanceof Uint8Array) ? state.timbreA : new Uint8Array(state.timbreA);
+            this.timbreA.rawData = bytesA;
+            this.originalSnapshotA = this.timbreA.clone();
+        }
+        if (state.timbreB) {
+            const bytesB = (state.timbreB instanceof Uint8Array) ? state.timbreB : new Uint8Array(state.timbreB);
+            this.timbreB.rawData = bytesB;
+            this.originalSnapshotB = this.timbreB.clone();
+        }
+        if (state.hardwareResponsive !== undefined && state.hardwareResponsive !== null && this.midi) {
+            this.midi.applyRemoteHardwareStatus(state.hardwareResponsive);
+        }
+        this._hasDetectedMM2Once = true;
+        this.undoStack = [];
+        this.redoStack = [];
+        this.updateUndoRedoUI();
+        this.updateSyncStatus('synced');
+        this.refreshEditorControls();
+        this.updateActivePartIndicator();
+        this.updateConnectionStatus();
+        this.showNotification('Synchronized settings from leader window', 'info');
     }
 
     updateSettingsPortLists() {
