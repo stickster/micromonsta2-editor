@@ -327,10 +327,16 @@ class App {
         const outName = this.midi.outPort ? this.midi.outPort.name : 'None';
 
         if (this.midi.inPort && this.midi.outPort) {
+            const isVerified = this.midi.hardwareResponsive === true;
+
             if (this.midi.hardwareResponsive === false) {
-                dot.className = 'status-dot unresponsive';
-                text.textContent = `Unresponsive: ${outName}`;
-                text.title = `Port connected (${outName}), but MicroMonsta 2 is not responding to queries.\nCheck MIDI cable or router connections.`;
+                dot.className = 'status-dot disconnected unresponsive';
+                text.textContent = `No Response: ${outName}`;
+                text.title = `Port open (${outName}), but MicroMonsta 2 hardware is not responding to SysEx/MIDI.\nCheck power and MIDI connections.`;
+            } else if (!isVerified) {
+                dot.className = 'status-dot standby';
+                text.textContent = `Standby: ${outName}`;
+                text.title = `Port connected (${outName}), awaiting handshake or response from MicroMonsta 2 hardware.`;
             } else {
                 dot.className = 'status-dot connected';
                 text.textContent = `Connected: ${outName}`;
@@ -808,6 +814,10 @@ class App {
                 badge.textContent = 'Fetching from MM2...';
                 badge.title = 'Requesting active edit buffer from synth hardware';
                 break;
+            case 'failed':
+                badge.textContent = 'Sync Failed (Offline)';
+                badge.title = 'Hardware did not respond to SysEx dump request. Check cables and channel settings.';
+                break;
         }
     }
 
@@ -829,7 +839,7 @@ class App {
         this._fetchTimeout = setTimeout(() => {
             this._pendingProbe = null;
             if (this.syncStatus === 'fetching') {
-                this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
+                this.updateSyncStatus('failed');
                 this.midi.markHardwareResponsive(false);
                 this.updateConnectionStatus();
                 const portName = (this.midi.outPort && this.midi.outPort.name) ? this.midi.outPort.name : 'selected port';
@@ -2346,6 +2356,9 @@ class App {
             this.updateSyncStatus('synced');
             this.showNotification(`Successfully sent "${progName}" to MM2 ${slotLabel}!`, 'success');
         } catch (err) {
+            this.updateSyncStatus('failed');
+            this.midi.markHardwareResponsive(false);
+            this.updateConnectionStatus();
             alert('Failed to send program: ' + err.message);
         }
     }

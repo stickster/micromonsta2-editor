@@ -812,6 +812,18 @@ async function runAllTests(logger = console.log) {
         assertEqual(userSelectedMidi.inPort.id, 'gen-in', 'Preserves user-selected non-MM2 input port even when MM2 is connected');
         assertEqual(userSelectedMidi.outPort.id, 'mm2-out', 'Still auto-selects MM2 output port when no output preference is saved');
 
+        // 2b. Verify no greedy auto-selection when only generic/virtual ports exist
+        const genericOnlyMidi = new MidiManager();
+        genericOnlyMidi.midiAccess = {
+            inputs: new Map([['thru-in', { id: 'thru-in', name: 'Midi Through Port-0', removeEventListener: () => {}, addEventListener: () => {} }]]),
+            outputs: new Map([['thru-out', { id: 'thru-out', name: 'Midi Through Port-0' }]])
+        };
+        genericOnlyMidi.savedInPortName = '';
+        genericOnlyMidi.savedOutPortName = '';
+        genericOnlyMidi.autoSelectPorts();
+        assertEqual(genericOnlyMidi.inPort, null, 'Does not auto-select generic/virtual input port when no MM2 is connected');
+        assertEqual(genericOnlyMidi.outPort, null, 'Does not auto-select generic/virtual output port when no MM2 is connected');
+
         // 3. App Live Sync & Fetch status transitions
         const app = new App();
         let sentSysEx = null;

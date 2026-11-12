@@ -113,10 +113,10 @@ class MidiManager {
     }
 
     autoSelectPorts() {
-        const inputs = this.getInputs();
-        const outputs = this.getOutputs();
+        const inputs = this.getInputs().filter(i => !this.isVirtualPort(i));
+        const outputs = this.getOutputs().filter(o => !this.isVirtualPort(o));
 
-        // 1. Identify MM2 ports (targeting MicroMonsta)
+        // 1. Identify MM2 ports (targeting MicroMonsta hardware by name)
         const mm2In = inputs.find(i => this.isMM2Port(i));
         const mm2Out = outputs.find(o => this.isMM2Port(o));
 
@@ -130,16 +130,14 @@ class MidiManager {
             matchedOut = outputs.find(o => (this.savedOutPortName && o.name === this.savedOutPortName) || (this.savedOutPortId && o.id === this.savedOutPortId));
         }
 
-        // Prioritize saved port if present; if a saved port preference exists but is temporarily disconnected,
-        // do not fall back to an unrelated port so we don't clobber the user's saved preference during reconnects.
-        const hasSavedIn = !!(this.savedInPortName || this.savedInPortId);
-        const targetIn = matchedIn || mm2In || (hasSavedIn ? null : inputs[0]);
+        // Only auto-connect if a port was previously saved or explicitly matches MicroMonsta 2.
+        // Do not greedily fall back to generic inputs[0]/outputs[0] when no hardware is attached.
+        const targetIn = matchedIn || mm2In || null;
         if (targetIn && (!this.inPort || this.inPort.id !== targetIn.id)) {
             this.setInputPort(targetIn.id);
         }
 
-        const hasSavedOut = !!(this.savedOutPortName || this.savedOutPortId);
-        const targetOut = matchedOut || mm2Out || (hasSavedOut ? null : outputs[0]);
+        const targetOut = matchedOut || mm2Out || null;
         if (targetOut && (!this.outPort || this.outPort.id !== targetOut.id)) {
             this.setOutputPort(targetOut.id);
         }
@@ -196,6 +194,15 @@ class MidiManager {
         if (!port || !port.name) return false;
         const n = port.name.toLowerCase();
         return n.includes('micromonsta');
+    }
+
+    isVirtualPort(port) {
+        if (!port || !port.name) return false;
+        const n = port.name.toLowerCase();
+        return n.includes('midi through') ||
+               n.includes('iac driver') ||
+               n.includes('virtual') ||
+               n.includes('loopbe');
     }
 
     setPeriodicCheck(enabled) {
