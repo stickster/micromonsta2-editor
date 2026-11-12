@@ -288,7 +288,9 @@ class MidiManager {
         this._isProbing = true;
         this._probeTimeout = setTimeout(() => {
             this._probeTimeout = null;
-            this._isProbing = false;
+            // Mark unresponsive, but preserve _isProbing so any late-arriving SysEx response
+            // to this probe is still recognized as a probe response (isProbe=true) and does
+            // not leak as an unsolicited dump into active banks or overwrite editor data.
             this.markHardwareResponsive(false);
             this.emit('hardware-timeout', { inPort: this.inPort, outPort: this.outPort });
         }, timeoutMs);

@@ -84,8 +84,6 @@ class PatchLibrarian {
             new MM2Bank('Bank B', 1),
             new MM2Bank('Bank C', 2)
         ];
-        // Populate Bank A with a starter INIT program
-        this.banks[0].addProgram(new MM2Program());
     }
 
     async loadAllBanks() {

@@ -1864,6 +1864,51 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    logger('\n--- [29] Librarian HW Poll Isolation & Empty Default Banks Tests ---');
+    try {
+        const lib = new PatchLibrarian();
+        lib.createDefaultBanks();
+        assertEqual(lib.banks.length, 3, 'createDefaultBanks creates 3 default banks');
+        assertEqual(lib.banks[0].length, 0, 'Bank 0 starts empty with 0 programs (no default INIT patch)');
+        assertEqual(lib.banks[1].length, 0, 'Bank 1 starts empty with 0 programs');
+        assertEqual(lib.banks[2].length, 0, 'Bank 2 starts empty with 0 programs');
+
+        // Verify HW probe does not add patch to Librarian even if response is delayed past probe timeout
+        const pollApp = new App();
+        const testBank = new MM2Bank('Test Bank', 0);
+        pollApp.librarian.banks = [testBank];
+        pollApp.librarian.activeBankIndex = 0;
+        pollApp.currentView = 'librarian';
+
+        const mockOut = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+        pollApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
+        pollApp.midi.outPort = mockOut;
+
+        // Trigger probe with short timeout to simulate delayed HW response
+        pollApp.midi.probeHardware(40);
+        assert(pollApp.midi._isProbing, '_isProbing is true during probe');
+
+        // Wait past timeout (40ms)
+        await new Promise(r => setTimeout(r, 60));
+        assertEqual(pollApp.midi.hardwareResponsive, false, 'Hardware marked unresponsive on probe timeout');
+        assertEqual(pollApp.midi._probeTimeout, null, '_probeTimeout cleared');
+        assert(pollApp.midi._isProbing, '_isProbing preserved to prevent late probe reply from leaking as dump');
+
+        // Late SysEx response arrives
+        const probeDump = new Uint8Array(INIT_PROGRAM_BYTES);
+        let receivedIsProbe = null;
+        pollApp.midi.on('program-received', ({ isProbe }) => { receivedIsProbe = isProbe; });
+        pollApp.midi.onMidiMessage({ data: probeDump, timeStamp: Date.now() });
+
+        assertEqual(receivedIsProbe, true, 'Late probe response is recognized as a probe (isProbe=true)');
+        assertEqual(pollApp.midi.hardwareResponsive, true, 'Hardware responsiveness restored on incoming dump');
+        assertEqual(pollApp.midi._isProbing, false, '_isProbing cleared after probe response is handled');
+        assertEqual(testBank.length, 0, 'Librarian bank remains empty (no INIT patch added on HW poll)');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
