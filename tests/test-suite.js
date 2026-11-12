@@ -1645,9 +1645,20 @@ async function runAllTests(logger = console.log) {
         btnPush.id = 'btn-prog-push';
         document.registerMockElement('btn-prog-push', btnPush);
 
+        // When disconnected / unverified, Live Sync toggle is disabled
+        testApp.updateLiveSyncUI();
+        assertEqual(chkLiveSync.disabled, true, 'Live sync checkbox is disabled when hardware is disconnected');
+        assertEqual(chkLiveSync.checked, false, 'Live sync checkbox remains unchecked when disconnected');
+
+        // Simulate verified good hardware connection
+        testApp.midi.inPort = { id: 'in-1', name: 'MicroMonsta 2' };
+        testApp.midi.outPort = { id: 'out-1', name: 'MicroMonsta 2' };
+        testApp.midi.hardwareResponsive = true;
+
         // Initially Live Sync is false
         testApp.midi.liveSync = false;
         testApp.updateLiveSyncUI();
+        assertEqual(chkLiveSync.disabled, false, 'Live sync checkbox enabled when connection is good');
         assertEqual(btnFetch.disabled, false, 'Fetch button enabled when Live Sync is false');
         assertEqual(btnPush.disabled, false, 'Push button enabled when Live Sync is false');
         assertEqual(chkLiveSync.checked, false, 'Live sync checkbox is unchecked');
@@ -1659,12 +1670,12 @@ async function runAllTests(logger = console.log) {
         assertEqual(btnPush.disabled, true, 'Push button disabled when Live Sync is true');
         assertEqual(chkLiveSync.checked, true, 'Live sync checkbox is checked');
 
-        // Turn Live Sync back off
-        testApp.midi.liveSync = false;
-        testApp.updateLiveSyncUI();
-        assertEqual(btnFetch.disabled, false, 'Fetch button re-enabled when Live Sync turned off');
-        assertEqual(btnPush.disabled, false, 'Push button re-enabled when Live Sync turned off');
-        assertEqual(chkLiveSync.checked, false, 'Live sync checkbox is unchecked again');
+        // If connection drops while Live Sync is active, Live Sync auto-disables
+        testApp.midi.hardwareResponsive = false;
+        testApp.updateConnectionStatus();
+        assertEqual(testApp.midi.liveSync, false, 'Live Sync automatically turns off if hardware becomes unresponsive');
+        assertEqual(chkLiveSync.disabled, true, 'Live sync checkbox disables when hardware becomes unresponsive');
+        assertEqual(chkLiveSync.checked, false, 'Live sync checkbox unchecks when hardware becomes unresponsive');
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }

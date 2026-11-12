@@ -67,6 +67,16 @@ class App {
         return this.activeSlot === 0 ? this.timbreA : this.timbreB;
     }
 
+    get isConnectionGood() {
+        return !!(
+            this.midi &&
+            !this.midi.permissionError &&
+            this.midi.inPort &&
+            this.midi.outPort &&
+            this.midi.hardwareResponsive === true
+        );
+    }
+
     async init() {
         await this.librarian.init();
         await this.midi.init();
@@ -312,6 +322,8 @@ class App {
     }
 
     updateConnectionStatus() {
+        this.updateLiveSyncUI();
+
         const dot = document.getElementById('midi-status-dot');
         const text = document.getElementById('midi-status-text');
         if (!dot || !text) return;
@@ -730,10 +742,25 @@ class App {
 
     updateLiveSyncUI() {
         if (typeof document === 'undefined') return;
-        const isLive = !!(this.midi && this.midi.liveSync);
+        const connGood = this.isConnectionGood;
+        if (!connGood && this.midi && this.midi.liveSync) {
+            this.midi.liveSync = false;
+            this.midi.saveSettings();
+        }
+        const isLive = !!(this.midi && this.midi.liveSync && connGood);
         const chkLiveSync = document.getElementById('chk-prog-live-sync');
-        if (chkLiveSync && chkLiveSync.checked !== isLive) {
-            chkLiveSync.checked = isLive;
+        if (chkLiveSync) {
+            chkLiveSync.disabled = !connGood;
+            if (chkLiveSync.checked !== isLive) {
+                chkLiveSync.checked = isLive;
+            }
+            const labelEl = chkLiveSync.parentElement;
+            if (labelEl && labelEl.classList) {
+                labelEl.classList.toggle('disabled', !connGood);
+                labelEl.title = connGood
+                    ? 'Real-time NRPN parameter streaming to MM2 hardware'
+                    : 'Live Sync unavailable until MicroMonsta 2 connection is verified';
+            }
         }
 
         const btnFetch = document.getElementById('btn-prog-fetch');
@@ -2152,6 +2179,11 @@ class App {
             chkLiveSync.checked = this.midi.liveSync;
             this.updateLiveSyncUI();
             chkLiveSync.onchange = () => {
+                if (!this.isConnectionGood) {
+                    chkLiveSync.checked = false;
+                    this.updateLiveSyncUI();
+                    return;
+                }
                 if (chkLiveSync.checked) {
                     const dialog = document.getElementById('live-sync-dialog');
                     if (dialog && typeof dialog.showModal === 'function') {

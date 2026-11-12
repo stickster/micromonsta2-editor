@@ -2112,6 +2112,14 @@ footer.audition-footer {
     border-color: var(--accent-cyan);
 }
 
+.live-sync-switch.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+    border-color: var(--border-color);
+    color: var(--text-muted);
+}
+
 .live-sync-label {
     letter-spacing: 0.5px;
 }
