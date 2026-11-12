@@ -2263,7 +2263,7 @@ class App {
         if (btnInit) {
             btnInit.onclick = () => {
                 const partLabel = `Part ${this.activeSlot === 0 ? 'A' : 'B'}`;
-                const liveSyncNote = this.midi.liveSync ? ' and will immediately synchronize with connected MicroMonsta 2 hardware' : '';
+                const liveSyncNote = this.midi.liveSync ? ' and immediately synchronize with connected MicroMonsta 2 hardware' : '';
                 if (confirm(`Reset ${partLabel} (${this.activeTimbre.name}) to default INIT values${liveSyncNote}?`)) {
                     this.activeTimbre.rawData = new MM2Program().rawData;
                     if (this.activeSlot === 0) {
