@@ -80,8 +80,8 @@ Analyze the problem, formulate the solution, and generate the JSON payload conta
     const branchName = `fix/issue-${issueNumber}`;
 
     // Configure git user to reflect Gemini AI authorship
-    execFileSync('git', ['config', 'user.name', 'Gemini Agent']);
-    execFileSync('git', ['config', 'user.email', 'gemini-agent[bot]@users.noreply.github.com']);
+    execFileSync('git', ['config', 'user.name', 'Google Gemini']);
+    execFileSync('git', ['config', 'user.email', 'gemini@google.com']);
 
     // Check out new branch
     execFileSync('git', ['checkout', '-B', branchName]);

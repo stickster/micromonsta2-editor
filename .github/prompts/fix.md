@@ -29,7 +29,7 @@ Guardrails:
    {
      "pr_title": "fix: <concise conventional commit title under 72 chars>",
      "pr_description": "Detailed explanation of changes and root cause, including 'Closes #<issue_number>'",
-     "commit_message": "fix: <concise subject under 72 chars>\n\n<body explaining changes>\n\nCo-authored-by: Gemini Agent <gemini-agent[bot]@users.noreply.github.com>",
+     "commit_message": "fix: <concise subject under 72 chars>\n\n<body explaining changes>\n\nCo-authored-by: Google Gemini <gemini@google.com>",
      "files": [
        {
          "path": "relative/path/to/file",
