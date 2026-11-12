@@ -23,6 +23,7 @@ class MidiManager {
         this.liveSync = false; // Configurable: Live Sync vs Staged Commit
         this.autoCapture = true; // Automatically loads incoming SysEx dumps
         this.periodicCheck = false; // Periodic idle probe for downstream MM2 hardware
+        this.isLeader = true; // Elected leader runs periodic hardware polling
         this.lastFetchedSlot = 0; // Tracks most recently requested slot (0=Part A, 1=Part B)
         this.hardwareResponsive = null; // null: unknown/untested, true: responding, false: unresponsive
         this._probeTimeout = null;
@@ -218,6 +219,7 @@ class MidiManager {
     startPeriodicCheck(intervalMs = 15000) {
         this.stopPeriodicCheck();
         if (!this.periodicCheck) return;
+        if (!this.isLeader) return; // Only elected leader runs periodic background polling
         this._periodicCheckInterval = setInterval(() => {
             // Only probe if both ports are connected and synth has been idle for at least 10s
             if (!this.inPort || !this.outPort) return;
@@ -226,6 +228,17 @@ class MidiManager {
                 this.probeHardware(2500);
             }
         }, intervalMs);
+    }
+
+    setLeaderStatus(isLeader) {
+        this.isLeader = !!isLeader;
+        if (this.isLeader) {
+            if (this.periodicCheck) {
+                this.startPeriodicCheck();
+            }
+        } else {
+            this.stopPeriodicCheck();
+        }
     }
 
     stopPeriodicCheck() {
@@ -246,7 +259,7 @@ class MidiManager {
         }
     }
 
-    markHardwareResponsive(responsive) {
+    markHardwareResponsive(responsive, isRemote = false) {
         const prev = this.hardwareResponsive;
         const changed = prev !== responsive;
         this.hardwareResponsive = responsive;
@@ -255,8 +268,12 @@ class MidiManager {
             this._probeTimeout = null;
         }
         if (changed) {
-            this.emit('hardware-responsiveness-changed', { responsive, previous: prev });
+            this.emit('hardware-responsiveness-changed', { responsive, previous: prev, isRemote });
         }
+    }
+
+    applyRemoteHardwareStatus(responsive) {
+        this.markHardwareResponsive(responsive, true);
     }
 
     /**
