@@ -38,6 +38,7 @@ jobs:
       - name: Run Gemini Issue Triage
         uses: google-github-actions/run-gemini-cli@v0
         with:
+          gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           prompt: |
             Triage issue #${{ github.event.inputs.issue_number || github.event.issue.number }}: "${{ github.event.issue.title }}".
             Evaluate the issue against GEMINI.md:
