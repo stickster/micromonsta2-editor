@@ -4,7 +4,7 @@
 export const AGENT_CONFIG = {
   name: 'Google Gemini',
   email: 'gemini@google.com',
-  model: process.env.GEMINI_MODEL || 'gemini-3.7-flash-lite',
+  model: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
   maxAttempts: 5,
   retryableStatusCodes: [429, 500, 502, 503, 504],
   labels: {
