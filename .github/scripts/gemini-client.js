@@ -1,7 +1,7 @@
 import https from 'node:https';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
 if (!GEMINI_API_KEY) {
   console.error('Error: GEMINI_API_KEY environment variable is required.');
