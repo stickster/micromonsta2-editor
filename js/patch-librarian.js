@@ -193,11 +193,14 @@ class PatchLibrarian {
 
     removeBank(index) {
         if (this.banks.length <= 1) return false;
+        if (index < 0 || index >= this.banks.length) return false;
         this.banks.splice(index, 1);
         for (let i = 0; i < this.banks.length; i++) {
             this.banks[i].index = i;
         }
-        if (this.activeBankIndex >= this.banks.length) {
+        if (this.activeBankIndex > index) {
+            this.activeBankIndex--;
+        } else if (this.activeBankIndex >= this.banks.length) {
             this.activeBankIndex = this.banks.length - 1;
         }
         this.saveAllBanks();

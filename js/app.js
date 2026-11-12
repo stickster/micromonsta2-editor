@@ -2646,7 +2646,32 @@ class App {
             };
         }
 
+        // Delete the bank itself
+        const btnDeleteBank = document.getElementById('btn-delete-bank');
+        if (btnDeleteBank) {
+            btnDeleteBank.onclick = () => this.deleteBank();
+        }
+
         // Dumps from MM2 are always appended to the currently selected bank (no separate target toggle)
+    }
+
+    deleteBank(index = this.librarian.activeBankIndex) {
+        const bank = this.librarian.banks[index];
+        if (!bank) return;
+        if (this.librarian.banks.length <= 1) {
+            this.showNotification('Cannot delete the only bank. At least one bank is required.', 'warning');
+            return;
+        }
+        const patchNote = bank.length > 0 ? ` and all of its ${bank.length} patch(es)` : '';
+        const confirmed = confirm(`Delete bank "${bank.name}"${patchNote}?\n\nThis cannot be undone.`);
+        if (confirmed) {
+            const bankName = bank.name;
+            const ok = this.librarian.removeBank(index);
+            if (ok) {
+                this.renderLibrarianBank();
+                this.showNotification(`Deleted bank "${bankName}".`, 'success');
+            }
+        }
     }
 
     renderLibrarianBank() {
@@ -2654,8 +2679,13 @@ class App {
         const bankTabs = document.getElementById('bank-tabs');
         const progList = document.getElementById('librarian-prog-list');
         const dupBadge = document.getElementById('bank-duplicates-badge');
+        const btnDeleteBank = document.getElementById('btn-delete-bank');
 
         if (!bankTabs || !progList) return;
+
+        if (btnDeleteBank) {
+            btnDeleteBank.disabled = this.librarian.banks.length <= 1;
+        }
 
         // Render Bank Tabs with Drag-and-Drop Reordering
         bankTabs.innerHTML = '';
@@ -2667,12 +2697,21 @@ class App {
                 <span class="bank-tab-drag" title="Drag to reorder banks">⋮⋮</span>
                 <span class="bank-tab-title">${bank.name}</span>
                 <span class="bank-tab-count">(${bank.length})</span>
+                ${this.librarian.banks.length > 1 ? `<button class="bank-tab-close" data-index="${idx}" title="Delete bank ${bank.name}">✕</button>` : ''}
             `;
 
             tab.onclick = () => {
                 this.librarian.activeBankIndex = idx;
                 this.renderLibrarianBank();
             };
+
+            const closeBtn = tab.querySelector('.bank-tab-close');
+            if (closeBtn) {
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.deleteBank(idx);
+                };
+            }
 
             // Drag to reorder banks
             tab.ondragstart = (e) => {

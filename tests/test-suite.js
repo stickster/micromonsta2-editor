@@ -1909,6 +1909,71 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    logger('\n--- [30] Librarian Bank Deletion Tests ---');
+    try {
+        const lib = new PatchLibrarian();
+        lib.banks = [
+            new MM2Bank('Bank 1', 0),
+            new MM2Bank('Bank 2', 1),
+            new MM2Bank('Bank 3', 2)
+        ];
+        lib.activeBankIndex = 2;
+
+        // Removing bank at index 0 should decrement activeBankIndex to 1 and re-index
+        const ok0 = lib.removeBank(0);
+        assertEqual(ok0, true, 'removeBank(0) succeeds');
+        assertEqual(lib.banks.length, 2, 'Librarian has 2 banks remaining');
+        assertEqual(lib.banks[0].name, 'Bank 2', 'First bank is now Bank 2');
+        assertEqual(lib.banks[0].index, 0, 'First bank index updated to 0');
+        assertEqual(lib.banks[1].name, 'Bank 3', 'Second bank is Bank 3');
+        assertEqual(lib.banks[1].index, 1, 'Second bank index updated to 1');
+        assertEqual(lib.activeBankIndex, 1, 'activeBankIndex adjusted from 2 to 1');
+
+        // Removing the active bank (now index 1)
+        const ok1 = lib.removeBank(1);
+        assertEqual(ok1, true, 'removeBank(1) succeeds');
+        assertEqual(lib.banks.length, 1, 'Librarian has 1 bank remaining');
+        assertEqual(lib.activeBankIndex, 0, 'activeBankIndex clamped to 0');
+
+        // Attempting to remove the last remaining bank is disallowed
+        const okLast = lib.removeBank(0);
+        assertEqual(okLast, false, 'removeBank rejected when only 1 bank remains');
+        assertEqual(lib.banks.length, 1, 'Librarian still retains 1 bank');
+
+        // Test App.deleteBank() method
+        const delApp = new App();
+        delApp.librarian.banks = [new MM2Bank('Solo Bank', 0)];
+        delApp.librarian.activeBankIndex = 0;
+
+        let notifiedWarning = false;
+        delApp.showNotification = (msg, type) => {
+            if (type === 'warning') notifiedWarning = true;
+        };
+        delApp.deleteBank();
+        assertEqual(notifiedWarning, true, 'deleteBank warns user when trying to delete the only bank');
+        assertEqual(delApp.librarian.banks.length, 1, 'Single bank was not deleted');
+
+        // Two banks with confirm rejection
+        delApp.librarian.banks = [new MM2Bank('Bank A', 0), new MM2Bank('Bank B', 1)];
+        global.confirm = () => false;
+        delApp.deleteBank(1);
+        assertEqual(delApp.librarian.banks.length, 2, 'Bank not deleted when confirm rejected');
+
+        // Confirm accepted
+        global.confirm = () => true;
+        let notifiedSuccess = false;
+        delApp.showNotification = (msg, type) => {
+            if (type === 'success') notifiedSuccess = true;
+        };
+        delApp.deleteBank(1);
+        assertEqual(delApp.librarian.banks.length, 1, 'Bank deleted when confirm accepted');
+        assertEqual(notifiedSuccess, true, 'Success notification shown on bank deletion');
+        delete global.confirm;
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

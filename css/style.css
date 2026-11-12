@@ -1593,6 +1593,27 @@ main.app-main {
     color: var(--text-muted);
 }
 
+.bank-tab-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 0 4px;
+    margin-left: 4px;
+    cursor: pointer;
+    border-radius: 3px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+}
+
+.bank-tab-close:hover {
+    color: var(--accent-red);
+    background: rgba(255, 68, 68, 0.15);
+}
+
 @keyframes pulse {
     0% { opacity: 1; }
     50% { opacity: 0.5; }
