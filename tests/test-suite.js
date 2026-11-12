@@ -1869,6 +1869,9 @@ async function runAllTests(logger = console.log) {
         const lib = new PatchLibrarian();
         lib.createDefaultBanks();
         assertEqual(lib.banks.length, 3, 'createDefaultBanks creates 3 default banks');
+        assertEqual(lib.banks[0].name, 'Bank 1', 'Default bank 0 is named Bank 1');
+        assertEqual(lib.banks[1].name, 'Bank 2', 'Default bank 1 is named Bank 2');
+        assertEqual(lib.banks[2].name, 'Bank 3', 'Default bank 2 is named Bank 3');
         assertEqual(lib.banks[0].length, 0, 'Bank 0 starts empty with 0 programs (no default INIT patch)');
         assertEqual(lib.banks[1].length, 0, 'Bank 1 starts empty with 0 programs');
         assertEqual(lib.banks[2].length, 0, 'Bank 2 starts empty with 0 programs');

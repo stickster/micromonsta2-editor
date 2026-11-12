@@ -80,9 +80,9 @@ class PatchLibrarian {
 
     createDefaultBanks() {
         this.banks = [
-            new MM2Bank('Bank A', 0),
-            new MM2Bank('Bank B', 1),
-            new MM2Bank('Bank C', 2)
+            new MM2Bank('Bank 1', 0),
+            new MM2Bank('Bank 2', 1),
+            new MM2Bank('Bank 3', 2)
         ];
     }
 
