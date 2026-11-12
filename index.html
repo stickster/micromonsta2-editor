@@ -1,307 +1,253 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MicroMonsta 2 Editor & Patch Librarian</title>
-    <meta name="description"
-        content="Hardware editor, patch librarian, and duplicate manager for Audiothingies MicroMonsta 2.">
-    <link rel="stylesheet" href="css/style.css">
+    <title>MicroMonsta 2 Editor & Librarian</title>
+    <link rel="stylesheet" href="css/styles.css">
 </head>
-
 <body>
-    <!-- Top Header -->
-    <header class="app-header">
-        <div class="brand-section">
-            <div class="brand-title">MicroMonsta <span>2</span></div>
-            <div class="brand-badge">FW v3.x</div>
-            <div class="brand-badge app-version-badge" id="app-version-badge" title="Editor Version">v0.1</div>
-        </div>
-
-        <div class="header-center">
-            <div class="part-selector">
-                <button class="part-btn active" id="btn-part-a" data-slot="0" onclick="window.app.selectPart(0)"
-                    title="Edit Part A (Layer A)">Part A</button>
-                <button class="part-btn" id="btn-part-b" data-slot="1" onclick="window.app.selectPart(1)"
-                    title="Edit Part B (Layer B)">Part B</button>
+    <div id="app-container">
+        <!-- Top Header & Navigation -->
+        <header class="app-header">
+            <div class="brand">
+                <h1>MicroMonsta 2</h1>
+                <span id="app-version-badge" class="version-badge">v0.1.2</span>
             </div>
-
-            <div class="mode-box" id="mode-selector-box">
-                <span id="synth-mode-indicator" class="mode-indicator-badge" role="status"
-                    title="Synth Timbral Mode (Display Only — must be adjusted on MM2 hardware)">Monotimbral
-                    (12V)</span>
+            <div class="nav-tabs">
+                <button id="tab-editor" class="nav-tab active" onclick="app.switchView('editor')">Patch Editor</button>
+                <button id="tab-librarian" class="nav-tab" onclick="app.switchView('librarian')">Patch Librarian</button>
+                <button id="tab-settings" class="nav-tab" onclick="app.switchView('settings')">MIDI Settings</button>
             </div>
-
-            <nav class="nav-tabs">
-                <button class="nav-tab active" id="tab-editor" onclick="window.app.switchView('editor')">Editor</button>
-                <button class="nav-tab" id="tab-librarian"
-                    onclick="window.app.switchView('librarian')">Librarian</button>
-                <button class="nav-tab" id="tab-settings" onclick="window.app.switchView('settings')">Settings</button>
-            </nav>
-        </div>
-
-        <div class="header-right">
-            <div class="midi-status-box" id="midi-status-box" onclick="window.app.handleMidiStatusClick()"
-                title="Click to connect or configure MIDI">
-                <div class="status-dot disconnected" id="midi-status-dot"></div>
+            <div class="midi-status-bar" onclick="app.handleMidiStatusClick()" title="Click to configure MIDI ports">
+                <span id="midi-status-dot" class="status-dot disconnected"></span>
                 <span id="midi-status-text">Disconnected</span>
             </div>
-        </div>
-    </header>
+        </header>
 
-    <!-- Main Views -->
-    <main class="app-main">
-        <!-- 1. EDITOR VIEW -->
-        <div id="view-editor" class="tab-content active">
-            <!-- Program Header Bar -->
-            <div class="program-bar">
-                <div class="program-name-group">
-                    <div id="active-part-indicator" class="active-part-badge part-a" title="Active Sound Layer">PART A
+        <!-- Main Views Container -->
+        <main class="main-content">
+            
+            <!-- ======================================================== -->
+            <!-- 1. PATCH EDITOR VIEW -->
+            <!-- ======================================================== -->
+            <section id="view-editor" class="tab-content active">
+                <!-- Program Header Bar -->
+                <div class="program-bar">
+                    <div class="program-name-group">
+                        <div class="part-selector-group" id="program-part-selector">
+                            <button type="button" class="part-btn active" data-slot="0" onclick="app.selectPart(0)">Part A</button>
+                            <button type="button" class="part-btn" id="btn-part-b" data-slot="1" onclick="app.selectPart(1)">Part B</button>
+                            <div id="active-part-indicator" class="active-part-badge part-a">PART A [MONO 12V]</div>
+                        </div>
+                        <div class="prog-name-wrap">
+                            <label for="prog-name-input">Name</label>
+                            <input type="text" id="prog-name-input" maxlength="12" spellcheck="false" placeholder="Init Patch">
+                        </div>
+                        <div class="prog-cat-wrap">
+                            <label for="prog-category-select">Category</label>
+                            <select id="prog-category-select"></select>
+                        </div>
+                        <div id="prog-tempo-container" class="prog-tempo-wrap"></div>
                     </div>
-                    <input type="text" id="prog-name-input" class="input-name" maxlength="8" placeholder="Patch"
-                        title="Patch Name (up to 8 characters)">
-                    <select id="prog-category-select" class="program-cat-select" title="Patch Category"></select>
-                    <div id="prog-tempo-container" class="prog-tempo-container" title="Program Tempo (40-295 BPM)">
-                    </div>
-                    <button class="btn btn-sm btn-subtle btn-compare" id="btn-prog-compare"
-                        title="Compare with original loaded patch (A/B testing)">Compare: Off</button>
-                    <div id="editor-sync-badge" class="sync-badge synced" title="Live sync status with MM2">Synced</div>
-                </div>
-
-                <div class="program-actions">
-                    <div class="undo-redo-group">
-                        <button class="btn btn-sm btn-subtle" id="btn-prog-undo" title="Undo change (Ctrl+Z)"
-                            disabled>↶</button>
-                        <button class="btn btn-sm btn-subtle" id="btn-prog-redo" title="Redo change (Ctrl+Y)"
-                            disabled>↷</button>
-                    </div>
-
-                    <label class="live-sync-switch" title="Real-time NRPN parameter streaming to MM2 hardware">
-                        <input type="checkbox" id="chk-prog-live-sync">
-                        <span class="live-sync-label">Live Sync</span>
-                    </label>
-
-                    <button class="btn btn-fetch" id="btn-prog-fetch"
-                        title="Fetch current sound patch directly from MM2 hardware">Fetch from MM2</button>
-                    <input type="file" id="prog-file-picker" accept=".syx" style="display: none;">
-                    <button class="btn" id="btn-prog-load" title="Load patch from .syx file">Load .syx</button>
-                    <button class="btn" id="btn-prog-save" title="Save patch to .syx file">Save .syx</button>
-                    <button class="btn btn-subtle" id="btn-prog-add-to-lib"
-                        title="Store copy of current patch into active Librarian bank">Store in Bank</button>
-                    <button class="btn btn-subtle" id="btn-prog-init"
-                        title="Reset patch to default INIT settings">Init</button>
-                    <button class="btn btn-subtle" id="btn-prog-copy-other"
-                        title="Copy active Part settings to Part B">Copy A → B</button>
-                    <button class="btn btn-push" id="btn-prog-push" title="Send patch to MicroMonsta 2 hardware">Push
-                        to MM2</button>
-                </div>
-            </div>
-
-            <!-- Dynamic Synthesizer Grid -->
-            <div id="editor-grid" class="editor-grid">
-                <!-- Populated dynamically by app.js -->
-            </div>
-        </div>
-
-        <!-- 2. LIBRARIAN VIEW -->
-        <div id="view-librarian" class="tab-content">
-            <div class="librarian-container">
-                <!-- Bank Selector Tabs -->
-                <div class="bank-tabs-bar">
-                    <div id="bank-tabs" style="display: flex; gap: 6px;"></div>
-                    <button class="btn btn-sm btn-subtle" id="btn-add-bank" title="Create a new patch bank">+ New
-                        Bank</button>
-                </div>
-
-                <!-- Bank Actions & Search Toolbar -->
-                <div class="bank-toolbar">
-                    <div class="bank-tools-left">
-                        <input type="file" id="bank-file-picker" accept=".syx" style="display: none;">
-                        <button class="btn btn-sm" id="btn-import-bank"
-                            title="Import .syx file (single patch or whole bank)">Import .syx</button>
-                        <button class="btn btn-sm" id="btn-export-bank" title="Export entire bank as a .syx file">Export
-                            Bank .syx</button>
-                        <button class="btn btn-sm btn-warning" id="btn-detect-duplicates"
-                            title="Scan bank for duplicate patches">Manage Duplicates</button>
-                        <button class="btn btn-sm btn-subtle" id="btn-condense-bank"
-                            title="Remove empty/duplicate slots and pack sequentially">Condense Bank</button>
-                        <button class="btn btn-sm btn-danger" id="btn-delete-all-patches"
-                            title="Delete all patches in the current bank">Delete All</button>
-                        <span id="bank-duplicates-badge" class="badge badge-warning" style="display: none;"></span>
-                    </div>
-
-                    <div class="bank-tools-right">
-                        <select id="lib-cat-filter" class="control-select" style="width: 130px;"></select>
-                        <input type="text" id="lib-search-input" class="search-input" placeholder="Search patches...">
+                    
+                    <div class="program-actions-group">
+                        <div class="sync-status-wrap">
+                            <span id="editor-sync-badge" class="sync-badge synced" title="Sound matches hardware state">Synced</span>
+                        </div>
+                        <div class="live-sync-toggle">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="chk-prog-live-sync">
+                                <span>Live Sync</span>
+                            </label>
+                        </div>
+                        <button type="button" id="btn-prog-undo" class="btn btn-sm btn-action" title="Undo last parameter tweak (Ctrl+Z)" disabled>Undo</button>
+                        <button type="button" id="btn-prog-redo" class="btn btn-sm btn-action" title="Redo parameter tweak (Ctrl+Y)" disabled>Redo</button>
+                        <button type="button" id="btn-prog-compare" class="btn btn-sm btn-action" title="Compare against original loaded patch">Compare: Off</button>
+                        <button type="button" id="btn-prog-fetch" class="btn btn-sm btn-action" title="Fetch active patch from MM2 hardware">Fetch</button>
+                        <button type="button" id="btn-prog-push" class="btn btn-sm btn-action" title="Send patch to MM2 hardware">Push</button>
+                        <button type="button" id="btn-prog-init" class="btn btn-sm btn-action" title="Reset patch to default init values">Init</button>
+                        <button type="button" id="btn-prog-copy-other" class="btn btn-sm btn-action" title="Copy settings between Part A and Part B">Copy A → B</button>
+                        <button type="button" id="btn-prog-load" class="btn btn-sm btn-action" title="Load SysEx .syx file">Load...</button>
+                        <input type="file" id="prog-file-picker" accept=".syx,.syndrome" style="display: none;">
+                        <button type="button" id="btn-prog-save" class="btn btn-sm btn-action" title="Save SysEx .syx file">Save...</button>
+                        <button type="button" id="btn-prog-add-to-lib" class="btn btn-sm btn-primary" title="Store preset in active bank slot">+ Library</button>
                     </div>
                 </div>
 
-                <!-- Program List Table -->
-                <div class="prog-table" id="librarian-prog-list">
-                    <!-- Populated dynamically by app.js -->
-                </div>
-            </div>
-        </div>
+                <!-- Virtual Keyboard / Audition Toolbar -->
+                <div id="audition-toolbar-container" class="audition-toolbar-container"></div>
 
-        <!-- 3. SETTINGS VIEW -->
-        <div id="view-settings" class="tab-content">
-            <div class="synth-card" style="max-width: 640px; margin: 0 auto;">
-                <div class="synth-card-header">Hardware & MIDI Settings</div>
-                <div class="synth-card-body" style="padding: 10px;">
+                <!-- Main Synth Editor Grid (populated dynamically by App) -->
+                <div id="editor-grid" class="editor-grid"></div>
+            </section>
+
+            <!-- ======================================================== -->
+            <!-- 2. PATCH LIBRARIAN VIEW -->
+            <!-- ======================================================== -->
+            <section id="view-librarian" class="tab-content">
+                <div class="librarian-header">
+                    <div class="bank-tabs-bar">
+                        <div id="bank-tabs" class="bank-tabs"></div>
+                        <button id="btn-add-bank" class="btn btn-sm btn-action" title="Create new patch bank">+ New Bank</button>
+                    </div>
+                    <div class="librarian-toolbar">
+                        <div class="lib-search-wrap">
+                            <input type="text" id="lib-search-input" placeholder="Search presets..." spellcheck="false">
+                        </div>
+                        <div class="lib-filter-wrap">
+                            <select id="lib-cat-filter">
+                                <option value="all">All Categories</option>
+                            </select>
+                        </div>
+                        <div class="lib-batch-actions">
+                            <span id="bank-duplicates-badge" class="badge" style="display: none;">0 Duplicates</span>
+                            <button id="btn-detect-duplicates" class="btn btn-sm btn-action" title="Scan bank for identical patches">Scan Duplicates</button>
+                            <button id="btn-condense-bank" class="btn btn-sm btn-action" title="Remove duplicates and compact slots">Condense Bank</button>
+                            <button id="btn-delete-all-patches" class="btn btn-sm btn-danger" title="Delete all patches in current bank">Delete All</button>
+                            <button id="btn-export-bank" class="btn btn-sm btn-action" title="Export bank as .syx SysEx dump">Export Bank...</button>
+                            <button id="btn-import-bank" class="btn btn-sm btn-action" title="Import .syx bank dump">Import Bank...</button>
+                            <input type="file" id="bank-file-picker" accept=".syx" style="display: none;">
+                        </div>
+                    </div>
+                </div>
+                <div id="librarian-prog-list" class="librarian-prog-list"></div>
+            </section>
+
+            <!-- ======================================================== -->
+            <!-- 3. MIDI & APP SETTINGS VIEW -->
+            <!-- ======================================================== -->
+            <section id="view-settings" class="tab-content">
+                <div class="settings-container">
+                    <h2>MIDI & Hardware Settings</h2>
+                    <p class="settings-desc">Configure Web MIDI ports and communication parameters for your Audiothingies MicroMonsta 2.</p>
+
                     <div id="midi-permission-banner" class="midi-permission-banner" style="display: none;"></div>
-                    <div class="midi-reconnect-bar"
-                        style="display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap;">
-                        <button class="btn btn-sm btn-primary" id="btn-reconnect-midi"
-                            title="Scan and reconnect Web MIDI devices">🔄 Scan / Reconnect MIDI Devices</button>
-                        <button class="btn btn-sm btn-secondary" id="btn-probe-hardware"
-                            title="Send SysEx query to verify MicroMonsta 2 is responsive on selected ports">⚡ Test MM2 Connection</button>
-                        <span id="midi-permission-text" class="setting-desc" style="margin: 0;"></span>
-                    </div>
 
-                    <div class="setting-item">
-                        <label class="setting-label">MIDI Input Port (Listening for MM2 Dumps)</label>
-                        <select id="settings-midi-in" class="control-select"></select>
-                        <span class="setting-desc">Auto-selects Micromonsta 2 when connected.</span>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label">MIDI Output Port (Sending to MM2)</label>
-                        <select id="settings-midi-out" class="control-select"></select>
-                        <span class="setting-desc">Auto-selects Micromonsta 2 when connected.</span>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label">MIDI Base Channel</label>
-                        <select id="settings-base-channel" class="control-select">
-                            <option value="0">Channel 1 (Part A=Ch 1, Part B=Ch 2)</option>
-                            <option value="1">Channel 2 (Part A=Ch 2, Part B=Ch 3)</option>
-                            <option value="2">Channel 3 (Part A=Ch 3, Part B=Ch 4)</option>
-                            <option value="3">Channel 4 (Part A=Ch 4, Part B=Ch 5)</option>
-                            <option value="4">Channel 5 (Part A=Ch 5, Part B=Ch 6)</option>
-                            <option value="5">Channel 6 (Part A=Ch 6, Part B=Ch 7)</option>
-                            <option value="6">Channel 7 (Part A=Ch 7, Part B=Ch 8)</option>
-                            <option value="7">Channel 8 (Part A=Ch 8, Part B=Ch 9)</option>
-                            <option value="8">Channel 9 (Part A=Ch 9, Part B=Ch 10)</option>
-                            <option value="9">Channel 10 (Part A=Ch 10, Part B=Ch 11)</option>
-                            <option value="10">Channel 11 (Part A=Ch 11, Part B=Ch 12)</option>
-                            <option value="11">Channel 12 (Part A=Ch 12, Part B=Ch 13)</option>
-                            <option value="12">Channel 13 (Part A=Ch 13, Part B=Ch 14)</option>
-                            <option value="13">Channel 14 (Part A=Ch 14, Part B=Ch 15)</option>
-                            <option value="14">Channel 15 (Part A=Ch 15, Part B=Ch 16)</option>
-                        </select>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                            <input type="checkbox" id="settings-periodic-check">
-                            <span>Check hardware connection periodically</span>
-                        </label>
-                        <span class="setting-desc" style="margin-left: 24px;">Periodically pings MM2 when idle to detect disconnection behind MIDI routers or interfaces.</span>
-                    </div>
-
-                    <div class="setting-item">
-                        <label class="setting-label" for="settings-undo-levels">Levels of Undo</label>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <input type="number" id="settings-undo-levels" class="control-input" min="1" max="100"
-                                value="20">
-                            <span class="setting-desc" style="margin: 0;">Number of undo steps to remember (1–100,
-                                default: 20).</span>
+                    <div class="settings-card">
+                        <h3>MIDI Ports</h3>
+                        <div class="settings-row">
+                            <label for="settings-midi-in">MIDI Input (from MicroMonsta 2)</label>
+                            <select id="settings-midi-in"></select>
+                        </div>
+                        <div class="settings-row">
+                            <label for="settings-midi-out">MIDI Output (to MicroMonsta 2)</label>
+                            <select id="settings-midi-out"></select>
+                        </div>
+                        <div class="settings-actions">
+                            <button id="btn-reconnect-midi" class="btn btn-primary">Scan / Reconnect MIDI Devices</button>
+                            <button id="btn-probe-hardware" class="btn btn-action">Test MM2 Connection (Ping)</button>
                         </div>
                     </div>
 
-                    <div class="setting-item" style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 12px;">
-                        <label class="setting-label">Application Version</label>
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span id="settings-app-version" class="brand-badge app-version-badge" style="font-size: 13px; padding: 4px 10px;">v0.1.0</span>
-                            <span class="setting-desc" style="margin: 0;">MicroMonsta 2 Web Editor & Patch Librarian</span>
+                    <div class="settings-card">
+                        <h3>Channel & Communication</h3>
+                        <div class="settings-row">
+                            <label for="settings-base-channel">Base MIDI Channel (1–16)</label>
+                            <select id="settings-base-channel">
+                                <option value="0">Channel 1</option>
+                                <option value="1">Channel 2</option>
+                                <option value="2">Channel 3</option>
+                                <option value="3">Channel 4</option>
+                                <option value="4">Channel 5</option>
+                                <option value="5">Channel 6</option>
+                                <option value="6">Channel 7</option>
+                                <option value="7">Channel 8</option>
+                                <option value="8">Channel 9</option>
+                                <option value="9">Channel 10</option>
+                                <option value="10">Channel 11</option>
+                                <option value="11">Channel 12</option>
+                                <option value="12">Channel 13</option>
+                                <option value="13">Channel 14</option>
+                                <option value="14">Channel 15</option>
+                                <option value="15">Channel 16</option>
+                            </select>
                         </div>
+                        <div class="settings-row">
+                            <label for="settings-periodic-check">Periodic Hardware Polling</label>
+                            <div class="settings-toggle-row">
+                                <input type="checkbox" id="settings-periodic-check">
+                                <span>Periodically check connection responsiveness</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-card">
+                        <h3>Editor Preferences</h3>
+                        <div class="settings-row">
+                            <label for="settings-undo-levels">Undo History Levels (1–100)</label>
+                            <input type="number" id="settings-undo-levels" min="1" max="100" value="20">
+                        </div>
+                    </div>
+
+                    <div class="settings-card">
+                        <h3>About</h3>
+                        <div class="settings-info-row">
+                            <span>MicroMonsta 2 HTML Editor & Librarian</span>
+                            <span id="settings-app-version">v0.1.2</span>
+                        </div>
+                        <p class="settings-credits">Created for Audiothingies MicroMonsta 2 hardware synthesizer. Open source MIT license.</p>
                     </div>
                 </div>
-            </div>
-        </div>
-    </main>
+            </section>
 
-    <!-- Bottom Audition Toolbar -->
-    <footer class="audition-footer">
-        <div id="audition-toolbar-container">
-            <!-- Populated dynamically with createKeyboard() -->
-        </div>
-    </footer>
+        </main>
 
-    <!-- Duplicate Management Modal -->
-    <div id="duplicate-modal" class="modal-overlay">
-        <div class="modal-dialog">
+        <!-- Toast Notification Banner -->
+        <div id="toast-notification" class="toast"></div>
+
+        <!-- Live Sync Confirmation Dialog -->
+        <dialog id="live-sync-dialog" class="modal-dialog">
             <div class="modal-header">
-                <div class="modal-title">Duplicate Patch Manager</div>
-                <button class="modal-close-btn"
-                    onclick="document.getElementById('duplicate-modal').classList.remove('open')">✕</button>
+                <h3>Enable Live Parameter Sync?</h3>
             </div>
-            <div class="modal-body" id="duplicate-modal-body"></div>
+            <div class="modal-body">
+                <p>Enabling Live Sync streams every knob and slider tweak instantly to your MicroMonsta 2 hardware via NRPN.</p>
+                <p>How would you like to initialize the sync state?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="this.closest('dialog').close('fetch')">Fetch from Synth First</button>
+                <button class="btn btn-action" onclick="this.closest('dialog').close('push')">Push Editor Patch to Synth</button>
+                <button class="btn" onclick="this.closest('dialog').close('cancel')">Cancel</button>
+            </div>
+        </dialog>
+
+        <!-- Reconnect Sync Confirmation Dialog -->
+        <dialog id="reconnect-sync-dialog" class="modal-dialog">
+            <div class="modal-header">
+                <h3>MicroMonsta 2 Reconnected</h3>
+            </div>
+            <div class="modal-body">
+                <p>Your MicroMonsta 2 synthesizer has reconnected. Would you like to pull the current patch from hardware, or push your editor settings to the synth?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="this.closest('dialog').close('pull')">Pull from Synth (Overwrite Editor)</button>
+                <button class="btn btn-action" onclick="this.closest('dialog').close('push')">Push to Synth (Overwrite Hardware)</button>
+                <button class="btn" onclick="this.closest('dialog').close('cancel')">Ignore</button>
+            </div>
+        </dialog>
+
+        <!-- Duplicate Resolution Modal -->
+        <div id="duplicate-modal" class="modal-overlay">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>Duplicate Patch Manager</h3>
+                    <button class="modal-close-btn" onclick="document.getElementById('duplicate-modal').classList.remove('open')">✕</button>
+                </div>
+                <div id="duplicate-modal-body" class="modal-body">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Toast Notification -->
-    <div id="toast-notification" class="toast"></div>
-
-    <!-- Live Sync Confirmation Dialog -->
-    <dialog id="live-sync-dialog" class="modal-dialog-native" aria-labelledby="live-sync-title">
-        <div class="dialog-native-box">
-            <h3 id="live-sync-title" class="dialog-title">⚠️ Enable Live Hardware Sync?</h3>
-            <p class="dialog-desc">
-                Enabling Live Sync transmits parameter edits immediately to your MicroMonsta 2 over MIDI NRPN/CC.
-                To avoid accidental patch overwrites or sound mismatches, choose an initial synchronization action:
-            </p>
-            <div class="dialog-options-list">
-                <div class="dialog-option-item">
-                    <strong>Fetch from MM2:</strong> Pulls current hardware settings from your MicroMonsta 2 into this
-                    editor before enabling live sync.
-                </div>
-                <div class="dialog-option-item">
-                    <strong>Push to MM2:</strong> Transmits this editor's current patch settings into the active
-                    hardware layer (A or B).
-                </div>
-            </div>
-            <form method="dialog" class="dialog-button-bar">
-                <button type="submit" value="cancel" class="btn btn-secondary" autofocus>Cancel</button>
-                <button type="submit" value="fetch" class="btn btn-primary">Fetch from MM2</button>
-                <button type="submit" value="push" class="btn btn-warning">Push to MM2</button>
-            </form>
-        </div>
-    </dialog>
-
-    <!-- Hardware Reconnection Sync Dialog -->
-    <dialog id="reconnect-sync-dialog" class="modal-dialog-native" aria-labelledby="reconnect-sync-title">
-        <div class="dialog-native-box">
-            <h3 id="reconnect-sync-title" class="dialog-title">🔄 MicroMonsta 2 Reconnected</h3>
-            <p class="dialog-desc">
-                Communication with your MicroMonsta 2 synthesizer has been restored.
-                Choose whether you want to pull parameters from the hardware or push this editor's parameters to the synth:
-            </p>
-            <div class="dialog-options-list">
-                <div class="dialog-option-item">
-                    <strong>Pull from MM2:</strong> Reads active edit buffer settings from the synth hardware into Part A and Part B.
-                </div>
-                <div class="dialog-option-item">
-                    <strong>Push from App:</strong> Transmits current patch parameters in the editor to the synth hardware.
-                </div>
-            </div>
-            <form method="dialog" class="dialog-button-bar">
-                <button type="submit" value="dismiss" class="btn btn-secondary" autofocus>Keep Existing (Dismiss)</button>
-                <button type="submit" value="pull" class="btn btn-primary">Pull from MM2</button>
-                <button type="submit" value="push" class="btn btn-warning">Push to MM2</button>
-            </form>
-        </div>
-    </dialog>
-
-    <!-- Application Scripts -->
-    <script src="js/version.js"></script>
-    <script src="js/mm2-specs.js"></script>
-    <script src="js/sysex-parser.js"></script>
-    <script src="js/patch-librarian.js"></script>
-    <script src="js/midi-manager.js"></script>
-    <script src="js/ui-controls.js"></script>
+    <!-- JavaScript App Modules -->
+    <script src="js/constants.js"></script>
+    <script src="js/sysex.js"></script>
+    <script src="js/program.js"></script>
+    <script src="js/midi.js"></script>
+    <script src="js/librarian.js"></script>
+    <script src="js/ui.js"></script>
     <script src="js/app.js"></script>
 </body>
-
 </html>
