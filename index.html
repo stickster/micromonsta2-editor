@@ -20,19 +20,6 @@
         </div>
 
         <div class="header-center">
-            <div class="part-selector">
-                <button class="part-btn active" id="btn-part-a" data-slot="0" onclick="window.app.selectPart(0)"
-                    title="Edit Part A (Layer A)">Part A</button>
-                <button class="part-btn" id="btn-part-b" data-slot="1" onclick="window.app.selectPart(1)"
-                    title="Edit Part B (Layer B)">Part B</button>
-            </div>
-
-            <div class="mode-box" id="mode-selector-box">
-                <span id="synth-mode-indicator" class="mode-indicator-badge" role="status"
-                    title="Synth Timbral Mode (Display Only — must be adjusted on MM2 hardware)">Monotimbral
-                    (12V)</span>
-            </div>
-
             <nav class="nav-tabs">
                 <button class="nav-tab active" id="tab-editor" onclick="window.app.switchView('editor')">Editor</button>
                 <button class="nav-tab" id="tab-librarian"
@@ -57,7 +44,18 @@
             <!-- Program Header Bar -->
             <div class="program-bar">
                 <div class="program-name-group">
+                    <div class="part-selector">
+                        <button class="part-btn active" id="btn-part-a" data-slot="0" onclick="window.app.selectPart(0)"
+                            title="Edit Part A (Layer A)">Part A</button>
+                        <button class="part-btn" id="btn-part-b" data-slot="1" onclick="window.app.selectPart(1)"
+                            title="Edit Part B (Layer B)">Part B</button>
+                    </div>
                     <div id="active-part-indicator" class="active-part-badge part-a" title="Active Sound Layer">PART A
+                    </div>
+                    <div class="mode-box" id="mode-selector-box">
+                        <span id="synth-mode-indicator" class="mode-indicator-badge" role="status"
+                            title="Synth Timbral Mode (Display Only — must be adjusted on MM2 hardware)">Monotimbral
+                            (12V)</span>
                     </div>
                     <input type="text" id="prog-name-input" class="input-name" maxlength="8" placeholder="Patch"
                         title="Patch Name (up to 8 characters)">
