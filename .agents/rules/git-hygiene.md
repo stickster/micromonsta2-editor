@@ -53,3 +53,14 @@ All commit messages MUST follow the [Conventional Commits](https://www.conventio
   - The UI (Settings panel and header badge) loads `App.VERSION` dynamically from `js/version.js`.
   - The `.githooks/pre-commit` hook automatically keeps `package.json` synchronized with `js/version.js`.
 - **Pre-Push Gate**: Every push of the `main` branch to the remote is guarded by `.githooks/pre-push`. The version in `package.json` (and `js/version.js`) must be bumped relative to the remote `main` branch before pushing new commits to `origin/main`.
+
+## 4. Branching & Release Workflow
+- **Branching Strategy**:
+  - `main`: Continuous development branch.
+  - `release`: Deploy/publish branch.
+  - Feature & fix branches: Always create separate branches for fixes and features before merging into `main`.
+- **Cutting a Release**: When the user requests a release (e.g., `"bump version and release"`, `"cut release"`, `"prep release"`, `"release new version"`):
+  1. Bump `APP_VERSION` in `js/version.js` (`.githooks/pre-commit` syncs `package.json` automatically).
+  2. Add entries to `CHANGELOG.md` summarizing all changes since the last version (moving items out of `[Unreleased]` into the new version heading with the release date).
+  3. Commit the release changes on `main` (ensuring `node tests/cli-runner.js` passes).
+  4. Merge the `main` branch into the `release` branch.

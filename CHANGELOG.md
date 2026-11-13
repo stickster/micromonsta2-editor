@@ -1,0 +1,98 @@
+# Changelog
+
+All notable changes to the **MicroMonsta 2 Editor & Patch Librarian** will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Consistent HTML5 drag-and-drop parameter copying across **Oscillators** (tabs and active `.synth-card-body`), **Envelopes** (tabs, ADSR graph cards, and active `.env-pane`), **LFOs**, **Mod Matrix slots**, and **Multipliers**.
+- Drag-and-drop copying for **16-Step Pattern Sequencer** steps (`.step-col`) in both **1-to-1** mode and **1-to-all** mode via an orange `"Copy to all"` drop target button.
+
+### Changed
+- Standardized multiplier and building block button styling.
+
+### Documentation & Maintenance
+- Specified live site URL and updated contribution guidelines.
+- Added backup file patterns to `.gitignore`.
+
+---
+
+## [0.1.5] - 2026-11-12
+
+### Added
+- Support Ko-fi username in `.github/FUNDING.yml`.
+
+### Documentation & CI
+- Extracted agent-agnostic project rules into `.agents/rules/` and `AGENTS.md`.
+- Updated Gemini GitHub Actions workflows to use `gemini-4-hydrogen` and push/PR instructions.
+
+---
+
+## [0.1.4] - 2026-11-12
+
+### Added
+- **Librarian:** Bank renaming via toolbar button and double-clicking bank tabs.
+- **Librarian:** Inline patch category editing directly in the librarian table.
+- **Librarian:** Bank deletion support via toolbar and bank tabs.
+
+### Fixed
+- **Sync:** Synchronized Live Sync control state across app windows.
+- **Sync:** Inherited hardware connection status, suppressed hardware poll dump notifications, and synced state from leader on open without running a redundant hardware fetch.
+- **Timbral Mode:** Prevented spurious bitimbral mode switch when probing Part B on monotimbral hardware.
+- **Librarian:** Prevented hardware poll dumps from populating the librarian, removed the default `INIT` patch, and aligned default bank names (`1`, `2`, `3`) with the new bank dialog.
+
+### CI / Maintenance
+- Configured official Gemini GitHub Actions, defined ESM module type for CI scripts, and added PR revision commands (`/revise`, `/fix`) and retry/sanitization hardening.
+
+---
+
+## [0.1.3] - 2026-11-12
+
+### Added
+- **Cross-Tab Sync:** Real-time `BroadcastChannel` synchronization and single-leader hardware polling across multiple browser tabs.
+- **UI:** Moved Undo and Redo controls to the top `app-header`.
+
+### Fixed
+- **UI:** Streamlined Part A/B selection controls into `.program-name-group` and removed redundant header badges.
+- **MIDI:** Included hardware state in Live Sync mode when initializing a program, and clarified the Init dialog prompt.
+
+### CI / Maintenance
+- Added automated Gemini issue-to-PR workflows and retry backoff.
+
+---
+
+## [0.1.2] - 2026-11-11
+
+### Performance
+- Memoized SysEx sound fingerprints and reused `TextEncoder`/`TextDecoder` instances.
+- Cached parameter DOM controls and deduplicated visualizer refreshes.
+
+### Fixed
+- **MIDI:** Guarded SysEx buffer against interrupted streams and prevented false-positive connected status when hardware is absent.
+- **UI:** Disabled Live Sync toggle unless hardware connection is verified, deactivated Fetch/Push controls when hardware is offline, and prevented reconnect sync dialog from repeating.
+
+### Tests
+- Added regression tests for fingerprint caching and interrupted SysEx streams.
+
+---
+
+## [0.1.1] - 2026-11-10
+
+### Added
+- Displayed application version in Settings backed by `js/version.js` as the single source of truth.
+
+---
+
+## [0.1.0] - 2026-11-10
+
+### Added
+- Initial release of the browser-based **MicroMonsta 2 Editor & Patch Librarian**.
+- Full 216-byte single-layer SysEx parser/serializer, v2-to-v3 converter, and 7-bit/14-bit NRPN Web MIDI engine.
+- 4-row synthesis rack with unified Oscillator and Envelope cards, bipolar sliders, vector SVG action icons, LFO/Matrix group actions, and Chorder 25-key keyboard visualizer.
+- Functional Undo/Redo history with release-deferred knob updates.
+- Live Sync dialog, hardware responsiveness health checks, reconnect handling, and synchronized Fetch/Push/Part Copy controls.
+- Multi-bank Patch Librarian with duplicate detection, condensation, and bulk clear.
+- Automated CLI/browser test suite (`tests/cli-runner.js`, `tests/test-suite.js`), Conventional Commits git hooks, README, and MIT license.
