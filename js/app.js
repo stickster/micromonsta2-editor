@@ -1822,7 +1822,7 @@ class App {
 
         const mult1Box = document.createElement('div');
         mult1Box.className = 'math-sub-panel';
-        mult1Box.innerHTML = '<div class="fx-sub-title">Multiplier 1 (A × B)</div>';
+        mult1Box.innerHTML = '<div class="mult-badge">Multiplier 1 (A × B)</div>';
         const mult1Sels = document.createElement('div');
         mult1Sels.className = 'select-row';
         mult1Sels.appendChild(createSelect('MULT_A1', timbre, onChange));
@@ -1832,7 +1832,7 @@ class App {
 
         const mult2Box = document.createElement('div');
         mult2Box.className = 'math-sub-panel';
-        mult2Box.innerHTML = '<div class="fx-sub-title">Multiplier 2 (A × B)</div>';
+        mult2Box.innerHTML = '<div class="mult-badge">Multiplier 2 (A × B)</div>';
         const mult2Sels = document.createElement('div');
         mult2Sels.className = 'select-row';
         mult2Sels.appendChild(createSelect('MULT_A2', timbre, onChange));
