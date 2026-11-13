@@ -3139,6 +3139,76 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    // Section 40: Push Confirmation App Dialog Tests
+    // =========================================================================
+    logger('\n--- [40] Push Confirmation App Dialog Tests ---');
+    try {
+        const pushApp = new App();
+        const pushMidi = pushApp.midi;
+        pushMidi.saveSettings = () => { };
+        pushApp.showNotification = () => { };
+        let switchedView = null;
+        pushApp.switchView = (v) => { switchedView = v; };
+
+        // 1. Missing outPort shows notification and switches to settings without browser alert
+        pushMidi.outPort = null;
+        const noPortResult = await pushApp.confirmAndSendProgram();
+        assertEqual(noPortResult, false, 'confirmAndSendProgram returns false when outPort is missing');
+        assertEqual(switchedView, 'settings', 'confirmAndSendProgram switches to settings when outPort is missing');
+
+        // 2. App dialog confirm / cancel / v2 incompatibility note
+        let sentCount = 0;
+        pushMidi.outPort = { id: 'mm2-out', name: 'MicroMonsta 2', send: () => { sentCount++; } };
+        pushApp.activeSlot = 0;
+        pushApp.activeTimbre.name = 'PAD_TEST';
+        pushApp.updateSyncStatus('modified');
+
+        const mockDesc = { textContent: '' };
+        const mockIncompat = { textContent: '', style: { display: 'none' } };
+        let nextReturnValue = 'cancel';
+        const listeners = {};
+        const mockPushDialog = {
+            open: false,
+            returnValue: '',
+            addEventListener: (ev, fn) => { listeners[ev] = fn; },
+            removeEventListener: (ev, fn) => { if (listeners[ev] === fn) delete listeners[ev]; },
+            showModal: () => {
+                mockPushDialog.returnValue = nextReturnValue;
+                if (listeners.close) listeners.close();
+            }
+        };
+        document.registerMockElement('push-confirm-dialog', mockPushDialog);
+        document.registerMockElement('push-confirm-desc', mockDesc);
+        document.registerMockElement('push-confirm-incompat', mockIncompat);
+
+        nextReturnValue = 'cancel';
+        const cancelResult = await pushApp.confirmAndSendProgram();
+        assertEqual(cancelResult, false, 'Canceling push-confirm-dialog returns false');
+        assertEqual(sentCount, 0, 'Canceling push-confirm-dialog does not send MIDI SysEx');
+        assert(mockDesc.textContent.includes('PAD_TEST'), 'Push dialog description includes patch name');
+        assert(mockDesc.textContent.includes('Layer A'), 'Push dialog description includes layer name');
+        assertEqual(mockIncompat.style.display, 'none', 'Incompatibility notice hidden in v3 mode');
+
+        // Confirm with v2 incompatibilities
+        pushMidi.detectedFirmwareVersion = 2;
+        pushApp.activeTimbre.setValue('CHORD_TYPE1', 3);
+        nextReturnValue = 'confirm';
+        const confirmResult = await pushApp.confirmAndSendProgram();
+        assertEqual(confirmResult, true, 'Confirming push-confirm-dialog returns true');
+        assertEqual(sentCount, 1, 'Confirming push-confirm-dialog sends MIDI SysEx');
+        assertEqual(pushApp.syncStatus, 'synced', 'Confirming push updates syncStatus to synced');
+        assertEqual(mockIncompat.style.display, '', 'Incompatibility notice shown in v2 mode when v3 features present');
+        assert(mockIncompat.textContent.includes('Chorder'), 'Incompatibility notice mentions v3-only features');
+
+        document.registerMockElement('push-confirm-dialog', null);
+        document.registerMockElement('push-confirm-desc', null);
+        document.registerMockElement('push-confirm-incompat', null);
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

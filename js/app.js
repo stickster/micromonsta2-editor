@@ -2929,25 +2929,18 @@ class App {
 
     async confirmAndSendProgram() {
         if (!this.midi.outPort) {
-            alert('No MIDI Output port is selected. Please open MIDI Settings and select port where Micromonsta 2 is connected.');
+            this.showNotification('No MIDI Output port is selected. Please open MIDI Settings and select the port where MicroMonsta 2 is connected.', 'error');
             this.switchView('settings');
-            return;
+            return false;
         }
 
         const slotLabel = this.activeSlot === 0 ? 'Layer A' : 'Layer B';
         const progName = this.activeTimbre.name;
         const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
         const incompat = fwVer === 2 ? detectV3Incompatibilities(this.activeTimbre) : { hasIncompatibilities: false, reasons: [] };
-        const incompatNote = incompat.hasIncompatibilities
-            ? `\n\nNote: Firmware v2.x will omit v3-only features: ${incompat.reasons.join(', ')}.`
-            : '';
 
-        // Strict Confirmation Gate as required by user!
-        const confirmed = confirm(
-            `Hardware Write Confirmation:\n\nSend program "${progName}" to MicroMonsta 2 (${slotLabel}) via port "${this.midi.outPort.name}"?\n\nThis will update the active edit buffer on the synth.${incompatNote}`
-        );
-
-        if (!confirmed) return;
+        const confirmed = await this._promptPushConfirm(progName, slotLabel, this.midi.outPort.name, incompat);
+        if (!confirmed) return false;
 
         try {
             this.midi.sendProgram(this.activeTimbre, this.activeSlot, true);
@@ -2961,12 +2954,52 @@ class App {
             this.updateUndoRedoUI();
             this.updateSyncStatus('synced');
             this.showNotification(`Successfully sent "${progName}" to MM2 ${slotLabel}!`, 'success');
+            return true;
         } catch (err) {
             this.updateSyncStatus('failed');
             this.midi.markHardwareResponsive(false);
             this.updateConnectionStatus();
-            alert('Failed to send program: ' + err.message);
+            this.showNotification('Failed to send program: ' + err.message, 'error');
+            return false;
         }
+    }
+
+    _promptPushConfirm(progName, slotLabel, portName, incompat) {
+        if (typeof document === 'undefined') return Promise.resolve(false);
+        const dialog = document.getElementById('push-confirm-dialog');
+        if (!dialog || typeof dialog.showModal !== 'function' || dialog.open) {
+            return Promise.resolve(false);
+        }
+
+        const desc = document.getElementById('push-confirm-desc');
+        if (desc) {
+            desc.textContent = `Send program "${progName}" to MicroMonsta 2 (${slotLabel}) via port "${portName}"? This will overwrite the active edit buffer on the synth.`;
+        }
+
+        const incompatEl = document.getElementById('push-confirm-incompat');
+        if (incompatEl) {
+            if (incompat && incompat.hasIncompatibilities) {
+                incompatEl.textContent = `Firmware v2.x Note: The following v3-only features will be omitted: ${incompat.reasons.join(', ')}.`;
+                incompatEl.style.display = '';
+            } else {
+                incompatEl.textContent = '';
+                incompatEl.style.display = 'none';
+            }
+        }
+
+        return new Promise((resolve) => {
+            const onClose = () => {
+                dialog.removeEventListener('close', onClose);
+                resolve(dialog.returnValue === 'confirm');
+            };
+            dialog.addEventListener('close', onClose);
+            try {
+                dialog.showModal();
+            } catch (e) {
+                dialog.removeEventListener('close', onClose);
+                resolve(false);
+            }
+        });
     }
 
     promptReconnectSync() {

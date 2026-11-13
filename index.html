@@ -256,6 +256,19 @@
     <!-- Toast Notification -->
     <div id="toast-notification" class="toast"></div>
 
+    <!-- Push to Hardware Confirmation Dialog -->
+    <dialog id="push-confirm-dialog" class="modal-dialog-native" aria-labelledby="push-confirm-title">
+        <div class="dialog-native-box">
+            <h3 id="push-confirm-title" class="dialog-title">Push Patch to MicroMonsta 2?</h3>
+            <p id="push-confirm-desc" class="dialog-desc"></p>
+            <div id="push-confirm-incompat" class="dialog-options-list" style="display: none;"></div>
+            <form method="dialog" class="dialog-button-bar">
+                <button type="submit" value="cancel" class="btn btn-secondary" autofocus>Cancel</button>
+                <button type="submit" value="confirm" class="btn btn-warning">Push to MM2</button>
+            </form>
+        </div>
+    </dialog>
+
     <!-- Live Sync Confirmation Dialog -->
     <dialog id="live-sync-dialog" class="modal-dialog-native" aria-labelledby="live-sync-title">
         <div class="dialog-native-box">
