@@ -1,6 +1,6 @@
 {
   "name": "micromonsta2-editor",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Hardware editor and patch librarian for Audiothingies MicroMonsta 2",
   "main": "index.html",
   "scripts": {
