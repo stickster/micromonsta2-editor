@@ -1,62 +1,108 @@
 #!/usr/bin/env sh
-# Pre-push hook: Ensure versioning is defined and updated before pushing main to origin.
+# Pre-push hook:
+# - On 'main': ensure package.json and js/version.js versions are in sync.
+# - On 'release': ensure version is bumped relative to remote 'release',
+#   package.json matches js/version.js, and an annotated tag v<VERSION> points to the commit.
 
 REMOTE="$1"
 URL="$2"
+ZERO_SHA="0000000000000000000000000000000000000000"
 
-# Read push refs passed via stdin: <local ref> <local sha> <remote ref> <remote sha>
-PUSHING_MAIN=0
+read_pkg_version_at() {
+    git show "$1:package.json" 2>/dev/null | node -e "
+        let d = '';
+        process.stdin.on('data', c => d += c);
+        process.stdin.on('end', () => {
+            try {
+                const p = JSON.parse(d);
+                console.log(p.version || '');
+            } catch (e) {
+                console.log('');
+            }
+        });
+    "
+}
+
+read_js_version_at() {
+    git show "$1:js/version.js" 2>/dev/null | node -e "
+        const vm = require('vm');
+        let d = '';
+        process.stdin.on('data', c => d += c);
+        process.stdin.on('end', () => {
+            try {
+                const mod = { exports: {} };
+                vm.runInNewContext(d, { module: mod, exports: mod.exports });
+                console.log(mod.exports.APP_VERSION || '');
+            } catch (e) {
+                console.log('');
+            }
+        });
+    "
+}
+
 while read -r local_ref local_sha remote_ref remote_sha; do
+    # Skip branch deletions
+    if [ "$local_sha" = "$ZERO_SHA" ]; then
+        continue
+    fi
+
     if [ "$local_ref" = "refs/heads/main" ] || [ "$remote_ref" = "refs/heads/main" ]; then
-        PUSHING_MAIN=1
-        break
-    fi
-done
+        echo "[pre-push] Checking version sync on 'main'..."
+        PKG_VER=$(read_pkg_version_at "$local_sha")
+        JS_VER=$(read_js_version_at "$local_sha")
 
-if [ "$PUSHING_MAIN" -eq 1 ]; then
-    echo "[pre-push] Checking versioning requirements for 'main' branch..."
+        if [ -z "$PKG_VER" ] || [ -z "$JS_VER" ]; then
+            echo "[pre-push] ❌ Push aborted: Missing version in package.json or js/version.js at $local_sha."
+            exit 1
+        fi
 
-    if [ ! -f "package.json" ]; then
-        echo "[pre-push] ❌ Push aborted: package.json does not exist."
-        exit 1
-    fi
+        if [ "$PKG_VER" != "$JS_VER" ]; then
+            echo "[pre-push] ❌ Push aborted: package.json ($PKG_VER) does not match js/version.js ($JS_VER)."
+            exit 1
+        fi
 
-    # Extract version from package.json using node
-    VERSION=$(node -e "try { const p = require('./package.json'); console.log(p.version || ''); } catch (e) { console.log(''); }")
-    if [ -z "$VERSION" ]; then
-        echo "[pre-push] ❌ Push aborted: No valid 'version' field found in package.json."
-        exit 1
+        echo "[pre-push] ✓ 'main' version sync passed ($JS_VER)."
     fi
 
-    # Check that git remote main doesn't have the same or newer version unless remote ref is 000000... (initial push)
-    # Check if remote main exists
-    REMOTE_MAIN_REV=$(git rev-parse --verify "$REMOTE/main" 2>/dev/null)
-    if [ -n "$REMOTE_MAIN_REV" ]; then
-        REMOTE_VERSION=$(git show "$REMOTE/main:package.json" 2>/dev/null | node -e "
-            let d = '';
-            process.stdin.on('data', c => d += c);
-            process.stdin.on('end', () => {
-                try {
-                    const p = JSON.parse(d);
-                    console.log(p.version || '');
-                } catch(e) {
-                    console.log('');
-                }
-            });
-        ")
+    if [ "$local_ref" = "refs/heads/release" ] || [ "$remote_ref" = "refs/heads/release" ]; then
+        echo "[pre-push] Checking release requirements for 'release' branch..."
+        PKG_VER=$(read_pkg_version_at "$local_sha")
+        JS_VER=$(read_js_version_at "$local_sha")
 
-        if [ -n "$REMOTE_VERSION" ] && [ "$VERSION" = "$REMOTE_VERSION" ]; then
-            # Check if there are new commits being pushed
-            AHEAD=$(git rev-list --count "$REMOTE/main..$local_sha" 2>/dev/null)
-            if [ "$AHEAD" -gt 0 ]; then
-                echo "[pre-push] ❌ Push aborted: package.json version is still '$VERSION', identical to remote '$REMOTE/main'."
-                echo "             You must update the version before pushing commits to main (e.g. bump to next version)."
+        if [ -z "$PKG_VER" ] || [ -z "$JS_VER" ]; then
+            echo "[pre-push] ❌ Push aborted: Missing version in package.json or js/version.js at $local_sha."
+            exit 1
+        fi
+
+        if [ "$PKG_VER" != "$JS_VER" ]; then
+            echo "[pre-push] ❌ Push aborted: package.json ($PKG_VER) does not match js/version.js ($JS_VER)."
+            exit 1
+        fi
+
+        REMOTE_REL_REV=$(git rev-parse --verify "$REMOTE/release" 2>/dev/null)
+        if [ -n "$REMOTE_REL_REV" ]; then
+            REMOTE_VER=$(read_pkg_version_at "$REMOTE/release")
+            AHEAD=$(git rev-list --count "$REMOTE/release..$local_sha" 2>/dev/null)
+            if [ "${AHEAD:-0}" -gt 0 ] && [ -n "$REMOTE_VER" ] && [ "$PKG_VER" = "$REMOTE_VER" ]; then
+                echo "[pre-push] ❌ Push aborted: version is still '$PKG_VER', identical to '$REMOTE/release'."
+                echo "             Bump APP_VERSION in js/version.js on 'main' before merging to 'release'."
                 exit 1
             fi
         fi
-    fi
 
-    echo "[pre-push] ✓ Version check passed: version $VERSION is ready to push."
-fi
+        TAG_NAME="v$PKG_VER"
+        TAG_TYPE=$(git cat-file -t "refs/tags/$TAG_NAME" 2>/dev/null)
+        TAG_COMMIT=$(git rev-parse "$TAG_NAME^{commit}" 2>/dev/null)
+
+        if [ "$TAG_TYPE" != "tag" ] || [ "$TAG_COMMIT" != "$local_sha" ]; then
+            echo "[pre-push] ❌ Push aborted: missing annotated tag '$TAG_NAME' pointing to $local_sha."
+            echo "             Create it with: git tag -a $TAG_NAME -m \"Release $TAG_NAME\""
+            echo "             Then push both: git push $REMOTE release $TAG_NAME"
+            exit 1
+        fi
+
+        echo "[pre-push] ✓ Release check passed: version $PKG_VER with tag $TAG_NAME."
+    fi
+done
 
 exit 0

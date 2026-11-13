@@ -1,6 +1,16 @@
 #!/usr/bin/env sh
-# Pre-commit hook: Run the MicroMonsta 2 automated CLI test suite before allowing a commit,
-# and synchronize package.json with js/version.js.
+# Pre-commit hook: Guard against direct non-merge commits on 'release',
+# synchronize package.json with js/version.js, and run the automated CLI test suite.
+
+# 0. Prevent accidental direct commits to 'release' (allow merges via MERGE_HEAD)
+BRANCH=$(git symbolic-ref --short HEAD 2>/dev/null)
+MERGE_HEAD_PATH=$(git rev-parse --git-path MERGE_HEAD 2>/dev/null)
+if [ "$BRANCH" = "release" ] && [ ! -f "$MERGE_HEAD_PATH" ]; then
+    echo ""
+    echo "[pre-commit] ❌ Direct commits to 'release' are not allowed."
+    echo "             Commit on 'main' (or a fix branch) and merge into 'release' instead."
+    exit 1
+fi
 
 # 1. Sync package.json version with js/version.js
 VERSION_IN_JS=$(node -e "try { const { APP_VERSION } = require('./js/version.js'); console.log(APP_VERSION || ''); } catch (e) { console.log(''); }")

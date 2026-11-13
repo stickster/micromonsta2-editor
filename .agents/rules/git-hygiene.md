@@ -52,7 +52,9 @@ All commit messages MUST follow the [Conventional Commits](https://www.conventio
   - To change or bump the version, edit the `APP_VERSION` string in `js/version.js` and nowhere else.
   - The UI (Settings panel and header badge) loads `App.VERSION` dynamically from `js/version.js`.
   - The `.githooks/pre-commit` hook automatically keeps `package.json` synchronized with `js/version.js`.
-- **Pre-Push Gate**: Every push of the `main` branch to the remote is guarded by `.githooks/pre-push`. The version in `package.json` (and `js/version.js`) must be bumped relative to the remote `main` branch before pushing new commits to `origin/main`.
+- **Pre-Commit & Pre-Push Gates**:
+  - `.githooks/pre-commit` blocks direct non-merge commits to `release`, keeps `package.json` synced with `js/version.js`, and runs `node tests/cli-runner.js`.
+  - `.githooks/pre-push` verifies `package.json` and `js/version.js` are in sync when pushing `main`, and on `release` requires both a version bump relative to `origin/release` and a matching annotated tag `v<APP_VERSION>` pointing to the pushed commit.
 
 ## 4. Branching & Release Workflow
 - **Branching Strategy**:
