@@ -2511,7 +2511,7 @@ async function runAllTests(logger = console.log) {
         const mockDialog = {
             showModal: () => { dialogShownCount++; }
         };
-        document.registerMockElement('live-sync-dialog', mockDialog);
+        document.registerMockElement('sync-action-dialog', mockDialog);
 
         // 1. Leader enables Live Sync -> Follower inherits state & UI without dialog
         leaderApp._setLiveSyncState(true);
@@ -2542,7 +2542,7 @@ async function runAllTests(logger = console.log) {
 
         // Cleanup
         document.registerMockElement('chk-prog-live-sync', null);
-        document.registerMockElement('live-sync-dialog', null);
+        document.registerMockElement('sync-action-dialog', null);
         leaderSync.destroy();
         followerSync.destroy();
     } catch (e) {
@@ -3268,6 +3268,113 @@ async function runAllTests(logger = console.log) {
         folApp.midi.outPort = { id: 'gen-out', name: 'USB MIDI Out' };
         folApp.midi.emit('port-change', { type: 'output', port: folApp.midi.outPort });
         assertEqual(folPrompted, false, 'Follower tab does not prompt on port-change');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    // =========================================================================
+    // Section 42: Unified Fetch/Push/Ignore Sync Dialog Tests
+    // =========================================================================
+    logger('\n--- [42] Unified Fetch/Push/Ignore Sync Dialog Tests ---');
+    try {
+        const syncApp = new App();
+        const syncMidi = syncApp.midi;
+        syncMidi.saveSettings = () => { };
+        syncApp.showNotification = () => { };
+
+        const titleEl = { textContent: '' };
+        const descEl = { textContent: '' };
+        const fetchEl = { textContent: '' };
+        const pushEl = { textContent: '' };
+        const ignoreBtn = { textContent: '' };
+        let nextChoice = 'ignore';
+        const syncListeners = {};
+        const mockSyncDialog = {
+            open: false,
+            returnValue: '',
+            addEventListener: (ev, fn) => { syncListeners[ev] = fn; },
+            removeEventListener: (ev, fn) => { if (syncListeners[ev] === fn) delete syncListeners[ev]; },
+            showModal: () => {
+                mockSyncDialog.returnValue = nextChoice;
+                if (syncListeners.close) syncListeners.close();
+            }
+        };
+
+        document.registerMockElement('sync-action-dialog', mockSyncDialog);
+        document.registerMockElement('sync-action-title', titleEl);
+        document.registerMockElement('sync-action-desc', descEl);
+        document.registerMockElement('sync-action-fetch-detail', fetchEl);
+        document.registerMockElement('sync-action-push-detail', pushEl);
+        document.registerMockElement('sync-action-ignore-btn', ignoreBtn);
+
+        let fetchCount = 0;
+        let pushAllCount = 0;
+        syncApp.fetchActiveProgram = () => { fetchCount++; };
+        syncApp.pushAllPartsToHardware = () => { pushAllCount++; };
+
+        // 1. promptReconnectSync uses unified dialog for ignore / fetch / push
+        nextChoice = 'ignore';
+        await syncApp.promptReconnectSync({ isReconnect: false, portName: 'MicroMonsta 2' });
+        assertEqual(fetchCount, 0, 'Connection sync ignore does not fetch');
+        assertEqual(pushAllCount, 0, 'Connection sync ignore does not push');
+        assertEqual(titleEl.textContent, '🔌 MicroMonsta 2 Connected', 'Initial connection title set');
+        assertEqual(ignoreBtn.textContent, 'Ignore', 'Ignore button label is consistent');
+
+        syncApp._isPromptingSync = false;
+        nextChoice = 'fetch';
+        await syncApp.promptReconnectSync({ isReconnect: true, portName: 'MicroMonsta 2' });
+        assertEqual(fetchCount, 1, 'Connection sync fetch triggers fetchActiveProgram');
+        assertEqual(titleEl.textContent, '🔄 MicroMonsta 2 Reconnected', 'Reconnect title set');
+
+        syncApp._isPromptingSync = false;
+        nextChoice = 'push';
+        await syncApp.promptReconnectSync({ isReconnect: true, portName: 'MicroMonsta 2' });
+        assertEqual(pushAllCount, 1, 'Connection sync push triggers pushAllPartsToHardware');
+
+        // 2. Live sync toggle uses the same unified sync-action-dialog
+        syncMidi.inPort = { id: 'mm2-in', name: 'MicroMonsta 2' };
+        syncMidi.outPort = { id: 'mm2-out', name: 'MicroMonsta 2', send: () => { } };
+        syncMidi.hardwareResponsive = true;
+        const chkLiveSync = document.createElement('input');
+        chkLiveSync.type = 'checkbox';
+        chkLiveSync.id = 'chk-prog-live-sync';
+        document.registerMockElement('chk-prog-live-sync', chkLiveSync);
+
+        // Minimal mock elements needed by buildEditorUI
+        syncApp.setupProgramBar();
+
+        // Ignore keeps liveSync disabled
+        nextChoice = 'ignore';
+        chkLiveSync.checked = true;
+        await chkLiveSync.onchange();
+        assertEqual(syncMidi.liveSync, false, 'Live sync ignore keeps liveSync disabled');
+
+        // Fetch enables liveSync and fetches
+        nextChoice = 'fetch';
+        chkLiveSync.checked = true;
+        await chkLiveSync.onchange();
+        assertEqual(syncMidi.liveSync, true, 'Live sync fetch enables liveSync');
+        assertEqual(fetchCount, 2, 'Live sync fetch triggers fetchActiveProgram');
+
+        // Disable and test Push
+        syncApp._setLiveSyncState(false);
+        let sentProgCount = 0;
+        syncMidi.outPort.send = () => { sentProgCount++; };
+        nextChoice = 'push';
+        chkLiveSync.checked = true;
+        await chkLiveSync.onchange();
+        assertEqual(syncMidi.liveSync, true, 'Live sync push enables liveSync');
+        assertEqual(sentProgCount, 1, 'Live sync push sends active program to MM2');
+
+        // Cleanup
+        document.registerMockElement('sync-action-dialog', null);
+        document.registerMockElement('sync-action-title', null);
+        document.registerMockElement('sync-action-desc', null);
+        document.registerMockElement('sync-action-fetch-detail', null);
+        document.registerMockElement('sync-action-push-detail', null);
+        document.registerMockElement('sync-action-ignore-btn', null);
+        document.registerMockElement('chk-prog-live-sync', null);
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;

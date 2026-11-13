@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Editor:** Replaced browser push confirmation with an in-app dialog and toast notifications.
 - **MIDI:** Prompted to fetch, push, or ignore on every hardware connection.
+- **UI:** Unified connection sync dialogs into a shared `#sync-action-dialog`.
 
 ### Documentation & Maintenance
 - Restored standard `## [Unreleased]` workflow in `CHANGELOG.md` and `.agents/rules/git-hygiene.md`.

@@ -2722,37 +2722,37 @@ class App {
         if (chkLiveSync) {
             chkLiveSync.checked = this.midi.liveSync;
             this.updateLiveSyncUI();
-            chkLiveSync.onchange = () => {
+            chkLiveSync.onchange = async () => {
                 if (!this.isConnectionGood) {
                     chkLiveSync.checked = false;
                     this.updateLiveSyncUI();
                     return;
                 }
                 if (chkLiveSync.checked) {
-                    const dialog = document.getElementById('live-sync-dialog');
-                    if (dialog && typeof dialog.showModal === 'function') {
-                        chkLiveSync.checked = false; // Stay unchecked until choice confirmed
-                        const onClose = () => {
-                            dialog.removeEventListener('close', onClose);
-                            const choice = dialog.returnValue;
-                            if (choice === 'fetch') {
-                                this._setLiveSyncState(true);
-                                this.fetchActiveProgram();
-                                this.showNotification('Live Sync ENABLED (Fetched MM2 hardware settings)', 'success');
-                            } else if (choice === 'push') {
-                                this._setLiveSyncState(true);
-                                this.confirmAndSendProgram();
-                                this.showNotification('Live Sync ENABLED (Pushed patch to MM2)', 'success');
-                            } else {
-                                this._setLiveSyncState(false, { broadcast: false });
-                            }
-                        };
-                        dialog.addEventListener('close', onClose);
-                        dialog.showModal();
-                    } else {
+                    chkLiveSync.checked = false; // Stay unchecked until choice confirmed
+                    const choice = await this.promptSyncAction({
+                        title: '⚠️ Enable Live Hardware Sync?',
+                        description: 'Enabling Live Sync transmits parameter edits immediately to your MicroMonsta 2 over MIDI NRPN/CC. To avoid accidental patch overwrites or sound mismatches, choose an initial synchronization action:',
+                        fetchDetail: 'Pulls current hardware settings from your MicroMonsta 2 into this editor before enabling live sync.',
+                        pushDetail: 'Transmits this editor\'s current patch settings into the active hardware layer (A or B).'
+                    });
+                    if (choice === 'fetch') {
+                        this._setLiveSyncState(true);
+                        this.fetchActiveProgram();
+                        this.showNotification('Live Sync ENABLED (Fetched MM2 hardware settings)', 'success');
+                    } else if (choice === 'push') {
+                        if (this._sendActiveProgramToHardware()) {
+                            this._setLiveSyncState(true);
+                            this.showNotification('Live Sync ENABLED (Pushed patch to MM2)', 'success');
+                        } else {
+                            this._setLiveSyncState(false, { broadcast: false });
+                        }
+                    } else if (choice === null) {
                         // Fallback if dialog.showModal not supported
                         this._setLiveSyncState(true);
                         this.updateSyncStatus('synced');
+                    } else {
+                        this._setLiveSyncState(false, { broadcast: false });
                     }
                 } else {
                     this._setLiveSyncState(false);
@@ -2938,6 +2938,51 @@ class App {
         }
     }
 
+    _openDialog(dialogId, setupFn = null) {
+        if (typeof document === 'undefined') return Promise.resolve(null);
+        const dialog = document.getElementById(dialogId);
+        if (!dialog || typeof dialog.showModal !== 'function' || dialog.open) {
+            return Promise.resolve(null);
+        }
+        if (setupFn) setupFn(dialog);
+
+        return new Promise((resolve) => {
+            const onClose = () => {
+                dialog.removeEventListener('close', onClose);
+                resolve(dialog.returnValue || null);
+            };
+            dialog.addEventListener('close', onClose);
+            try {
+                dialog.showModal();
+            } catch (e) {
+                dialog.removeEventListener('close', onClose);
+                resolve(null);
+            }
+        });
+    }
+
+    _sendActiveProgramToHardware() {
+        try {
+            this.midi.sendProgram(this.activeTimbre, this.activeSlot, true);
+            if (this.activeSlot === 0) {
+                this.originalSnapshotA = this.activeTimbre.clone();
+            } else {
+                this.originalSnapshotB = this.activeTimbre.clone();
+            }
+            this.undoStack = [];
+            this.redoStack = [];
+            this.updateUndoRedoUI();
+            this.updateSyncStatus('synced');
+            return true;
+        } catch (err) {
+            this.updateSyncStatus('failed');
+            this.midi.markHardwareResponsive(false);
+            this.updateConnectionStatus();
+            this.showNotification('Failed to send program: ' + err.message, 'error');
+            return false;
+        }
+    }
+
     async confirmAndSendProgram() {
         if (!this.midi.outPort) {
             this.showNotification('No MIDI Output port is selected. Please open MIDI Settings and select the port where MicroMonsta 2 is connected.', 'error');
@@ -2953,110 +2998,77 @@ class App {
         const confirmed = await this._promptPushConfirm(progName, slotLabel, this.midi.outPort.name, incompat);
         if (!confirmed) return false;
 
-        try {
-            this.midi.sendProgram(this.activeTimbre, this.activeSlot, true);
-            if (this.activeSlot === 0) {
-                this.originalSnapshotA = this.activeTimbre.clone();
-            } else {
-                this.originalSnapshotB = this.activeTimbre.clone();
-            }
-            this.undoStack = [];
-            this.redoStack = [];
-            this.updateUndoRedoUI();
-            this.updateSyncStatus('synced');
+        const sent = this._sendActiveProgramToHardware();
+        if (sent) {
             this.showNotification(`Successfully sent "${progName}" to MM2 ${slotLabel}!`, 'success');
-            return true;
-        } catch (err) {
-            this.updateSyncStatus('failed');
-            this.midi.markHardwareResponsive(false);
-            this.updateConnectionStatus();
-            this.showNotification('Failed to send program: ' + err.message, 'error');
-            return false;
         }
+        return sent;
     }
 
-    _promptPushConfirm(progName, slotLabel, portName, incompat) {
-        if (typeof document === 'undefined') return Promise.resolve(false);
-        const dialog = document.getElementById('push-confirm-dialog');
-        if (!dialog || typeof dialog.showModal !== 'function' || dialog.open) {
-            return Promise.resolve(false);
-        }
-
-        const desc = document.getElementById('push-confirm-desc');
-        if (desc) {
-            desc.textContent = `Send program "${progName}" to MicroMonsta 2 (${slotLabel}) via port "${portName}"? This will overwrite the active edit buffer on the synth.`;
-        }
-
-        const incompatEl = document.getElementById('push-confirm-incompat');
-        if (incompatEl) {
-            if (incompat && incompat.hasIncompatibilities) {
-                incompatEl.textContent = `Firmware v2.x Note: The following v3-only features will be omitted: ${incompat.reasons.join(', ')}.`;
-                incompatEl.style.display = '';
-            } else {
-                incompatEl.textContent = '';
-                incompatEl.style.display = 'none';
+    async _promptPushConfirm(progName, slotLabel, portName, incompat) {
+        const result = await this._openDialog('push-confirm-dialog', () => {
+            const desc = document.getElementById('push-confirm-desc');
+            if (desc) {
+                desc.textContent = `Send program "${progName}" to MicroMonsta 2 (${slotLabel}) via port "${portName}"? This will overwrite the active edit buffer on the synth.`;
             }
-        }
 
-        return new Promise((resolve) => {
-            const onClose = () => {
-                dialog.removeEventListener('close', onClose);
-                resolve(dialog.returnValue === 'confirm');
-            };
-            dialog.addEventListener('close', onClose);
-            try {
-                dialog.showModal();
-            } catch (e) {
-                dialog.removeEventListener('close', onClose);
-                resolve(false);
+            const incompatEl = document.getElementById('push-confirm-incompat');
+            if (incompatEl) {
+                if (incompat && incompat.hasIncompatibilities) {
+                    incompatEl.textContent = `Firmware v2.x Note: The following v3-only features will be omitted: ${incompat.reasons.join(', ')}.`;
+                    incompatEl.style.display = '';
+                } else {
+                    incompatEl.textContent = '';
+                    incompatEl.style.display = 'none';
+                }
             }
+        });
+        return result === 'confirm';
+    }
+
+    promptSyncAction({ title, description, fetchDetail, pushDetail, ignoreLabel = 'Ignore' } = {}) {
+        return this._openDialog('sync-action-dialog', () => {
+            const titleEl = document.getElementById('sync-action-title');
+            if (titleEl && title !== undefined) titleEl.textContent = title;
+            const descEl = document.getElementById('sync-action-desc');
+            if (descEl && description !== undefined) descEl.textContent = description;
+            const fetchEl = document.getElementById('sync-action-fetch-detail');
+            if (fetchEl && fetchDetail !== undefined) fetchEl.textContent = fetchDetail;
+            const pushEl = document.getElementById('sync-action-push-detail');
+            if (pushEl && pushDetail !== undefined) pushEl.textContent = pushDetail;
+            const ignoreBtn = document.getElementById('sync-action-ignore-btn');
+            if (ignoreBtn) ignoreBtn.textContent = ignoreLabel;
         });
     }
 
-    promptReconnectSync({ isReconnect = true, portName = '' } = {}) {
+    async promptReconnectSync({ isReconnect = true, portName = '' } = {}) {
         if (typeof document === 'undefined') return;
         if (this._isPromptingSync) return;
-        const dialog = document.getElementById('reconnect-sync-dialog');
-        if (!dialog || typeof dialog.showModal !== 'function' || dialog.open) {
-            this.showNotification(isReconnect ? 'MicroMonsta 2 reconnected!' : 'MicroMonsta 2 connected!', 'success');
-            return;
-        }
-        const titleEl = document.getElementById('reconnect-sync-title');
-        if (titleEl) {
-            titleEl.textContent = isReconnect ? '🔄 MicroMonsta 2 Reconnected' : '🔌 MicroMonsta 2 Connected';
-        }
-        const descEl = dialog.querySelector ? dialog.querySelector('.dialog-desc') : null;
-        if (descEl) {
-            const portSuffix = portName ? ` (${portName})` : '';
-            descEl.textContent = isReconnect
-                ? `Communication with your MicroMonsta 2 synthesizer${portSuffix} has been restored. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`
-                : `Connected to your MicroMonsta 2 synthesizer${portSuffix}. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`;
-        }
         this._isPromptingSync = true;
 
-        const onClose = () => {
-            dialog.removeEventListener('close', onClose);
-            const choice = dialog.returnValue;
-            if (choice === 'pull') {
-                this.showNotification('Pulling Part A and Part B from MM2...', 'info');
-                // Read Part A, probe and load Part B
-                this.fetchActiveProgram(0, { probe: 'load' });
-            } else if (choice === 'push') {
-                this.showNotification('Pushing patch settings from editor to MM2...', 'info');
-                this.pushAllPartsToHardware();
-            }
-            setTimeout(() => {
-                this._isPromptingSync = false;
-            }, 300);
-        };
+        const portSuffix = portName ? ` (${portName})` : '';
+        const choice = await this.promptSyncAction({
+            title: isReconnect ? '🔄 MicroMonsta 2 Reconnected' : '🔌 MicroMonsta 2 Connected',
+            description: isReconnect
+                ? `Communication with your MicroMonsta 2 synthesizer${portSuffix} has been restored. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`
+                : `Connected to your MicroMonsta 2 synthesizer${portSuffix}. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`,
+            fetchDetail: 'Reads active edit buffer settings from the synth hardware into Part A and Part B.',
+            pushDetail: 'Transmits current patch parameters in the editor to the synth hardware.'
+        });
 
-        dialog.addEventListener('close', onClose);
-        try {
-            dialog.showModal();
-        } catch (e) {
-            // Already open or error
-            this._isPromptingSync = false;
+        if (choice === 'fetch') {
+            this.showNotification('Fetching Part A and Part B from MM2...', 'info');
+            this.fetchActiveProgram(0, { probe: 'load' });
+        } else if (choice === 'push') {
+            this.showNotification('Pushing patch settings from editor to MM2...', 'info');
+            this.pushAllPartsToHardware();
+        } else if (choice === null) {
+            this.showNotification(isReconnect ? 'MicroMonsta 2 reconnected!' : 'MicroMonsta 2 connected!', 'success');
         }
+
+        setTimeout(() => {
+            this._isPromptingSync = false;
+        }, 300);
     }
 
     pushAllPartsToHardware() {

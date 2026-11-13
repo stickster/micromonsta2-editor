@@ -269,51 +269,22 @@
         </div>
     </dialog>
 
-    <!-- Live Sync Confirmation Dialog -->
-    <dialog id="live-sync-dialog" class="modal-dialog-native" aria-labelledby="live-sync-title">
+    <!-- Unified Sync Action Dialog (Fetch / Push / Ignore) -->
+    <dialog id="sync-action-dialog" class="modal-dialog-native" aria-labelledby="sync-action-title">
         <div class="dialog-native-box">
-            <h3 id="live-sync-title" class="dialog-title">⚠️ Enable Live Hardware Sync?</h3>
-            <p class="dialog-desc">
-                Enabling Live Sync transmits parameter edits immediately to your MicroMonsta 2 over MIDI NRPN/CC.
-                To avoid accidental patch overwrites or sound mismatches, choose an initial synchronization action:
-            </p>
+            <h3 id="sync-action-title" class="dialog-title"></h3>
+            <p id="sync-action-desc" class="dialog-desc"></p>
             <div class="dialog-options-list">
                 <div class="dialog-option-item">
-                    <strong>Fetch from MM2:</strong> Pulls current hardware settings from your MicroMonsta 2 into this
-                    editor before enabling live sync.
+                    <strong>Fetch from MM2:</strong> <span id="sync-action-fetch-detail"></span>
                 </div>
                 <div class="dialog-option-item">
-                    <strong>Push to MM2:</strong> Transmits this editor's current patch settings into the active
-                    hardware layer (A or B).
+                    <strong>Push to MM2:</strong> <span id="sync-action-push-detail"></span>
                 </div>
             </div>
             <form method="dialog" class="dialog-button-bar">
-                <button type="submit" value="cancel" class="btn btn-secondary" autofocus>Cancel</button>
+                <button type="submit" value="ignore" id="sync-action-ignore-btn" class="btn btn-secondary" autofocus>Ignore</button>
                 <button type="submit" value="fetch" class="btn btn-primary">Fetch from MM2</button>
-                <button type="submit" value="push" class="btn btn-warning">Push to MM2</button>
-            </form>
-        </div>
-    </dialog>
-
-    <!-- Hardware Reconnection Sync Dialog -->
-    <dialog id="reconnect-sync-dialog" class="modal-dialog-native" aria-labelledby="reconnect-sync-title">
-        <div class="dialog-native-box">
-            <h3 id="reconnect-sync-title" class="dialog-title">🔄 MicroMonsta 2 Reconnected</h3>
-            <p class="dialog-desc">
-                Communication with your MicroMonsta 2 synthesizer has been restored.
-                Choose whether you want to pull parameters from the hardware or push this editor's parameters to the synth:
-            </p>
-            <div class="dialog-options-list">
-                <div class="dialog-option-item">
-                    <strong>Pull from MM2:</strong> Reads active edit buffer settings from the synth hardware into Part A and Part B.
-                </div>
-                <div class="dialog-option-item">
-                    <strong>Push from App:</strong> Transmits current patch parameters in the editor to the synth hardware.
-                </div>
-            </div>
-            <form method="dialog" class="dialog-button-bar">
-                <button type="submit" value="dismiss" class="btn btn-secondary" autofocus>Keep Existing (Dismiss)</button>
-                <button type="submit" value="pull" class="btn btn-primary">Pull from MM2</button>
                 <button type="submit" value="push" class="btn btn-warning">Push to MM2</button>
             </form>
         </div>
