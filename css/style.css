@@ -850,24 +850,27 @@ main.app-main {
 
 .btn-env-tab {
     background: transparent;
-    border: none;
-    color: var(--text-muted);
-    font-size: 11px;
+    border: 1px solid transparent;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 10px;
     font-weight: 700;
-    padding: 4px 10px;
-    border-radius: 3px;
+    padding: 2px 6px;
+    border-radius: 4px;
     cursor: pointer;
+    user-select: none;
     transition: all 0.15s ease;
 }
 
 .btn-env-tab:hover {
-    color: var(--text-primary);
+    color: var(--text-bright);
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .btn-env-tab.active {
-    background: var(--accent-orange);
-    color: #000;
-    box-shadow: 0 0 6px rgba(255, 159, 67, 0.35);
+    color: var(--accent-cyan);
+    background: rgba(0, 210, 255, 0.12);
+    border-color: rgba(0, 210, 255, 0.3);
 }
 
 .adsr-graphs-row {
@@ -1103,11 +1106,12 @@ main.app-main {
 .btn-osc-tab {
     background: transparent;
     color: var(--text-dim);
-    border: none;
+    border: 1px solid transparent;
     border-radius: 4px;
-    padding: 3px 10px;
-    font-size: 11px;
-    font-weight: 600;
+    padding: 2px 6px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
     cursor: pointer;
     transition: all 0.15s ease;
     display: inline-flex;
@@ -1123,10 +1127,9 @@ main.app-main {
 }
 
 .btn-osc-tab.active {
-    background: var(--accent-cyan);
-    color: #0b0f19;
-    font-weight: 700;
-    box-shadow: 0 0 8px rgba(0, 229, 255, 0.35);
+    color: var(--accent-cyan);
+    background: rgba(0, 210, 255, 0.12);
+    border-color: rgba(0, 210, 255, 0.3);
 }
 
 .btn-osc-tab.tab-drop-hover {
@@ -2495,6 +2498,19 @@ footer.audition-footer {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.mult-badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    background: rgba(0, 210, 255, 0.12);
+    border: 1px solid rgba(0, 210, 255, 0.3);
+    border-radius: 4px;
+    padding: 2px 6px;
+    user-select: none;
+    align-self: flex-start;
 }
 
 .math-mult-stack {
