@@ -1175,9 +1175,17 @@ class App {
             badge.textContent = isV2 ? 'FW v2.x' : 'FW v3.x';
             badge.classList.toggle('fw-v2', isV2);
             badge.classList.toggle('fw-v3', !isV2);
-            badge.title = isV2
-                ? 'MicroMonsta 2 firmware v2.x detected (176-byte SysEx & v2 NRPNs)'
-                : 'MicroMonsta 2 firmware v3.x mode (216-byte SysEx & v3 NRPNs)';
+            if (isV2) {
+                badge.setAttribute('href', 'https://www.audiothingies.com/tools/micromonsta2_updater/');
+                badge.setAttribute('target', '_blank');
+                badge.setAttribute('rel', 'noopener noreferrer');
+                badge.title = 'Update firmware';
+            } else {
+                badge.removeAttribute('href');
+                badge.removeAttribute('target');
+                badge.removeAttribute('rel');
+                badge.title = 'MicroMonsta 2 firmware v3.x mode (216-byte SysEx & v3 NRPNs)';
+            }
         }
 
         document.querySelectorAll('[data-fw-v3-only="true"]').forEach(el => {

@@ -251,6 +251,8 @@ header.app-header {
     border: 1px solid var(--border-color);
     background: var(--bg-card-inner);
     color: var(--text-muted);
+    text-decoration: none;
+    cursor: default;
     user-select: none;
 }
 
@@ -258,6 +260,15 @@ header.app-header {
     border-color: #f59e0b;
     color: #fbbf24;
     background: rgba(245, 158, 11, 0.12);
+}
+
+.fw-badge.fw-v2[href] {
+    cursor: pointer;
+}
+
+.fw-badge.fw-v2[href]:hover {
+    background: rgba(245, 158, 11, 0.22);
+    border-color: #fbbf24;
 }
 
 .fw-badge.fw-v3 {

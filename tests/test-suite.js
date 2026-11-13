@@ -3125,10 +3125,13 @@ async function runAllTests(logger = console.log) {
             app.midi.setDetectedFirmware(2, 0x10);
             const badge = document.getElementById('fw-version-badge');
             assertEqual(badge && badge.textContent, 'FW v2.x', 'Header badge shows FW v2.x when v2 detected');
+            assertEqual(badge && badge.getAttribute('href'), 'https://www.audiothingies.com/tools/micromonsta2_updater/', 'FW v2.x badge links to updater');
+            assertEqual(badge && badge.title, 'Update firmware', 'FW v2.x badge tooltip says Update firmware');
             const v3Els = document.querySelectorAll('[data-fw-v3-only="true"]');
             assert(v3Els.length > 0 && Array.from(v3Els).every(el => el.classList.contains('fw-v3-only-hidden')), 'All v3-only UI elements are hidden in v2.x mode');
             app.midi.setDetectedFirmware(null, null);
             assertEqual(badge && badge.textContent, 'FW v3.x', 'Header badge reverts to FW v3.x when detection resets');
+            assert(badge && !badge.hasAttribute('href'), 'FW v3.x badge is not clickable (no href)');
             assert(Array.from(v3Els).every(el => !el.classList.contains('fw-v3-only-hidden')), 'v3-only UI elements are visible again in v3.x mode');
         }
     } catch (e) {
