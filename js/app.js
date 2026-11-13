@@ -107,6 +107,24 @@ class App {
 
         // On load, always start in Editor mode
         this.switchView('editor');
+
+        // Verify hardware reachability immediately when both MIDI I/O ports are already set
+        this._probeIfNeeded();
+    }
+
+    _probeIfNeeded(timeoutMs = 2500) {
+        const isFollowerTab = this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower);
+        if (
+            !isFollowerTab &&
+            this.midi &&
+            this.midi.inPort &&
+            this.midi.outPort &&
+            this.midi.hardwareResponsive === null &&
+            !this.midi._isProbing
+        ) {
+            return this.midi.probeHardware(timeoutMs);
+        }
+        return false;
     }
 
     async handleMidiStatusClick() {
@@ -115,6 +133,7 @@ class App {
             this.updateConnectionStatus();
             this.updateSettingsPortLists();
             this.updateMidiPermissionUI();
+            this._probeIfNeeded();
         }
         this.switchView('settings');
     }
@@ -389,6 +408,7 @@ class App {
             this.showNotification(`⚠️ MIDI Connection Lost: ${name} (${type}) disconnected. Reconnecting automatically when plugged back in...`, 'warning');
             this.updateConnectionStatus();
             this.updateSettingsPortLists();
+            this._probeIfNeeded();
         });
 
         this.midi.on('connection-restored', ({ port, type }) => {
@@ -399,6 +419,7 @@ class App {
             }
             this.updateConnectionStatus();
             this.updateSettingsPortLists();
+            this._probeIfNeeded();
         });
 
         this.midi.on('error', (err) => {
@@ -1404,6 +1425,9 @@ class App {
             }
         }, 3000);
 
+        if (this.midi && typeof this.midi.cancelProbe === 'function') {
+            this.midi.cancelProbe();
+        }
         this.midi.fetchProgram(slot);
     }
 
@@ -3097,13 +3121,12 @@ class App {
             this.showNotification('Pushing patch settings from editor to MM2...', 'info');
             this.pushAllPartsToHardware();
             if (this.midi && this.midi.inPort && this.midi.outPort) {
-                setTimeout(() => this.midi.probeHardware(2500), 200);
+                setTimeout(() => this._probeIfNeeded(2500), 200);
             }
         } else if (choice === 'ignore') {
-            if (this.midi && this.midi.inPort && this.midi.outPort) {
-                this.midi.probeHardware(2500);
-            }
+            this._probeIfNeeded(2500);
         } else if (choice === null) {
+            this._probeIfNeeded(2500);
             this.showNotification(isReconnect ? 'MicroMonsta 2 reconnected!' : 'MicroMonsta 2 connected!', 'success');
         }
 
@@ -3682,6 +3705,7 @@ class App {
                 this.updateSettingsPortLists();
                 this.updateMidiPermissionUI();
                 if (ok) {
+                    this._probeIfNeeded();
                     this.showNotification('Web MIDI reconnected successfully!', 'success');
                 } else {
                     this.showNotification('Web MIDI connection failed. Check browser permissions.', 'error');

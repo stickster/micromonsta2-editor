@@ -275,6 +275,14 @@ class MidiManager {
         }
     }
 
+    cancelProbe() {
+        if (this._probeTimeout) {
+            clearTimeout(this._probeTimeout);
+            this._probeTimeout = null;
+        }
+        this._isProbing = false;
+    }
+
     resetHardwareResponsiveness() {
         if (!this.isLeader) {
             // In follower windows, hardware responsiveness is governed by leader sync.
@@ -283,13 +291,7 @@ class MidiManager {
         }
         this.hardwareResponsive = null;
         this.lastFetchedSlot = 0;
-        if (this._probeTimeout) {
-            clearTimeout(this._probeTimeout);
-            this._probeTimeout = null;
-        }
-        if (this._isProbing) {
-            this._isProbing = false;
-        }
+        this.cancelProbe();
     }
 
     markHardwareResponsive(responsive, isRemote = false) {

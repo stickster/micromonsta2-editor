@@ -3716,6 +3716,121 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    // Section 50: Initial App Load Hardware Probe & Standby Exit Tests
+    // =========================================================================
+    logger('\n--- [50] Initial App Load Hardware Probe & Standby Exit Tests ---');
+    try {
+        // 1. App.init() probes hardware when both ports are auto-selected so Standby exits to Connected
+        const initApp = new App();
+        initApp.librarian.init = async () => { };
+        initApp.buildEditorUI = () => { };
+        initApp.buildLibrarianUI = () => { };
+        initApp.buildSettingsUI = () => { };
+        initApp.buildAuditionUI = () => { };
+        initApp.switchView = () => { };
+        initApp.showNotification = () => { };
+        initApp.promptReconnectSync = async () => { };
+
+        const statusDot = { className: '' };
+        const statusText = { textContent: '', title: '' };
+        document.registerMockElement('midi-status-dot', statusDot);
+        document.registerMockElement('midi-status-text', statusText);
+
+        let initProbeCount = 0;
+        let sentSysEx = null;
+        const mockIn = { id: 'mm2-in', name: 'MicroMonsta 2', state: 'connected', addEventListener: () => { }, removeEventListener: () => { } };
+        const mockOut = {
+            id: 'mm2-out',
+            name: 'MicroMonsta 2',
+            state: 'connected',
+            send: (msg) => { sentSysEx = msg; }
+        };
+        initApp.midi.saveSettings = () => { };
+        initApp.midi.init = async () => {
+            initApp.midi.midiAccess = {
+                inputs: new Map([['mm2-in', mockIn]]),
+                outputs: new Map([['mm2-out', mockOut]])
+            };
+            initApp.midi.autoSelectPorts();
+            return true;
+        };
+        const origProbe = initApp.midi.probeHardware.bind(initApp.midi);
+        initApp.midi.probeHardware = (timeoutMs) => {
+            initProbeCount++;
+            return origProbe(timeoutMs);
+        };
+
+        await initApp.init();
+        assertEqual(initProbeCount, 1, 'App.init() probes hardware when both MIDI I/O ports are set');
+        assertEqual(statusText.textContent, 'Standby', 'Status is Standby while awaiting initial probe response');
+        assert(sentSysEx && sentSysEx.length === 8, 'Initial probe dispatches SysEx fetch request');
+
+        // Simulate MM2 replying with a valid v3 SysEx program dump
+        const replyProg = new MM2Program();
+        replyProg.name = 'INIT_HW';
+        initApp.midi.handleCompleteSysEx(replyProg.toSysEx(0, 3));
+        assertEqual(initApp.midi.hardwareResponsive, true, 'Hardware marked responsive on initial probe reply');
+        assertEqual(statusText.textContent, 'Connected', 'Status transitions from Standby to Connected after initial probe reply');
+        assertEqual(initApp.midi._isProbing, false, 'Probe flag cleared after reply');
+
+        // 2. Follower tab does not probe on App.init()
+        const followerInitApp = new App();
+        followerInitApp.librarian.init = async () => { };
+        followerInitApp.buildEditorUI = () => { };
+        followerInitApp.buildLibrarianUI = () => { };
+        followerInitApp.buildSettingsUI = () => { };
+        followerInitApp.buildAuditionUI = () => { };
+        followerInitApp.switchView = () => { };
+        followerInitApp.tabSync = { isLeader: false, isFollower: true, requestLeaderState: () => { } };
+        let followerProbeCount = 0;
+        followerInitApp.midi.saveSettings = () => { };
+        followerInitApp.midi.init = async () => {
+            followerInitApp.midi.inPort = mockIn;
+            followerInitApp.midi.outPort = mockOut;
+            return true;
+        };
+        followerInitApp.midi.probeHardware = () => { followerProbeCount++; return true; };
+        await followerInitApp.init();
+        assertEqual(followerProbeCount, 0, 'Follower tab does not probe hardware on App.init()');
+
+        // 3. Dismissing promptReconnectSync (choice === null) probes only when unverified
+        const dismissApp = new App();
+        dismissApp.midi.saveSettings = () => { };
+        dismissApp.showNotification = () => { };
+        dismissApp.midi.inPort = mockIn;
+        dismissApp.midi.outPort = mockOut;
+        let dismissProbeCount = 0;
+        dismissApp.midi.probeHardware = () => { dismissProbeCount++; return true; };
+        dismissApp.promptSyncAction = async () => null;
+
+        await dismissApp.promptReconnectSync({ isReconnect: false, portName: 'MicroMonsta 2' });
+        assertEqual(dismissProbeCount, 1, 'Dismissing sync dialog probes hardware when hardwareResponsive is null');
+
+        dismissApp._isPromptingSync = false;
+        dismissApp.midi.hardwareResponsive = true;
+        await dismissApp.promptReconnectSync({ isReconnect: false, portName: 'MicroMonsta 2' });
+        assertEqual(dismissProbeCount, 1, 'Dismissing sync dialog skips redundant probe when already Connected');
+
+        // 4. fetchActiveProgram cancels in-flight probe so reply is not discarded
+        const cancelApp = new App();
+        cancelApp.midi.saveSettings = () => { };
+        cancelApp.showNotification = () => { };
+        cancelApp.midi.inPort = mockIn;
+        cancelApp.midi.outPort = mockOut;
+        cancelApp.midi.probeHardware(2500);
+        assertEqual(cancelApp.midi._isProbing, true, 'Probe sets _isProbing=true');
+        cancelApp.fetchActiveProgram(0);
+        assertEqual(cancelApp.midi._isProbing, false, 'fetchActiveProgram cancels in-flight probe');
+        clearTimeout(cancelApp._fetchTimeout);
+
+        document.registerMockElement('midi-status-dot', null);
+        document.registerMockElement('midi-status-text', null);
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

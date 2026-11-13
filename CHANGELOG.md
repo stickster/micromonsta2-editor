@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Editor:** Updated `Synced` status to `Sync Failed` on connection loss.
 - **MIDI:** Reset responsiveness before port changes and probed Output port selection.
 - **MIDI:** Showed port-change notifications on probe outcome rather than attempt.
+- **MIDI:** Automatically probe MicroMonsta 2 hardware on initial app load, reconnect, and sync dialog dismissal so connection status exits `Standby` without waiting for manual interaction.
 - **Sync:** Prevented patch sync state and `#editor-sync-badge` indicator from showing `Synced` when MIDI connection mode is not `Connected`, introducing the `offline` (`Not Synced (Offline)`) state.
 
 ### Documentation & Maintenance
