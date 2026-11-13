@@ -13,9 +13,10 @@ permissions:
 
 jobs:
   review:
-    # Run automatically on opened/synchronized PRs, or on-demand via comment
+    # Run automatically on opened/synchronized PRs (skipping main -> release), or on-demand via comment
     if: >
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request' &&
+       !(github.head_ref == 'main' && github.base_ref == 'release')) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
        github.event.comment.user.login != 'github-actions[bot]' &&
