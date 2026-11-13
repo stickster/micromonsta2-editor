@@ -2443,7 +2443,7 @@ async function runAllTests(logger = console.log) {
         });
 
         assertEqual(statusDot.className, 'status-dot connected', 'Follower status dot immediately reflects connected');
-        assertEqual(statusText.textContent, 'Connected: MicroMonsta 2', 'Follower status text immediately displays Connected');
+        assertEqual(statusText.textContent, 'Connected', 'Follower status text immediately displays Connected');
 
         // 3. Remote hardware status update from leader immediately propagates to UI
         followerApp.applyRemoteHardwareStatus(false);
@@ -2452,7 +2452,7 @@ async function runAllTests(logger = console.log) {
 
         followerApp.applyRemoteHardwareStatus(true);
         assertEqual(statusDot.className, 'status-dot connected', 'Follower status dot returns to connected on remote responsive update');
-        assertEqual(statusText.textContent, 'Connected: MicroMonsta 2', 'Follower status text returns to Connected');
+        assertEqual(statusText.textContent, 'Connected', 'Follower status text returns to Connected');
 
         // Cleanup
         document.registerMockElement('midi-status-dot', null);

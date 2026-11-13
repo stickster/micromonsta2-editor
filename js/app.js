@@ -411,15 +411,15 @@ class App {
 
             if (this.midi.hardwareResponsive === false) {
                 dot.className = 'status-dot disconnected unresponsive';
-                text.textContent = `No Response: ${outName}`;
+                text.textContent = `No Response`;
                 text.title = `Port open (${outName}), but MicroMonsta 2 hardware is not responding to SysEx/MIDI.\nCheck power and MIDI connections.`;
             } else if (!isVerified) {
                 dot.className = 'status-dot standby';
-                text.textContent = `Standby: ${outName}`;
+                text.textContent = `Standby`;
                 text.title = `Port connected (${outName}), awaiting handshake or response from MicroMonsta 2 hardware.`;
             } else {
                 dot.className = 'status-dot connected';
-                text.textContent = `Connected: ${outName}`;
+                text.textContent = `Connected`;
                 text.title = `In: ${inName}\nOut: ${outName}`;
             }
         } else if (this.midi.inPort || this.midi.outPort) {
@@ -427,7 +427,7 @@ class App {
             text.textContent = `Partial: ${outName || inName}`;
         } else {
             dot.className = 'status-dot disconnected';
-            text.textContent = 'Disconnected (Click to setup)';
+            text.textContent = 'Disconnected';
         }
     }
 
