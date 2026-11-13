@@ -3662,7 +3662,13 @@ class App {
             };
         }
         if (selOut) {
-            selOut.onchange = () => this.midi.setOutputPort(selOut.value);
+            selOut.onchange = () => {
+                const prevPortId = this.midi.outPort ? this.midi.outPort.id : '';
+                this.midi.setOutputPort(selOut.value);
+                if (this.midi.outPort && this.midi.outPort.id !== prevPortId && this.midi.inPort) {
+                    this.midi.probeHardware(2500);
+                }
+            };
         }
         if (selChan) {
             selChan.value = this.midi.baseChannel;

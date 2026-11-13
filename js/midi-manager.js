@@ -171,11 +171,11 @@ class MidiManager {
             this.savedInPortName = '';
         }
         this.saveSettings();
-        this.emit('port-change', { type: 'input', port: this.inPort });
         if (!this.inPort) {
             this.setDetectedFirmware(null, null);
         }
         this.resetHardwareResponsiveness();
+        this.emit('port-change', { type: 'input', port: this.inPort });
         this.checkMM2Detection();
     }
 
@@ -191,11 +191,11 @@ class MidiManager {
             this.savedOutPortName = '';
         }
         this.saveSettings();
-        this.emit('port-change', { type: 'output', port: this.outPort });
         if (!this.outPort) {
             this.setDetectedFirmware(null, null);
         }
         this.resetHardwareResponsiveness();
+        this.emit('port-change', { type: 'output', port: this.outPort });
         this.checkMM2Detection();
     }
 

@@ -3531,6 +3531,63 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    // Section 47: Output Port Switch Connection Status Tests
+    // =========================================================================
+    logger('\n--- [47] Output Port Switch Connection Status Tests ---');
+    try {
+        const outApp = new App();
+        const outMidi = outApp.midi;
+        outMidi.saveSettings = () => { };
+        outApp.showNotification = () => { };
+
+        const portIn = { id: 'in-1', name: 'Port In', state: 'connected', addEventListener: () => { }, removeEventListener: () => { } };
+        const badOut = { id: 'out-bad', name: 'Wrong Out', state: 'connected', send: () => { } };
+        const goodOut = { id: 'out-good', name: 'Correct Out', state: 'connected', send: () => { } };
+
+        outMidi.midiAccess = {
+            inputs: new Map([['in-1', portIn]]),
+            outputs: new Map([['out-bad', badOut], ['out-good', goodOut]])
+        };
+        outMidi.setInputPort('in-1');
+        outMidi.setOutputPort('out-bad');
+        outMidi.markHardwareResponsive(false);
+
+        const statusDot = { className: '' };
+        const statusText = { textContent: '', title: '' };
+        document.registerMockElement('midi-status-dot', statusDot);
+        document.registerMockElement('midi-status-text', statusText);
+
+        const selOut = document.createElement('select');
+        selOut.id = 'settings-midi-out';
+        document.registerMockElement('settings-midi-out', selOut);
+
+        outApp.buildSettingsUI();
+
+        let outProbeCount = 0;
+        outMidi.probeHardware = () => { outProbeCount++; return true; };
+
+        // Switch from bad output port to good output port
+        selOut.value = 'out-good';
+        selOut.onchange();
+
+        // Status should immediately reset from 'No Response' to 'Standby' (not remain stale 'No Response'), and probe
+        assertEqual(outMidi.hardwareResponsive, null, 'Switching output port resets stale hardwareResponsive=false before port-change');
+        assertEqual(statusText.textContent, 'Standby', 'Connection status resets from No Response to Standby on output port change');
+        assertEqual(outProbeCount, 1, 'Switching to a new output port probes hardware when input port is set');
+
+        // When probe response arrives, status becomes Connected
+        outMidi.markHardwareResponsive(true);
+        assertEqual(statusText.textContent, 'Connected', 'Connection status updates to Connected when new output port responds');
+
+        document.registerMockElement('midi-status-dot', null);
+        document.registerMockElement('midi-status-text', null);
+        document.registerMockElement('settings-midi-out', null);
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
