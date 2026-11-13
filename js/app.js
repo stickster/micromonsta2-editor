@@ -51,6 +51,7 @@ class App {
         // Sound Design Solo & Mute States & Active Tabs
         this.selectedOsc = 1; // Active oscillator tab (1, 2, or 3)
         this.selectedEnv = 1; // Active envelope tab (1, 2, or 3)
+        this._activeDragSection = null;
         this.soloState = { osc1: false, osc2: false, osc3: false, noise: false };
         this.muteState = { osc1: false, osc2: false, osc3: false, noise: false };
         this.savedMixerLevels = null;
@@ -1025,6 +1026,77 @@ class App {
         this.updateUndoRedoUI();
     }
 
+    /**
+     * Configures an element as a drag source for copying a section's parameters.
+     */
+    wireSectionDragSource(dragEl, sectionType, sectionIndex, { containerEl } = {}) {
+        dragEl.setAttribute('draggable', 'true');
+        const dragContainer = containerEl || dragEl;
+
+        dragEl.addEventListener('dragstart', (e) => {
+            const payload = { kind: 'section', sectionType, sectionIndex };
+            this._activeDragSection = payload;
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'copy';
+                e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+            }
+            dragContainer.classList.add('is-dragging');
+        });
+
+        dragEl.addEventListener('dragend', () => {
+            this._activeDragSection = null;
+            dragContainer.classList.remove('is-dragging');
+            if (typeof document !== 'undefined' && document.querySelectorAll) {
+                document.querySelectorAll('.tab-drop-hover, .slot-drop-hover').forEach(el => {
+                    el.classList.remove('tab-drop-hover', 'slot-drop-hover');
+                });
+            }
+        });
+    }
+
+    /**
+     * Configures an element as a drop target for copying a matching section's parameters.
+     */
+    wireSectionDropTarget(targetEl, sectionType, targetIndex, timbre, onChange, { hoverClass = 'slot-drop-hover', onDrop } = {}) {
+        const resolveTargetIndex = () => (typeof targetIndex === 'function' ? targetIndex() : targetIndex);
+
+        targetEl.addEventListener('dragover', (e) => {
+            const active = this._activeDragSection;
+            const dstIdx = resolveTargetIndex();
+            if (!active || active.kind !== 'section' || active.sectionType !== sectionType || active.sectionIndex === dstIdx) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+            targetEl.classList.add(hoverClass);
+        });
+
+        targetEl.addEventListener('dragleave', (e) => {
+            e.stopPropagation();
+            if (e.relatedTarget && typeof targetEl.contains === 'function' && targetEl.contains(e.relatedTarget)) {
+                return;
+            }
+            targetEl.classList.remove(hoverClass);
+        });
+
+        targetEl.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            targetEl.classList.remove(hoverClass);
+            try {
+                const dstIdx = resolveTargetIndex();
+                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+                const data = raw ? JSON.parse(raw) : this._activeDragSection;
+                if (data && data.kind === 'section' && data.sectionType === sectionType && data.sectionIndex !== dstIdx) {
+                    copySection(sectionType, data.sectionIndex, sectionType, dstIdx, timbre(), onChange);
+                    this._activeDragSection = null;
+                    if (onDrop) onDrop(data.sectionIndex, dstIdx);
+                }
+            } catch (err) {}
+        });
+    }
+
     createOscillatorPanel(timbre, onChange) {
         if (typeof document === 'undefined') return { card: null };
 
@@ -1067,28 +1139,15 @@ class App {
             btn.appendChild(muteDot);
             btn.appendChild(soloDot);
 
-            // Drag-and-drop drop target to copy directly between oscillators
-            btn.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                btn.classList.add('tab-drop-hover');
-            });
-            btn.addEventListener('dragleave', (e) => {
-                e.stopPropagation();
-                btn.classList.remove('tab-drop-hover');
-            });
-            btn.addEventListener('drop', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                btn.classList.remove('tab-drop-hover');
-                try {
-                    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-                    if (data && data.kind === 'section' && data.sectionType === 'osc') {
-                        copySection('osc', data.sectionIndex, 'osc', i, timbre(), onChange);
-                        card.refresh();
-                        this.showNotification(`Copied Osc ${data.sectionIndex} to Osc ${i}`, 'success');
-                    }
-                } catch (err) {}
+            // Drag-and-drop source & target to copy directly between oscillators
+            btn.title = `Osc ${i} • Drag to copy to another oscillator`;
+            this.wireSectionDragSource(btn, 'osc', i);
+            this.wireSectionDropTarget(btn, 'osc', i, timbre, onChange, {
+                hoverClass: 'tab-drop-hover',
+                onDrop: (srcIdx, dstIdx) => {
+                    card.refresh();
+                    this.showNotification(`Copied Osc ${srcIdx} to Osc ${dstIdx}`, 'success');
+                }
             });
 
             btn.onclick = () => {
@@ -1222,6 +1281,14 @@ class App {
         // Body with Panes
         const body = document.createElement('div');
         body.className = 'synth-card-body';
+
+        this.wireSectionDropTarget(body, 'osc', () => this.selectedOsc, timbre, onChange, {
+            hoverClass: 'slot-drop-hover',
+            onDrop: (srcIdx, dstIdx) => {
+                card.refresh();
+                this.showNotification(`Copied Osc ${srcIdx} to Osc ${dstIdx}`, 'success');
+            }
+        });
 
         const panes = [];
         for (let i = 1; i <= 3; i++) {
@@ -1364,28 +1431,15 @@ class App {
             btn.setAttribute('data-env', i);
             btn.textContent = `Env ${i}`;
 
-            // Drag-and-drop drop target to copy directly between envelopes
-            btn.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                btn.classList.add('tab-drop-hover');
-            });
-            btn.addEventListener('dragleave', (e) => {
-                e.stopPropagation();
-                btn.classList.remove('tab-drop-hover');
-            });
-            btn.addEventListener('drop', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                btn.classList.remove('tab-drop-hover');
-                try {
-                    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-                    if (data && data.kind === 'section' && data.sectionType === 'env') {
-                        copySection('env', data.sectionIndex, 'env', i, timbre(), onChange);
-                        card.refresh();
-                        this.showNotification(`Copied Env ${data.sectionIndex} to Env ${i}`, 'success');
-                    }
-                } catch (err) {}
+            // Drag-and-drop source & target to copy directly between envelopes
+            btn.title = `Env ${i} • Drag to copy to another envelope`;
+            this.wireSectionDragSource(btn, 'env', i);
+            this.wireSectionDropTarget(btn, 'env', i, timbre, onChange, {
+                hoverClass: 'tab-drop-hover',
+                onDrop: (srcIdx, dstIdx) => {
+                    card.refresh();
+                    this.showNotification(`Copied Env ${srcIdx} to Env ${dstIdx}`, 'success');
+                }
             });
 
             btn.onclick = () => {
@@ -1495,7 +1549,15 @@ class App {
             const gCard = document.createElement('div');
             gCard.className = `adsr-graph-card ${this.selectedEnv === i ? 'active' : ''}`;
             gCard.setAttribute('data-env', i);
-            gCard.title = `Click to edit ${envLabels[i - 1]}`;
+            gCard.title = `Click to edit ${envLabels[i - 1]} • Drag to copy to another envelope`;
+            this.wireSectionDragSource(gCard, 'env', i);
+            this.wireSectionDropTarget(gCard, 'env', i, timbre, onChange, {
+                hoverClass: 'slot-drop-hover',
+                onDrop: (srcIdx, dstIdx) => {
+                    card.refresh();
+                    this.showNotification(`Copied Env ${srcIdx} to Env ${dstIdx}`, 'success');
+                }
+            });
 
             const gLabel = document.createElement('div');
             gLabel.className = 'adsr-graph-label';
@@ -1533,6 +1595,14 @@ class App {
             pane.appendChild(knobs);
 
             pane.appendChild(createSelect(`ENV${i}_RESET`, timbre, onChange));
+
+            this.wireSectionDropTarget(pane, 'env', i, timbre, onChange, {
+                hoverClass: 'slot-drop-hover',
+                onDrop: (srcIdx, dstIdx) => {
+                    card.refresh();
+                    this.showNotification(`Copied Env ${srcIdx} to Env ${dstIdx}`, 'success');
+                }
+            });
 
             body.appendChild(pane);
             panes.push(pane);
@@ -1678,43 +1748,18 @@ class App {
 
             const badge = document.createElement('div');
             badge.className = 'lfo-badge';
-            badge.setAttribute('draggable', 'true');
             badge.textContent = `LFO ${l}`;
             badge.title = `LFO ${l} • Drag to copy to another LFO`;
 
-            badge.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('text/plain', JSON.stringify({
-                    kind: 'section',
-                    sectionType: 'lfo',
-                    sectionIndex: l
-                }));
-                subLfo.classList.add('is-dragging');
-            });
-            badge.addEventListener('dragend', () => {
-                subLfo.classList.remove('is-dragging');
-            });
-
-            subLfo.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                subLfo.classList.add('slot-drop-hover');
-            });
-            subLfo.addEventListener('dragleave', () => {
-                subLfo.classList.remove('slot-drop-hover');
-            });
-            subLfo.addEventListener('drop', (e) => {
-                e.preventDefault();
-                subLfo.classList.remove('slot-drop-hover');
-                try {
-                    const raw = e.dataTransfer.getData('text/plain');
-                    const data = JSON.parse(raw);
-                    if (data && data.kind === 'section' && data.sectionType === 'lfo' && data.sectionIndex !== l) {
-                        copySection('lfo', data.sectionIndex, 'lfo', l, timbre(), onChange);
-                        subLfo.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
-                        const viz = subLfo.querySelector('.lfo-visualizer');
-                        if (viz && viz.refresh) viz.refresh();
-                        this.showNotification(`Copied LFO ${data.sectionIndex} to LFO ${l}`, 'success');
-                    }
-                } catch (err) {}
+            this.wireSectionDragSource(badge, 'lfo', l, { containerEl: subLfo });
+            this.wireSectionDropTarget(subLfo, 'lfo', l, timbre, onChange, {
+                hoverClass: 'slot-drop-hover',
+                onDrop: (srcIdx, dstIdx) => {
+                    subLfo.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                    const viz = subLfo.querySelector('.lfo-visualizer');
+                    if (viz && viz.refresh) viz.refresh();
+                    this.showNotification(`Copied LFO ${srcIdx} to LFO ${dstIdx}`, 'success');
+                }
             });
 
             const actions = document.createElement('div');
@@ -1820,25 +1865,33 @@ class App {
         const multStack = document.createElement('div');
         multStack.className = 'math-mult-stack';
 
-        const mult1Box = document.createElement('div');
-        mult1Box.className = 'math-sub-panel';
-        mult1Box.innerHTML = '<div class="mult-badge">Multiplier 1 (A × B)</div>';
-        const mult1Sels = document.createElement('div');
-        mult1Sels.className = 'select-row';
-        mult1Sels.appendChild(createSelect('MULT_A1', timbre, onChange));
-        mult1Sels.appendChild(createSelect('MULT_B1', timbre, onChange));
-        mult1Box.appendChild(mult1Sels);
-        multStack.appendChild(mult1Box);
+        for (let m = 1; m <= 2; m++) {
+            const multBox = document.createElement('div');
+            multBox.className = 'math-sub-panel';
+            multBox.setAttribute('data-mult', m);
 
-        const mult2Box = document.createElement('div');
-        mult2Box.className = 'math-sub-panel';
-        mult2Box.innerHTML = '<div class="mult-badge">Multiplier 2 (A × B)</div>';
-        const mult2Sels = document.createElement('div');
-        mult2Sels.className = 'select-row';
-        mult2Sels.appendChild(createSelect('MULT_A2', timbre, onChange));
-        mult2Sels.appendChild(createSelect('MULT_B2', timbre, onChange));
-        mult2Box.appendChild(mult2Sels);
-        multStack.appendChild(mult2Box);
+            const multBadge = document.createElement('div');
+            multBadge.className = 'mult-badge';
+            multBadge.textContent = `Multiplier ${m} (A × B)`;
+            multBadge.title = `Multiplier ${m} • Drag to copy to another multiplier`;
+            multBox.appendChild(multBadge);
+
+            this.wireSectionDragSource(multBadge, 'mult', m, { containerEl: multBox });
+            this.wireSectionDropTarget(multBox, 'mult', m, timbre, onChange, {
+                hoverClass: 'slot-drop-hover',
+                onDrop: (srcIdx, dstIdx) => {
+                    multBox.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                    this.showNotification(`Copied Multiplier ${srcIdx} to Multiplier ${dstIdx}`, 'success');
+                }
+            });
+
+            const multSels = document.createElement('div');
+            multSels.className = 'select-row';
+            multSels.appendChild(createSelect(`MULT_A${m}`, timbre, onChange));
+            multSels.appendChild(createSelect(`MULT_B${m}`, timbre, onChange));
+            multBox.appendChild(multSels);
+            multStack.appendChild(multBox);
+        }
 
         mathGrid.appendChild(multStack);
         mathSec.body.appendChild(mathGrid);
@@ -1877,41 +1930,16 @@ class App {
             // Drag badge
             const badge = document.createElement('div');
             badge.className = 'matrix-slot-badge';
-            badge.setAttribute('draggable', 'true');
             badge.textContent = `${m}`;
             badge.title = `Slot ${m} • Drag to copy to another slot`;
 
-            badge.addEventListener('dragstart', (e) => {
-                e.dataTransfer.setData('text/plain', JSON.stringify({
-                    kind: 'section',
-                    sectionType: 'mtx',
-                    sectionIndex: m
-                }));
-                slotRow.classList.add('is-dragging');
-            });
-            badge.addEventListener('dragend', () => {
-                slotRow.classList.remove('is-dragging');
-            });
-
-            // Drop target on slot row
-            slotRow.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                slotRow.classList.add('slot-drop-hover');
-            });
-            slotRow.addEventListener('dragleave', () => {
-                slotRow.classList.remove('slot-drop-hover');
-            });
-            slotRow.addEventListener('drop', (e) => {
-                e.preventDefault();
-                slotRow.classList.remove('slot-drop-hover');
-                try {
-                    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-                    if (data && data.kind === 'section' && data.sectionType === 'mtx') {
-                        copySection('mtx', data.sectionIndex, 'mtx', m, timbre(), onChange);
-                        slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
-                        this.showNotification(`Copied Slot ${data.sectionIndex} to Slot ${m}`, 'success');
-                    }
-                } catch (err) {}
+            this.wireSectionDragSource(badge, 'mtx', m, { containerEl: slotRow });
+            this.wireSectionDropTarget(slotRow, 'mtx', m, timbre, onChange, {
+                hoverClass: 'slot-drop-hover',
+                onDrop: (srcIdx, dstIdx) => {
+                    slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                    this.showNotification(`Copied Slot ${srcIdx} to Slot ${dstIdx}`, 'success');
+                }
             });
 
             const srcSelect = createSelect(`MTX${m}_SRC`, timbre, onChange);

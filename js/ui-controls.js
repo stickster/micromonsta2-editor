@@ -124,6 +124,29 @@ const SECTION_DEFINITIONS = {
             [`MTX${idx}_AMT`]: 128 + (Math.floor(Math.random() * 140) - 70)
         })
     },
+    mult: {
+        title: 'Multiplier',
+        count: 2,
+        getParams: (idx) => ({
+            a: `MULT_A${idx}`,
+            b: `MULT_B${idx}`
+        }),
+        randomize: (program, idx) => ({
+            [`MULT_A${idx}`]: Math.floor(Math.random() * 45),
+            [`MULT_B${idx}`]: Math.floor(Math.random() * 45)
+        })
+    },
+    arp_step: {
+        title: 'Sequencer Step',
+        count: 16,
+        getParams: (idx) => {
+            const numStr = idx.toString().padStart(2, '0');
+            return {
+                mode: `ARP_PTN_STEP${numStr}`,
+                mod: `ARP_PTN_STEP_MOD${numStr}`
+            };
+        }
+    },
     fx: {
         title: 'Effects & EQ',
         count: 1,
@@ -1690,6 +1713,57 @@ function createArpSequencer(program, onChangeCallback) {
     const toolsDiv = document.createElement('div');
     toolsDiv.className = 'sequencer-tools';
 
+    let activeStepDrag = null;
+
+    const copyToAllBtn = document.createElement('button');
+    copyToAllBtn.type = 'button';
+    copyToAllBtn.className = 'btn btn-sm seq-copy-all-btn';
+    copyToAllBtn.id = 'seq-copy-all-btn';
+    copyToAllBtn.title = 'Drop a step here to copy it to all 16 steps';
+    copyToAllBtn.textContent = 'Copy to all';
+
+    copyToAllBtn.addEventListener('dragover', (e) => {
+        if (activeStepDrag === null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        copyToAllBtn.classList.add('slot-drop-hover');
+    });
+    copyToAllBtn.addEventListener('dragleave', (e) => {
+        e.stopPropagation();
+        copyToAllBtn.classList.remove('slot-drop-hover');
+    });
+    copyToAllBtn.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        copyToAllBtn.classList.remove('slot-drop-hover', 'is-visible');
+        try {
+            const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+            const data = raw ? JSON.parse(raw) : (activeStepDrag !== null ? { kind: 'arp_step', stepIndex: activeStepDrag } : null);
+            const srcIdx = data && data.kind === 'arp_step' ? data.stepIndex : null;
+            const prog = getProg();
+            if (prog && srcIdx >= 1 && srcIdx <= 16) {
+                if (onChangeCallback && onChangeCallback.beginGroup) {
+                    onChangeCallback.beginGroup(`Copy Arp Step ${srcIdx} to All`);
+                }
+                for (let dst = 1; dst <= 16; dst++) {
+                    if (dst !== srcIdx) {
+                        copySection('arp_step', srcIdx, 'arp_step', dst, prog, onChangeCallback);
+                    }
+                }
+                if (onChangeCallback && onChangeCallback.endGroup) {
+                    onChangeCallback.endGroup();
+                }
+                container.refresh();
+                if (window.app && window.app.showNotification) {
+                    window.app.showNotification(`Copied Step ${srcIdx} to all steps`, 'success');
+                }
+            }
+        } catch (err) {}
+        activeStepDrag = null;
+    });
+    toolsDiv.appendChild(copyToAllBtn);
+
     const clearBtn = document.createElement('button');
     clearBtn.className = 'btn btn-sm btn-subtle';
     clearBtn.id = 'seq-clear-btn';
@@ -1798,6 +1872,60 @@ function createArpSequencer(program, onChangeCallback) {
         const col = document.createElement('div');
         col.className = 'step-col';
         col.setAttribute('data-step', i);
+        col.setAttribute('draggable', 'true');
+        col.title = `Step ${i} • Drag to copy to another step or "Copy to all"`;
+
+        col.addEventListener('dragstart', (e) => {
+            activeStepDrag = i;
+            const payload = { kind: 'arp_step', stepIndex: i };
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'copy';
+                e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+            }
+            col.classList.add('is-dragging');
+            copyToAllBtn.classList.add('is-visible');
+        });
+        col.addEventListener('dragend', () => {
+            activeStepDrag = null;
+            col.classList.remove('is-dragging');
+            copyToAllBtn.classList.remove('is-visible', 'slot-drop-hover');
+            stepsGrid.querySelectorAll('.step-col.slot-drop-hover').forEach(el => {
+                el.classList.remove('slot-drop-hover');
+            });
+        });
+        col.addEventListener('dragover', (e) => {
+            if (activeStepDrag === null || activeStepDrag === i) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+            col.classList.add('slot-drop-hover');
+        });
+        col.addEventListener('dragleave', (e) => {
+            e.stopPropagation();
+            if (e.relatedTarget && typeof col.contains === 'function' && col.contains(e.relatedTarget)) {
+                return;
+            }
+            col.classList.remove('slot-drop-hover');
+        });
+        col.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            col.classList.remove('slot-drop-hover');
+            copyToAllBtn.classList.remove('is-visible', 'slot-drop-hover');
+            try {
+                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+                const data = raw ? JSON.parse(raw) : (activeStepDrag !== null ? { kind: 'arp_step', stepIndex: activeStepDrag } : null);
+                const srcIdx = data && data.kind === 'arp_step' ? data.stepIndex : null;
+                if (srcIdx && srcIdx !== i) {
+                    copySection('arp_step', srcIdx, 'arp_step', i, getProg(), onChangeCallback);
+                    container.refresh();
+                    if (window.app && window.app.showNotification) {
+                        window.app.showNotification(`Copied Step ${srcIdx} to Step ${i}`, 'success');
+                    }
+                }
+            } catch (err) {}
+            activeStepDrag = null;
+        });
 
         const stepNum = document.createElement('div');
         stepNum.className = 'step-number';
