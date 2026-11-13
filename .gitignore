@@ -1,5 +1,6 @@
 __pycache__/
 references/
+.worktrees/
 
 # Gemini CLI
 .gemini/
