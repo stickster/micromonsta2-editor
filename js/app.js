@@ -64,6 +64,7 @@ class App {
         this._modeProbe = null;
         this._pendingProbe = null;
         this._hasDetectedMM2Once = false;
+        this._hadBothPortsConnected = false;
         this._isPromptingSync = false;
         this._paramControlMap = new Map();
 
@@ -147,17 +148,10 @@ class App {
                 this.tabSync.requestLeaderState();
                 return;
             }
-            if (!this._hasDetectedMM2Once) {
-                this._hasDetectedMM2Once = true;
-                this.showNotification(`MM2 detected on ${inPort.name}. Loading Patch A settings...`, 'info');
-                // Read Part A, then probe Part B to detect mono vs. two-layer (bi) mode and load Part B if present
-                this.fetchActiveProgram(0, { probe: 'load' });
-            } else {
-                // Device reconnected after being disconnected:
-                // Do not blindly fire an immediate fetch which can time out while the hardware USB/firmware boots up.
-                // Prompt user whether to pull from hardware or push from editor.
-                this.promptReconnectSync();
-            }
+            const isReconnect = this._hasDetectedMM2Once;
+            this._hasDetectedMM2Once = true;
+            this._hadBothPortsConnected = true;
+            this.promptReconnectSync({ isReconnect, portName: inPort && inPort.name });
         });
 
         // Firmware Detection Listener
@@ -245,6 +239,23 @@ class App {
             this.updateConnectionStatus();
             this.updateSettingsPortLists();
             this.updateMidiPermissionUI();
+
+            const hasBothPorts = !!(this.midi.inPort && this.midi.outPort);
+            const isFollowerTab = this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower);
+            if (hasBothPorts && !this._hadBothPortsConnected) {
+                this._hadBothPortsConnected = true;
+                const isMM2Pair = this.midi.isMM2Port(this.midi.inPort) && this.midi.isMM2Port(this.midi.outPort);
+                if (!isMM2Pair && !isFollowerTab) {
+                    const isReconnect = this._hasDetectedMM2Once;
+                    this._hasDetectedMM2Once = true;
+                    this.promptReconnectSync({
+                        isReconnect,
+                        portName: this.midi.outPort.name || this.midi.inPort.name
+                    });
+                }
+            } else if (!hasBothPorts) {
+                this._hadBothPortsConnected = false;
+            }
         });
 
         this.midi.on('hardware-responsiveness-changed', ({ responsive, previous, isRemote }) => {
@@ -3002,13 +3013,24 @@ class App {
         });
     }
 
-    promptReconnectSync() {
+    promptReconnectSync({ isReconnect = true, portName = '' } = {}) {
         if (typeof document === 'undefined') return;
         if (this._isPromptingSync) return;
         const dialog = document.getElementById('reconnect-sync-dialog');
         if (!dialog || typeof dialog.showModal !== 'function' || dialog.open) {
-            this.showNotification('MicroMonsta 2 reconnected!', 'success');
+            this.showNotification(isReconnect ? 'MicroMonsta 2 reconnected!' : 'MicroMonsta 2 connected!', 'success');
             return;
+        }
+        const titleEl = document.getElementById('reconnect-sync-title');
+        if (titleEl) {
+            titleEl.textContent = isReconnect ? '🔄 MicroMonsta 2 Reconnected' : '🔌 MicroMonsta 2 Connected';
+        }
+        const descEl = dialog.querySelector ? dialog.querySelector('.dialog-desc') : null;
+        if (descEl) {
+            const portSuffix = portName ? ` (${portName})` : '';
+            descEl.textContent = isReconnect
+                ? `Communication with your MicroMonsta 2 synthesizer${portSuffix} has been restored. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`
+                : `Connected to your MicroMonsta 2 synthesizer${portSuffix}. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`;
         }
         this._isPromptingSync = true;
 

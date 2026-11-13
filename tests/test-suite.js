@@ -3209,6 +3209,70 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    // Section 41: Connection Sync Prompt Tests
+    // =========================================================================
+    logger('\n--- [41] Connection Sync Prompt Tests ---');
+    try {
+        const connApp = new App();
+        const connMidi = connApp.midi;
+        connMidi.saveSettings = () => { };
+        connApp.showNotification = () => { };
+        const promptCalls = [];
+        connApp.promptReconnectSync = (opts) => { promptCalls.push(opts || {}); };
+
+        // 1. Initial MM2 detection prompts instead of auto-fetching
+        connMidi.emit('mm2-detected', { inPort: { name: 'MicroMonsta 2' }, outPort: { name: 'MicroMonsta 2' } });
+        assertEqual(promptCalls.length, 1, 'Initial mm2-detected triggers sync prompt');
+        assertEqual(promptCalls[0].isReconnect, false, 'Initial mm2-detected passes isReconnect=false');
+        assert(!connApp._fetchTimeout, 'Initial mm2-detected does not start blind auto-fetch');
+
+        // 2. Subsequent MM2 detection (reconnect) prompts with isReconnect=true
+        connMidi.emit('mm2-detected', { inPort: { name: 'MicroMonsta 2' }, outPort: { name: 'MicroMonsta 2' } });
+        assertEqual(promptCalls.length, 2, 'Reconnect mm2-detected triggers sync prompt');
+        assertEqual(promptCalls[1].isReconnect, true, 'Reconnect mm2-detected passes isReconnect=true');
+
+        // 3. Generic (non-MM2) dual-port connection also prompts
+        const genApp = new App();
+        const genMidi = genApp.midi;
+        genMidi.saveSettings = () => { };
+        genApp.showNotification = () => { };
+        const genPromptCalls = [];
+        genApp.promptReconnectSync = (opts) => { genPromptCalls.push(opts || {}); };
+
+        genMidi.inPort = { id: 'gen-in', name: 'USB MIDI In' };
+        genMidi.outPort = null;
+        genMidi.emit('port-change', { type: 'input', port: genMidi.inPort });
+        assertEqual(genPromptCalls.length, 0, 'Single input port does not trigger connection prompt');
+
+        genMidi.outPort = { id: 'gen-out', name: 'USB MIDI Out' };
+        genMidi.emit('port-change', { type: 'output', port: genMidi.outPort });
+        assertEqual(genPromptCalls.length, 1, 'Dual generic ports trigger connection sync prompt');
+
+        // Disconnecting and reconnecting generic ports prompts again
+        genMidi.outPort = null;
+        genMidi.emit('port-change', { type: 'output', port: null });
+        genMidi.outPort = { id: 'gen-out', name: 'USB MIDI Out' };
+        genMidi.emit('port-change', { type: 'output', port: genMidi.outPort });
+        assertEqual(genPromptCalls.length, 2, 'Reconnecting generic ports triggers connection sync prompt again');
+        assertEqual(genPromptCalls[1].isReconnect, true, 'Reconnecting generic ports passes isReconnect=true');
+
+        // 4. Follower tab does not prompt on port-change
+        const folApp = new App();
+        folApp.midi.saveSettings = () => { };
+        folApp.showNotification = () => { };
+        folApp.tabSync = { isLeader: false, isFollower: true, requestLeaderState: () => { } };
+        let folPrompted = false;
+        folApp.promptReconnectSync = () => { folPrompted = true; };
+        folApp.midi.inPort = { id: 'gen-in', name: 'USB MIDI In' };
+        folApp.midi.outPort = { id: 'gen-out', name: 'USB MIDI Out' };
+        folApp.midi.emit('port-change', { type: 'output', port: folApp.midi.outPort });
+        assertEqual(folPrompted, false, 'Follower tab does not prompt on port-change');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
