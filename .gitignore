@@ -4,3 +4,7 @@ references/
 # Gemini CLI
 .gemini/
 gha-creds-*.json
+
+# Backup files
+\#*
+*~
