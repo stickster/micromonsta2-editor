@@ -48,6 +48,10 @@ class App {
         this.isComparing = false;
         this.compareSavedProgram = null;
 
+        this.memories = [null, null, null, null];
+        this._activeMemoryDrag = null;
+        this.loadMemories();
+
         // Sound Design Solo & Mute States & Active Tabs
         this.selectedOsc = 1; // Active oscillator tab (1, 2, or 3)
         this.selectedEnv = 1; // Active envelope tab (1, 2, or 3)
@@ -721,6 +725,11 @@ class App {
             this.selectPart(action.slot);
         }
 
+        if (action.type === 'part-snapshot') {
+            this._applyPartSnapshot(action.slot, action.prevRawData, 'undo', `Undo: ${action.label || 'Part Change'}`);
+            return;
+        }
+
         if (action.changes && Array.isArray(action.changes)) {
             for (const ch of action.changes) {
                 this.activeTimbre.setValue(ch.key, ch.prevVal);
@@ -756,6 +765,11 @@ class App {
             this.selectPart(action.slot);
         }
 
+        if (action.type === 'part-snapshot') {
+            this._applyPartSnapshot(action.slot, action.newRawData, 'redo', `Redo: ${action.label || 'Part Change'}`);
+            return;
+        }
+
         if (action.changes && Array.isArray(action.changes)) {
             for (const ch of action.changes) {
                 this.activeTimbre.setValue(ch.key, ch.newVal);
@@ -788,6 +802,356 @@ class App {
         const btnRedo = document.getElementById('btn-prog-redo');
         if (btnUndo) btnUndo.disabled = this.undoStack.length === 0;
         if (btnRedo) btnRedo.disabled = this.redoStack.length === 0;
+    }
+
+    /**
+     * Restores a 216-byte part snapshot for undo/redo and refreshes UI/sync state.
+     */
+    _applyPartSnapshot(slot, rawData, source, notificationText) {
+        const targetTimbre = slot === 1 ? this.timbreB : this.timbreA;
+        targetTimbre.rawData = new Uint8Array(rawData);
+        if (this.midi && this.midi.liveSync && this.midi.outPort) {
+            this.midi.sendProgram(targetTimbre, slot);
+        }
+        this.refreshEditorControls();
+        this.updateUndoRedoUI();
+        this.updateSyncStatus('modified');
+        if (this.tabSync) {
+            this.tabSync.broadcast('PATCH_LOADED', {
+                slot,
+                rawData: Array.from(targetTimbre.rawData),
+                source
+            });
+        }
+        if (notificationText) {
+            this.showNotification(notificationText, 'info');
+        }
+    }
+
+    /**
+     * Replaces an entire Part's state as a single atomic undoable step.
+     */
+    replacePartWithRawData(targetSlot, rawData, label = 'Replace Part') {
+        if (this.isComparing) {
+            this.toggleCompare(false);
+        }
+        const targetTimbre = targetSlot === 1 ? this.timbreB : this.timbreA;
+        const prevRawData = new Uint8Array(targetTimbre.rawData);
+        const nextRawData = new Uint8Array(rawData);
+
+        this.undoStack.push({
+            type: 'part-snapshot',
+            slot: targetSlot,
+            prevRawData,
+            newRawData: nextRawData,
+            label
+        });
+        if (this.undoStack.length > this.maxHistory) {
+            this.undoStack.shift();
+        }
+        this.redoStack = [];
+
+        targetTimbre.rawData = nextRawData;
+        if (this.midi && this.midi.liveSync && this.midi.outPort) {
+            this.midi.sendProgram(targetTimbre, targetSlot);
+        }
+        this.refreshEditorControls();
+        this.updateUndoRedoUI();
+        this.updateSyncStatus('modified');
+        if (this.tabSync) {
+            this.tabSync.broadcast('PATCH_LOADED', {
+                slot: targetSlot,
+                rawData: Array.from(targetTimbre.rawData),
+                source: 'memory'
+            });
+        }
+    }
+
+    loadMemories() {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        try {
+            const raw = window.localStorage.getItem('mm2_memories');
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return;
+            for (let i = 0; i < 4; i++) {
+                const entry = parsed[i];
+                if (Array.isArray(entry) && entry.length === 216) {
+                    this.memories[i] = new MM2Program(new Uint8Array(entry));
+                }
+            }
+        } catch (e) {}
+    }
+
+    saveMemories() {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        try {
+            const payload = this.memories.map(m => (m ? Array.from(m.rawData) : null));
+            window.localStorage.setItem('mm2_memories', JSON.stringify(payload));
+        } catch (e) {}
+    }
+
+    updateMemoryUI() {
+        if (typeof document === 'undefined') return;
+        for (let i = 0; i < 4; i++) {
+            const btn = document.getElementById(`btn-mem-${i}`);
+            if (!btn) continue;
+            const mem = this.memories[i];
+            btn.classList.toggle('populated', !!mem);
+            btn.title = mem
+                ? `Memory M${i + 1}: "${mem.name}" (click to load, drag to copy)`
+                : `Memory M${i + 1} (Empty — drag a Part or Memory here)`;
+        }
+    }
+
+    loadMemoryToActivePart(memIdx) {
+        if (memIdx < 0 || memIdx >= 4 || !this.memories[memIdx]) {
+            this.showNotification(`Memory M${memIdx + 1} is empty. Drag a Part or Memory onto M${memIdx + 1} to store.`, 'info');
+            return false;
+        }
+        const mem = this.memories[memIdx];
+        const partLabel = this.activeSlot === 0 ? 'A' : 'B';
+        this.replacePartWithRawData(this.activeSlot, mem.rawData, `Load M${memIdx + 1} into Part ${partLabel}`);
+        this.showNotification(`Loaded Memory M${memIdx + 1} ("${mem.name}") into Part ${partLabel}`, 'success');
+        return true;
+    }
+
+    storePartInMemory(srcSlot, memIdx) {
+        if (memIdx < 0 || memIdx >= 4) return false;
+        const srcTimbre = srcSlot === 1 ? this.timbreB : this.timbreA;
+        this.memories[memIdx] = new MM2Program(new Uint8Array(srcTimbre.rawData));
+        this.saveMemories();
+        this.updateMemoryUI();
+        const partLabel = srcSlot === 0 ? 'A' : 'B';
+        this.showNotification(`Stored Part ${partLabel} ("${srcTimbre.name}") in Memory M${memIdx + 1}`, 'success');
+        return true;
+    }
+
+    copyMemory(srcIdx, dstIdx) {
+        if (srcIdx === dstIdx || srcIdx < 0 || srcIdx >= 4 || dstIdx < 0 || dstIdx >= 4) return false;
+        const srcMem = this.memories[srcIdx];
+        if (!srcMem) return false;
+        this.memories[dstIdx] = new MM2Program(new Uint8Array(srcMem.rawData));
+        this.saveMemories();
+        this.updateMemoryUI();
+        this.showNotification(`Copied Memory M${srcIdx + 1} ("${srcMem.name}") to M${dstIdx + 1}`, 'success');
+        return true;
+    }
+
+    _clearMemoryDragHover() {
+        if (typeof document === 'undefined' || !document.querySelectorAll) return;
+        document.querySelectorAll('.memory-btn.slot-drop-hover, .part-btn.slot-drop-hover, .app-main.slot-drop-hover, #editor-grid.slot-drop-hover').forEach(el => {
+            el.classList.remove('slot-drop-hover');
+        });
+    }
+
+    _parseDragPayload(e) {
+        try {
+            const raw = e && e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+            if (raw) return JSON.parse(raw);
+        } catch (err) {}
+        return this._activeMemoryDrag;
+    }
+
+    wireMemoryAndPartDragDrop(els = {}) {
+        if (typeof document === 'undefined' && !els.memButtons) return;
+
+        const memButtons = els.memButtons || [0, 1, 2, 3].map(i => document.getElementById(`btn-mem-${i}`)).filter(Boolean);
+        const partButtons = els.partButtons || [
+            document.getElementById('btn-part-a'),
+            document.getElementById('btn-part-b')
+        ].filter(Boolean);
+        const appMain = els.appMain !== undefined ? els.appMain : document.querySelector('.app-main');
+        const editorGrid = els.editorGrid !== undefined ? els.editorGrid : document.getElementById('editor-grid');
+
+        const clearHover = () => {
+            this._clearMemoryDragHover();
+            [...memButtons, ...partButtons, appMain, editorGrid].filter(Boolean).forEach(el => {
+                el.classList.remove('slot-drop-hover');
+            });
+        };
+
+        memButtons.forEach((btn, idx) => {
+            const memIdx = btn.dataset && btn.dataset.mem !== undefined ? parseInt(btn.dataset.mem, 10) : idx;
+            btn.setAttribute('draggable', 'true');
+
+            btn.addEventListener('click', () => {
+                this.loadMemoryToActivePart(memIdx);
+            });
+
+            btn.addEventListener('dragstart', (e) => {
+                if (!this.memories[memIdx]) {
+                    if (e.preventDefault) e.preventDefault();
+                    return;
+                }
+                const payload = { kind: 'memory', index: memIdx };
+                this._activeMemoryDrag = payload;
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = 'copy';
+                    e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+                }
+                btn.classList.add('is-dragging');
+            });
+
+            btn.addEventListener('dragend', () => {
+                this._activeMemoryDrag = null;
+                btn.classList.remove('is-dragging');
+                clearHover();
+            });
+
+            btn.addEventListener('dragover', (e) => {
+                const active = this._activeMemoryDrag;
+                if (!active) return;
+                const validMem = active.kind === 'memory' && active.index !== memIdx && !!this.memories[active.index];
+                const validPart = active.kind === 'part';
+                if (!validMem && !validPart) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                btn.classList.add('slot-drop-hover');
+            });
+
+            btn.addEventListener('dragleave', (e) => {
+                e.stopPropagation();
+                if (e.relatedTarget && typeof btn.contains === 'function' && btn.contains(e.relatedTarget)) return;
+                btn.classList.remove('slot-drop-hover');
+            });
+
+            btn.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                btn.classList.remove('slot-drop-hover');
+                const data = this._parseDragPayload(e);
+                if (!data) return;
+                if (data.kind === 'memory' && data.index !== memIdx) {
+                    this.copyMemory(data.index, memIdx);
+                } else if (data.kind === 'part' && (data.slot === 0 || data.slot === 1)) {
+                    this.storePartInMemory(data.slot, memIdx);
+                }
+                this._activeMemoryDrag = null;
+                clearHover();
+            });
+        });
+
+        partButtons.forEach((btn, idx) => {
+            const slot = btn.dataset && btn.dataset.slot !== undefined ? parseInt(btn.dataset.slot, 10) : idx;
+            btn.setAttribute('draggable', 'true');
+
+            btn.addEventListener('dragstart', (e) => {
+                const payload = { kind: 'part', slot };
+                this._activeMemoryDrag = payload;
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = 'copy';
+                    e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+                }
+                btn.classList.add('is-dragging');
+            });
+
+            btn.addEventListener('dragend', () => {
+                this._activeMemoryDrag = null;
+                btn.classList.remove('is-dragging');
+                clearHover();
+            });
+
+            btn.addEventListener('dragover', (e) => {
+                const active = this._activeMemoryDrag;
+                if (!active || active.kind !== 'part' || active.slot === slot || this.synthTimbralMode !== 'bitimbral') {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                btn.classList.add('slot-drop-hover');
+            });
+
+            btn.addEventListener('dragleave', (e) => {
+                e.stopPropagation();
+                if (e.relatedTarget && typeof btn.contains === 'function' && btn.contains(e.relatedTarget)) return;
+                btn.classList.remove('slot-drop-hover');
+            });
+
+            btn.addEventListener('drop', (e) => {
+                const data = this._parseDragPayload(e);
+                if (!data || data.kind !== 'part' || data.slot === slot || this.synthTimbralMode !== 'bitimbral') {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                btn.classList.remove('slot-drop-hover');
+                const srcTimbre = data.slot === 1 ? this.timbreB : this.timbreA;
+                const srcLabel = data.slot === 0 ? 'A' : 'B';
+                const dstLabel = slot === 0 ? 'A' : 'B';
+                this.replacePartWithRawData(slot, srcTimbre.rawData, `Copy Part ${srcLabel} → Part ${dstLabel}`);
+                this.showNotification(`Copied Part ${srcLabel} ("${srcTimbre.name}") to Part ${dstLabel}`, 'success');
+                this._activeMemoryDrag = null;
+                clearHover();
+            });
+        });
+
+        if (editorGrid) {
+            editorGrid.addEventListener('dragover', (e) => {
+                const active = this._activeMemoryDrag;
+                if (!active || active.kind !== 'part' || this.synthTimbralMode !== 'bitimbral' || this.activeSlot === active.slot) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                editorGrid.classList.add('slot-drop-hover');
+            });
+
+            editorGrid.addEventListener('dragleave', (e) => {
+                if (e.relatedTarget && typeof editorGrid.contains === 'function' && editorGrid.contains(e.relatedTarget)) return;
+                editorGrid.classList.remove('slot-drop-hover');
+            });
+
+            editorGrid.addEventListener('drop', (e) => {
+                const data = this._parseDragPayload(e);
+                if (!data || data.kind !== 'part' || this.synthTimbralMode !== 'bitimbral' || this.activeSlot === data.slot) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                editorGrid.classList.remove('slot-drop-hover');
+                const srcTimbre = data.slot === 1 ? this.timbreB : this.timbreA;
+                const srcLabel = data.slot === 0 ? 'A' : 'B';
+                const dstLabel = this.activeSlot === 0 ? 'A' : 'B';
+                this.replacePartWithRawData(this.activeSlot, srcTimbre.rawData, `Copy Part ${srcLabel} → Part ${dstLabel}`);
+                this.showNotification(`Copied Part ${srcLabel} ("${srcTimbre.name}") to Part ${dstLabel}`, 'success');
+                this._activeMemoryDrag = null;
+                clearHover();
+            });
+        }
+
+        if (appMain) {
+            appMain.addEventListener('dragover', (e) => {
+                const active = this._activeMemoryDrag;
+                if (!active || active.kind !== 'memory' || !this.memories[active.index]) {
+                    return;
+                }
+                e.preventDefault();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                appMain.classList.add('slot-drop-hover');
+            });
+
+            appMain.addEventListener('dragleave', (e) => {
+                if (e.relatedTarget && typeof appMain.contains === 'function' && appMain.contains(e.relatedTarget)) return;
+                appMain.classList.remove('slot-drop-hover');
+            });
+
+            appMain.addEventListener('drop', (e) => {
+                const data = this._parseDragPayload(e);
+                if (!data || data.kind !== 'memory' || !this.memories[data.index]) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                appMain.classList.remove('slot-drop-hover');
+                this.loadMemoryToActivePart(data.index);
+                this._activeMemoryDrag = null;
+                clearHover();
+            });
+        }
     }
 
     updateLiveSyncUI() {
@@ -2338,6 +2702,9 @@ class App {
         if (btnRedo) {
             btnRedo.onclick = () => this.redo();
         }
+
+        this.wireMemoryAndPartDragDrop();
+        this.updateMemoryUI();
 
         // Compare Button
         const btnCompare = document.getElementById('btn-prog-compare');
