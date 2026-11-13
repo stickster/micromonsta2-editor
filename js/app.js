@@ -267,6 +267,8 @@ class App {
         this.midi.on('hardware-responsiveness-changed', ({ responsive, previous, isRemote }) => {
             if (responsive === true && this.syncStatus === 'failed') {
                 this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
+            } else if (responsive === false && (this.syncStatus === 'synced' || this.syncStatus === 'streaming' || this.syncStatus === 'fetching')) {
+                this.updateSyncStatus('failed');
             }
             this.updateConnectionStatus();
             if (!isRemote && this.tabSync && this.tabSync.isLeader) {
@@ -371,6 +373,8 @@ class App {
             this._enableLiveSyncOnFetch = false;
             if (this.syncStatus === 'fetching') {
                 this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
+            } else if (this.syncStatus === 'synced' || this.syncStatus === 'streaming') {
+                this.updateSyncStatus('failed');
             }
 
             this.showNotification(`⚠️ MIDI Connection Lost: ${name} (${type}) disconnected. Reconnecting automatically when plugged back in...`, 'warning');

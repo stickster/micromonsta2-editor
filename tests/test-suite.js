@@ -3504,6 +3504,33 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    // Section 46: Sync Status Updates on Connection Failure Tests
+    // =========================================================================
+    logger('\n--- [46] Sync Status Updates on Connection Failure Tests ---');
+    try {
+        const failApp = new App();
+        const failMidi = failApp.midi;
+        failMidi.saveSettings = () => { };
+        failApp.showNotification = () => { };
+        failMidi.inPort = { id: 'in-1', name: 'MicroMonsta 2' };
+        failMidi.outPort = { id: 'out-1', name: 'MicroMonsta 2' };
+        failMidi.markHardwareResponsive(true);
+
+        // 1. Hardware becoming unresponsive transitions 'synced' -> 'failed'
+        failApp.updateSyncStatus('synced');
+        failMidi.markHardwareResponsive(false);
+        assertEqual(failApp.syncStatus, 'failed', 'Sync status changes from synced to failed when hardware becomes unresponsive');
+
+        // 2. connection-lost transitions 'synced' -> 'failed'
+        failApp.updateSyncStatus('synced');
+        failMidi.emit('connection-lost', { port: failMidi.outPort, type: 'output' });
+        assertEqual(failApp.syncStatus, 'failed', 'Sync status changes from synced to failed on connection-lost');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
