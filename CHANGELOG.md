@@ -5,6 +5,28 @@ All notable changes to the **MicroMonsta 2 Editor & Patch Librarian** will be do
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-11-13
+
+### Added
+- **Firmware v2.x Compatibility:** Automatic 176-byte SysEx parsing/serialization and NRPN/CC parameter translation for firmware v2.x hardware.
+- **Firmware v2.x Warnings:** Incompatibility detection for v3-only features (Chorder & Scaler, Matrix 11–12, etc.) and a clickable `FW v2.x` badge linking to the official updater.
+- **Editor:** `M1`–`M4` multi-memory slots for quick patch recall and comparison.
+- **Editor:** Drag-and-drop patch copying between `Part A`, `Part B`, memory slots, and the editor workspace.
+
+### Fixed
+- **UI:** Improved contrast and discernibility of Undo/Redo buttons.
+- **UI:** Removed redundant static FW badge next to the app title.
+
+### CI & Maintenance
+- Added a minimal test suite runner for general use.
+- Skipped automatic PR reviews for `main` to `release` PRs.
+- Removed redundant CI workflow.
+- Aligned git hooks with the `main`/`release` branch workflow.
+- Updated release rules to require annotated tags and individual item bullets in `CHANGELOG.md`.
+- Added `.gitignore` pattern for git worktrees.
+
+---
+
 ## [0.1.6] - 2026-11-13
 
 ### Added
