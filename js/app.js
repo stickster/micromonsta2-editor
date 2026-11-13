@@ -265,6 +265,9 @@ class App {
         });
 
         this.midi.on('hardware-responsiveness-changed', ({ responsive, previous, isRemote }) => {
+            if (responsive === true && this.syncStatus === 'failed') {
+                this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
+            }
             this.updateConnectionStatus();
             if (!isRemote && this.tabSync && this.tabSync.isLeader) {
                 this.tabSync.broadcast('HARDWARE_STATUS', { responsive });
@@ -378,6 +381,9 @@ class App {
         this.midi.on('connection-restored', ({ port, type }) => {
             const name = (port && port.name) ? port.name : 'MicroMonsta 2';
             this.showNotification(`✓ MIDI Connection Restored: ${name} (${type})`, 'success');
+            if (this.syncStatus === 'failed' && this.midi.inPort && this.midi.outPort) {
+                this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
+            }
             this.updateConnectionStatus();
             this.updateSettingsPortLists();
         });

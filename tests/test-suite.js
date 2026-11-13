@@ -3452,6 +3452,33 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    // Section 44: Sync Status Recovery on Connection Restored Tests
+    // =========================================================================
+    logger('\n--- [44] Sync Status Recovery on Connection Restored Tests ---');
+    try {
+        const recApp = new App();
+        const recMidi = recApp.midi;
+        recMidi.saveSettings = () => { };
+        recMidi.liveSync = false;
+        recApp.showNotification = () => { };
+        recMidi.inPort = { id: 'in-1', name: 'MicroMonsta 2' };
+        recMidi.outPort = { id: 'out-1', name: 'MicroMonsta 2' };
+
+        // 1. After sync failed, hardware becoming responsive clears 'failed' status
+        recApp.updateSyncStatus('failed');
+        recMidi.markHardwareResponsive(true);
+        assertEqual(recApp.syncStatus, 'modified', 'Sync failed clears to modified when hardware becomes responsive');
+
+        // 2. connection-restored with both ports clears 'failed' status
+        recApp.updateSyncStatus('failed');
+        recMidi.emit('connection-restored', { port: recMidi.inPort, type: 'input' });
+        assertEqual(recApp.syncStatus, 'modified', 'Sync failed clears on connection-restored when both ports exist');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

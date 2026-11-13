@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **UI:** Removed port names from the connection status indicator.
 - **MIDI:** Probed hardware after Ignore or Push to exit `Standby`.
 - **Editor:** Activated Live Sync only after Fetch or Push succeeds.
+- **Editor:** Cleared `Sync Failed` status when MIDI connection is restored.
 
 ### Documentation & Maintenance
 - Restored standard `## [Unreleased]` workflow in `CHANGELOG.md` and `.agents/rules/git-hygiene.md`.
