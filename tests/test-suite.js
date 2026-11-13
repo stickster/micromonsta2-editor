@@ -2829,6 +2829,169 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // ==========================================
+    // 39. Multi-Memory & Part Drag-and-Drop Tests
+    // ==========================================
+    logger('\n--- [39] Multi-Memory & Part Drag-and-Drop Tests ---');
+    try {
+        const memApp = new App();
+        memApp.showNotification = () => {};
+        memApp.memories = [null, null, null, null];
+
+        const makeEvent = (type, overrides = {}) => {
+            const store = overrides._store || {};
+            return {
+                type,
+                relatedTarget: overrides.relatedTarget || null,
+                preventDefaultCalled: false,
+                stopPropagationCalled: false,
+                preventDefault() { this.preventDefaultCalled = true; },
+                stopPropagation() { this.stopPropagationCalled = true; },
+                dataTransfer: {
+                    effectAllowed: '',
+                    dropEffect: '',
+                    setData(k, v) { store[k] = v; },
+                    getData(k) { return store[k] || ''; }
+                }
+            };
+        };
+
+        const memButtons = [0, 1, 2, 3].map(i => {
+            const el = document.createElement('button');
+            el.id = `btn-mem-${i}`;
+            el.dataset = { mem: String(i) };
+            return el;
+        });
+        const partA = document.createElement('button');
+        partA.id = 'btn-part-a';
+        partA.dataset = { slot: '0' };
+        const partB = document.createElement('button');
+        partB.id = 'btn-part-b';
+        partB.dataset = { slot: '1' };
+        const appMain = document.createElement('main');
+        appMain.className = 'app-main';
+        const editorGrid = document.createElement('div');
+        editorGrid.id = 'editor-grid';
+
+        memApp.wireMemoryAndPartDragDrop({
+            memButtons,
+            partButtons: [partA, partB],
+            appMain,
+            editorGrid
+        });
+
+        assertEqual(memApp.memories.length, 4, 'App initializes 4 memory slots');
+        assert(memButtons.every(b => b.attributes.get('draggable') === 'true'), 'All M1-M4 buttons are draggable');
+        assertEqual(partA.attributes.get('draggable'), 'true', 'Part A button is draggable');
+        assertEqual(partB.attributes.get('draggable'), 'true', 'Part B button is draggable');
+
+        // Dragging empty M1 should be prevented
+        const emptyDrag = makeEvent('dragstart');
+        memButtons[0].dispatchEvent(emptyDrag);
+        assert(emptyDrag.preventDefaultCalled, 'Empty memory button prevents dragstart');
+
+        // Store Part A into M1 via drag-and-drop
+        memApp.timbreA.name = 'MEM1_PAT';
+        memApp.timbreA.setValue('OSC1_SHAPE', 88);
+        const partToMemStore = {};
+        partA.dispatchEvent(makeEvent('dragstart', { _store: partToMemStore }));
+        memButtons[0].dispatchEvent(makeEvent('dragover', { _store: partToMemStore }));
+        assert(memButtons[0].classList.contains('slot-drop-hover'), 'Part A dragover highlights M1');
+        memButtons[0].dispatchEvent(makeEvent('drop', { _store: partToMemStore }));
+        assert(!memButtons[0].classList.contains('slot-drop-hover'), 'Drop clears slot-drop-hover on M1');
+        assert(memApp.memories[0] !== null, 'M1 is populated after Part A drop');
+        assertEqual(memApp.memories[0].name, 'MEM1_PAT', 'M1 retains Part A patch name');
+        assertEqual(memApp.memories[0].getValue('OSC1_SHAPE'), 88, 'M1 retains Part A OSC1_SHAPE');
+
+        // Copy M1 -> M2 via drag-and-drop
+        const memToMemStore = {};
+        memButtons[0].dispatchEvent(makeEvent('dragstart', { _store: memToMemStore }));
+        memButtons[1].dispatchEvent(makeEvent('dragover', { _store: memToMemStore }));
+        assert(memButtons[1].classList.contains('slot-drop-hover'), 'M1 dragover highlights M2');
+        memButtons[1].dispatchEvent(makeEvent('drop', { _store: memToMemStore }));
+        assertEqual(memApp.memories[1].name, 'MEM1_PAT', 'M1 -> M2 drop copies patch name');
+        assertEqual(memApp.memories[1].getValue('OSC1_SHAPE'), 88, 'M1 -> M2 drop copies OSC1_SHAPE');
+
+        // Modify Part A, then click M1 to overwrite Part A as 1 undoable step
+        memApp.timbreA.name = 'MODIFIED';
+        memApp.timbreA.setValue('OSC1_SHAPE', 15);
+        memApp.undoStack = [];
+        memApp.redoStack = [];
+        memButtons[0].dispatchEvent(makeEvent('click'));
+        assertEqual(memApp.timbreA.name, 'MEM1_PAT', 'Clicking M1 overwrites active Part name');
+        assertEqual(memApp.timbreA.getValue('OSC1_SHAPE'), 88, 'Clicking M1 overwrites active Part OSC1_SHAPE');
+        assertEqual(memApp.undoStack.length, 1, 'Clicking M1 creates exactly 1 undo step');
+
+        // Undo restores entire previous Part A state
+        memApp.undo();
+        assertEqual(memApp.timbreA.name, 'MODIFIED', 'Single Undo restores previous Part name');
+        assertEqual(memApp.timbreA.getValue('OSC1_SHAPE'), 15, 'Single Undo restores previous OSC1_SHAPE');
+
+        // Redo reapplies entire M1 state
+        memApp.redo();
+        assertEqual(memApp.timbreA.name, 'MEM1_PAT', 'Single Redo reapplies M1 Part name');
+        assertEqual(memApp.timbreA.getValue('OSC1_SHAPE'), 88, 'Single Redo reapplies M1 OSC1_SHAPE');
+
+        // Drag M2 -> app-main replaces active Part without warning dialog
+        memApp.timbreA.name = 'BEFORE_M';
+        memApp.timbreA.setValue('OSC1_SHAPE', 22);
+        const memToMainStore = {};
+        memButtons[1].dispatchEvent(makeEvent('dragstart', { _store: memToMainStore }));
+        appMain.dispatchEvent(makeEvent('dragover', { _store: memToMainStore }));
+        assert(appMain.classList.contains('slot-drop-hover'), 'M2 dragover highlights app-main');
+        appMain.dispatchEvent(makeEvent('drop', { _store: memToMainStore }));
+        assert(!appMain.classList.contains('slot-drop-hover'), 'Drop clears slot-drop-hover on app-main');
+        assertEqual(memApp.timbreA.name, 'MEM1_PAT', 'M2 -> app-main drop replaces active Part name');
+        assertEqual(memApp.timbreA.getValue('OSC1_SHAPE'), 88, 'M2 -> app-main drop replaces active Part OSC1_SHAPE');
+
+        // Monotimbral mode: Part A -> Part B and Part A -> editor-grid are deactivated
+        memApp.setTimbralMode('monotimbral');
+        memApp.timbreB.name = 'INIT_B';
+        const monoPartStore = {};
+        partA.dispatchEvent(makeEvent('dragstart', { _store: monoPartStore }));
+        partB.dispatchEvent(makeEvent('dragover', { _store: monoPartStore }));
+        assert(!partB.classList.contains('slot-drop-hover'), 'Monotimbral: Part B does not highlight on Part A dragover');
+        partB.dispatchEvent(makeEvent('drop', { _store: monoPartStore }));
+        assertEqual(memApp.timbreB.name, 'INIT_B', 'Monotimbral: Part A -> Part B drop does not overwrite Part B');
+        editorGrid.dispatchEvent(makeEvent('dragover', { _store: monoPartStore }));
+        assert(!editorGrid.classList.contains('slot-drop-hover'), 'Monotimbral: editor-grid does not highlight on Part A dragover');
+        partA.dispatchEvent(makeEvent('dragend'));
+
+        // Bitimbral mode: Part A -> Part B enabled; Part A -> editor-grid only enabled when Part B is active
+        memApp.setTimbralMode('bitimbral');
+        memApp.selectPart(0); // Part A active
+        const biPartStore = {};
+        partA.dispatchEvent(makeEvent('dragstart', { _store: biPartStore }));
+        editorGrid.dispatchEvent(makeEvent('dragover', { _store: biPartStore }));
+        assert(!editorGrid.classList.contains('slot-drop-hover'), 'Bitimbral (Part A active): editor-grid does not highlight for Part A drag');
+
+        partB.dispatchEvent(makeEvent('dragover', { _store: biPartStore }));
+        assert(partB.classList.contains('slot-drop-hover'), 'Bitimbral: Part B highlights on Part A dragover');
+        partB.dispatchEvent(makeEvent('drop', { _store: biPartStore }));
+        assertEqual(memApp.timbreB.name, 'MEM1_PAT', 'Bitimbral: Part A -> Part B drop copies Part A to Part B');
+        assertEqual(memApp.timbreB.getValue('OSC1_SHAPE'), 88, 'Bitimbral: Part A -> Part B drop copies OSC1_SHAPE');
+
+        // Now switch active Part to Part B, then drag Part A -> editor-grid
+        memApp.timbreB.name = 'OLD_B';
+        memApp.timbreB.setValue('OSC1_SHAPE', 33);
+        memApp.selectPart(1);
+        const biGridStore = {};
+        partA.dispatchEvent(makeEvent('dragstart', { _store: biGridStore }));
+        editorGrid.dispatchEvent(makeEvent('dragover', { _store: biGridStore }));
+        assert(editorGrid.classList.contains('slot-drop-hover'), 'Bitimbral (Part B active): editor-grid highlights on Part A dragover');
+        editorGrid.dispatchEvent(makeEvent('drop', { _store: biGridStore }));
+        assertEqual(memApp.timbreB.name, 'MEM1_PAT', 'Bitimbral (Part B active): Part A -> editor-grid replaces Part B name');
+        assertEqual(memApp.timbreB.getValue('OSC1_SHAPE'), 88, 'Bitimbral (Part B active): Part A -> editor-grid replaces Part B OSC1_SHAPE');
+
+        // Undo reverts Part B replacement in 1 step
+        memApp.undo();
+        assertEqual(memApp.timbreB.name, 'OLD_B', 'Undo reverts Part A -> editor-grid replacement in 1 step');
+        assertEqual(memApp.timbreB.getValue('OSC1_SHAPE'), 33, 'Undo restores Part B OSC1_SHAPE in 1 step');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

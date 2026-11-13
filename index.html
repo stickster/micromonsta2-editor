@@ -23,6 +23,16 @@
                 <button class="btn btn-sm btn-subtle" id="btn-prog-redo" title="Redo change (Ctrl+Y)"
                     disabled>↷</button>
             </div>
+            <div class="memory-group" id="memory-group" title="Patch Memories (M1-M4)">
+                <button class="btn btn-sm btn-subtle memory-btn" id="btn-mem-0" data-mem="0" draggable="true"
+                    title="Memory M1 (Empty)">M1</button>
+                <button class="btn btn-sm btn-subtle memory-btn" id="btn-mem-1" data-mem="1" draggable="true"
+                    title="Memory M2 (Empty)">M2</button>
+                <button class="btn btn-sm btn-subtle memory-btn" id="btn-mem-2" data-mem="2" draggable="true"
+                    title="Memory M3 (Empty)">M3</button>
+                <button class="btn btn-sm btn-subtle memory-btn" id="btn-mem-3" data-mem="3" draggable="true"
+                    title="Memory M4 (Empty)">M4</button>
+            </div>
         </div>
 
         <div class="header-center">
@@ -51,9 +61,9 @@
             <div class="program-bar">
                 <div class="program-name-group">
                     <div class="part-selector">
-                        <button class="part-btn part-a-btn active" id="btn-part-a" data-slot="0" onclick="window.app.selectPart(0)"
+                        <button class="part-btn part-a-btn active" id="btn-part-a" data-slot="0" draggable="true" onclick="window.app.selectPart(0)"
                             title="Edit Part A (Layer A)">Part A (12V)</button>
-                        <button class="part-btn part-b-btn" id="btn-part-b" data-slot="1" onclick="window.app.selectPart(1)"
+                        <button class="part-btn part-b-btn" id="btn-part-b" data-slot="1" draggable="true" onclick="window.app.selectPart(1)"
                             title="Edit Part B (Layer B)">Part B (6V)</button>
                     </div>
                     <input type="text" id="prog-name-input" class="input-name" maxlength="8" placeholder="Patch"
