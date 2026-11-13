@@ -3310,14 +3310,19 @@ async function runAllTests(logger = console.log) {
 
         let fetchCount = 0;
         let pushAllCount = 0;
+        let probeCount = 0;
         syncApp.fetchActiveProgram = () => { fetchCount++; };
         syncApp.pushAllPartsToHardware = () => { pushAllCount++; };
+        syncMidi.probeHardware = () => { probeCount++; return true; };
 
         // 1. promptReconnectSync uses unified dialog for ignore / fetch / push
+        syncMidi.inPort = { id: 'mm2-in', name: 'MicroMonsta 2' };
+        syncMidi.outPort = { id: 'mm2-out', name: 'MicroMonsta 2', send: () => { } };
         nextChoice = 'ignore';
         await syncApp.promptReconnectSync({ isReconnect: false, portName: 'MicroMonsta 2' });
         assertEqual(fetchCount, 0, 'Connection sync ignore does not fetch');
         assertEqual(pushAllCount, 0, 'Connection sync ignore does not push');
+        assertEqual(probeCount, 1, 'Connection sync ignore probes hardware to exit Standby');
         assertEqual(titleEl.textContent, '🔌 MicroMonsta 2 Connected', 'Initial connection title set');
         assertEqual(ignoreBtn.textContent, 'Ignore', 'Ignore button label is consistent');
 

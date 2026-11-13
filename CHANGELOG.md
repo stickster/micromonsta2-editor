@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **MIDI:** Probed hardware when selecting a new MIDI Input port.
 - **UI:** Removed port names from the connection status indicator.
+- **MIDI:** Probed hardware after Ignore or Push to exit `Standby`.
 
 ### Documentation & Maintenance
 - Restored standard `## [Unreleased]` workflow in `CHANGELOG.md` and `.agents/rules/git-hygiene.md`.

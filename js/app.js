@@ -3062,6 +3062,13 @@ class App {
         } else if (choice === 'push') {
             this.showNotification('Pushing patch settings from editor to MM2...', 'info');
             this.pushAllPartsToHardware();
+            if (this.midi && this.midi.inPort && this.midi.outPort) {
+                setTimeout(() => this.midi.probeHardware(2500), 200);
+            }
+        } else if (choice === 'ignore') {
+            if (this.midi && this.midi.inPort && this.midi.outPort) {
+                this.midi.probeHardware(2500);
+            }
         } else if (choice === null) {
             this.showNotification(isReconnect ? 'MicroMonsta 2 reconnected!' : 'MicroMonsta 2 connected!', 'success');
         }
