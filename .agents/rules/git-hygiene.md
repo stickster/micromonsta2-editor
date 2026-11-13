@@ -64,3 +64,4 @@ All commit messages MUST follow the [Conventional Commits](https://www.conventio
   2. Add entries to `CHANGELOG.md` summarizing all changes since the last version (moving items out of `[Unreleased]` into the new version heading with the release date).
   3. Commit the release changes on `main` (ensuring `node tests/cli-runner.js` passes).
   4. Merge the `main` branch into the `release` branch.
+  5. Create an annotated git tag matching the new version (`git tag -a v<APP_VERSION> -m "Release v<APP_VERSION>"`) on the release commit, push `main`, `release`, and the tag (`git push origin v<APP_VERSION>`), and switch back to `main`.
