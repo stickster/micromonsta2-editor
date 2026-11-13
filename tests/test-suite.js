@@ -12,8 +12,8 @@ if (typeof document === 'undefined') {
             const classes = new Set();
             this.classList = {
                 _classes: classes,
-                add: (c) => classes.add(c),
-                remove: (c) => classes.delete(c),
+                add: (...cs) => cs.forEach(c => classes.add(c)),
+                remove: (...cs) => cs.forEach(c => classes.delete(c)),
                 toggle: (c, force) => {
                     if (force !== undefined) {
                         if (force) classes.add(c);
@@ -109,11 +109,21 @@ if (typeof document === 'undefined') {
             }
             return null;
         }
+        contains(node) {
+            if (!node) return false;
+            if (node === this) return true;
+            for (const ch of this.children) {
+                if (ch === node || (typeof ch.contains === 'function' && ch.contains(node))) {
+                    return true;
+                }
+            }
+            return false;
+        }
         querySelectorAll(sel) {
             const res = [];
             for (const ch of this.children) {
                 if (sel.startsWith('[data-offset="') && ch.attributes.get('data-offset') === sel.slice(14, -2)) res.push(ch);
-                if (sel === '.key' && ch.classList.contains('key')) res.push(ch);
+                if (sel.startsWith('.') && ch.classList.contains(sel.slice(1))) res.push(ch);
                 if (sel === '[data-param]' && ch.hasAttribute('data-param')) res.push(ch);
                 if (ch.querySelectorAll) res.push(...ch.querySelectorAll(sel));
             }
@@ -2535,6 +2545,285 @@ async function runAllTests(logger = console.log) {
         document.registerMockElement('live-sync-dialog', null);
         leaderSync.destroy();
         followerSync.destroy();
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    // =========================================================================
+    // Section 38: Section Copy & Drag-and-Drop Regression Tests
+    // =========================================================================
+    logger('\n--- [38] Section Copy & Drag-and-Drop Regression Tests ---');
+    try {
+        // 1. copySection('mult', 1, 'mult', 2, ...) copies MULT_A1/MULT_B1 -> MULT_A2/MULT_B2 1:1
+        const multProg = new MM2Program();
+        multProg.setValue('MULT_A1', 12);
+        multProg.setValue('MULT_B1', 27);
+        multProg.setValue('MULT_A2', 3);
+        multProg.setValue('MULT_B2', 5);
+        const multCopied = copySection('mult', 1, 'mult', 2, multProg, () => {});
+        assertEqual(multCopied, true, 'copySection("mult", 1, "mult", 2) returns true');
+        assertEqual(multProg.getValue('MULT_A2'), 12, 'MULT_A2 copied 1:1 from MULT_A1');
+        assertEqual(multProg.getValue('MULT_B2'), 27, 'MULT_B2 copied 1:1 from MULT_B1');
+
+        // 2. copySection('env', ...) velocity sensitivity handling across Env 1, 2, and 3
+        const envProg = new MM2Program();
+        envProg.setValue('ENV1_ATK', 15);
+        envProg.setValue('ENV1_DCY', 42);
+        envProg.setValue('ENV1_SUS', 88);
+        envProg.setValue('ENV1_REL', 63);
+        envProg.setValue('ENV1_RESET', 1);
+        envProg.setValue('ENV1_VCA_VEL_SENS', 91);
+        envProg.setValue('ENV2_FLT_VEL_SENS', 10);
+
+        copySection('env', 1, 'env', 2, envProg, () => {});
+        assertEqual(envProg.getValue('ENV2_ATK'), 15, 'Env 1->2 copies ATK');
+        assertEqual(envProg.getValue('ENV2_RESET'), 1, 'Env 1->2 copies RESET');
+        assertEqual(envProg.getValue('ENV2_FLT_VEL_SENS'), 91, 'Env 1->2 copies velocity sensitivity');
+
+        copySection('env', 1, 'env', 3, envProg, () => {});
+        assertEqual(envProg.getValue('ENV3_ATK'), 15, 'Env 1->3 copies ATK');
+        assertEqual(envProg.getValue('ENV3_DCY'), 42, 'Env 1->3 copies DCY');
+        assertEqual(envProg.getValue('ENV3_SUS'), 88, 'Env 1->3 copies SUS');
+        assertEqual(envProg.getValue('ENV3_REL'), 63, 'Env 1->3 copies REL');
+        assertEqual(envProg.getValue('ENV3_RESET'), 1, 'Env 1->3 copies RESET');
+
+        envProg.setValue('ENV3_ATK', 5);
+        copySection('env', 3, 'env', 1, envProg, () => {});
+        assertEqual(envProg.getValue('ENV1_ATK'), 5, 'Env 3->1 copies ATK');
+        assertEqual(envProg.getValue('ENV1_VCA_VEL_SENS'), 91, 'Env 3->1 leaves ENV1_VCA_VEL_SENS untouched');
+
+        // 3. DOM Drag-and-Drop Simulation Tests
+        const dndApp = new App();
+        dndApp.showNotification = () => {};
+        const dndProg = dndApp.timbreA;
+        const makeDragEvent = (type, overrides = {}) => {
+            const store = overrides._store || {};
+            return {
+                type,
+                relatedTarget: overrides.relatedTarget || null,
+                preventDefaultCalled: false,
+                stopPropagationCalled: false,
+                preventDefault() { this.preventDefaultCalled = true; },
+                stopPropagation() { this.stopPropagationCalled = true; },
+                dataTransfer: {
+                    effectAllowed: '',
+                    dropEffect: '',
+                    setData(k, v) { store[k] = v; },
+                    getData(k) { return store[k] || ''; }
+                }
+            };
+        };
+
+        // 3a. Oscillator Tabs (createOscillatorPanel)
+        const oscCard = dndApp.createOscillatorPanel(() => dndProg, () => {});
+        const oscTabs = oscCard.querySelectorAll('.btn-osc-tab');
+        assertEqual(oscTabs.length, 3, 'Oscillator panel renders 3 tabs');
+        assert(oscTabs.every(t => t.attributes.get('draggable') === 'true'), 'All btn-osc-tab elements have draggable="true"');
+
+        dndProg.setValue('OSC1_SHAPE', 77);
+        dndProg.setValue('OSC2_SHAPE', 11);
+        const oscStore = {};
+        oscTabs[0].dispatchEvent(makeDragEvent('dragstart', { _store: oscStore }));
+        oscTabs[0].dispatchEvent(makeDragEvent('dragover', { _store: oscStore }));
+        assert(!oscTabs[0].classList.contains('tab-drop-hover'), 'Self dragover on Osc 1 tab does not add tab-drop-hover');
+        oscTabs[1].dispatchEvent(makeDragEvent('dragover', { _store: oscStore }));
+        assert(oscTabs[1].classList.contains('tab-drop-hover'), 'Valid dragover on Osc 2 tab adds tab-drop-hover');
+        // Child element dragleave (.tab-dot) should NOT remove hover class
+        const osc2Dot = oscTabs[1].querySelector('.tab-dot');
+        oscTabs[1].dispatchEvent(makeDragEvent('dragleave', { relatedTarget: osc2Dot }));
+        assert(oscTabs[1].classList.contains('tab-drop-hover'), 'dragleave to child .tab-dot preserves tab-drop-hover');
+        oscTabs[1].dispatchEvent(makeDragEvent('drop', { _store: oscStore }));
+        assert(!oscTabs[1].classList.contains('tab-drop-hover'), 'Drop on Osc 2 tab clears tab-drop-hover');
+        assertEqual(dndProg.getValue('OSC2_SHAPE'), 77, 'Dropping Osc 1 tab onto Osc 2 tab copies OSC1_SHAPE -> OSC2_SHAPE');
+        oscTabs[0].dispatchEvent(makeDragEvent('dragend'));
+
+        // Active synth-card-body as drop target when dragging non-active Osc 2 -> active Osc 1
+        const oscBody = oscCard.querySelector('.synth-card-body');
+        dndProg.setValue('OSC1_SHAPE', 12);
+        dndProg.setValue('OSC2_SHAPE', 99);
+        oscTabs[0].dispatchEvent(makeDragEvent('dragstart', { _store: oscStore }));
+        oscBody.dispatchEvent(makeDragEvent('dragover', { _store: oscStore }));
+        assert(!oscBody.classList.contains('slot-drop-hover'), 'Dragging active Osc 1 over synth-card-body does not add slot-drop-hover');
+        oscTabs[0].dispatchEvent(makeDragEvent('dragend'));
+        oscTabs[1].dispatchEvent(makeDragEvent('dragstart', { _store: oscStore }));
+        oscBody.dispatchEvent(makeDragEvent('dragover', { _store: oscStore }));
+        assert(oscBody.classList.contains('slot-drop-hover'), 'Dragging non-active Osc 2 over synth-card-body adds slot-drop-hover');
+        oscBody.dispatchEvent(makeDragEvent('drop', { _store: oscStore }));
+        assert(!oscBody.classList.contains('slot-drop-hover'), 'Drop on synth-card-body clears slot-drop-hover');
+        assertEqual(dndProg.getValue('OSC1_SHAPE'), 99, 'Dropping non-active Osc 2 onto synth-card-body copies OSC2_SHAPE -> OSC1_SHAPE');
+        oscTabs[1].dispatchEvent(makeDragEvent('dragend'));
+
+        // 3b. Envelope Tabs & ADSR Graph Cards (createEnvelopePanel)
+        const envCard = dndApp.createEnvelopePanel(() => dndProg, () => {});
+        const envTabs = envCard.querySelectorAll('.btn-env-tab');
+        const envGraphCards = envCard.querySelectorAll('.adsr-graph-card');
+        assertEqual(envTabs.length, 3, 'Envelope panel renders 3 tabs');
+        assertEqual(envGraphCards.length, 3, 'Envelope panel renders 3 ADSR graph cards');
+        assert(envTabs.every(t => t.attributes.get('draggable') === 'true'), 'All btn-env-tab elements have draggable="true"');
+        assert(envGraphCards.every(c => c.attributes.get('draggable') === 'true'), 'All adsr-graph-card elements have draggable="true"');
+
+        // Cross-type rejection: dragging Osc 1 over Env 2 tab must not highlight
+        oscTabs[0].dispatchEvent(makeDragEvent('dragstart', { _store: oscStore }));
+        envTabs[1].dispatchEvent(makeDragEvent('dragover', { _store: oscStore }));
+        assert(!envTabs[1].classList.contains('tab-drop-hover'), 'Cross-type dragover (osc -> env) does not add tab-drop-hover');
+        oscTabs[0].dispatchEvent(makeDragEvent('dragend'));
+
+        // Dragging Env 1 ADSR graph card onto Env 2 ADSR graph card
+        dndProg.setValue('ENV1_ATK', 55);
+        dndProg.setValue('ENV2_ATK', 9);
+        const envStore = {};
+        envGraphCards[0].dispatchEvent(makeDragEvent('dragstart', { _store: envStore }));
+        envGraphCards[1].dispatchEvent(makeDragEvent('dragover', { _store: envStore }));
+        assert(envGraphCards[1].classList.contains('slot-drop-hover'), 'Valid dragover on Env 2 graph card adds slot-drop-hover');
+        const env2Label = envGraphCards[1].querySelector('.adsr-graph-label');
+        envGraphCards[1].dispatchEvent(makeDragEvent('dragleave', { relatedTarget: env2Label }));
+        assert(envGraphCards[1].classList.contains('slot-drop-hover'), 'dragleave to child .adsr-graph-label preserves slot-drop-hover');
+        envGraphCards[1].dispatchEvent(makeDragEvent('drop', { _store: envStore }));
+        assert(!envGraphCards[1].classList.contains('slot-drop-hover'), 'Drop on Env 2 graph card clears slot-drop-hover');
+        assertEqual(dndProg.getValue('ENV2_ATK'), 55, 'Dropping Env 1 graph card onto Env 2 graph card copies ENV1_ATK -> ENV2_ATK');
+        envGraphCards[0].dispatchEvent(makeDragEvent('dragend'));
+
+        // Active env-pane-1 as drop target when dragging non-active Env 2 -> active Env 1
+        const envPane1 = envCard.querySelector('.env-pane-1');
+        dndProg.setValue('ENV1_ATK', 8);
+        dndProg.setValue('ENV2_ATK', 64);
+        envTabs[0].dispatchEvent(makeDragEvent('dragstart', { _store: envStore }));
+        envPane1.dispatchEvent(makeDragEvent('dragover', { _store: envStore }));
+        assert(!envPane1.classList.contains('slot-drop-hover'), 'Dragging active Env 1 over env-pane-1 does not add slot-drop-hover');
+        envTabs[0].dispatchEvent(makeDragEvent('dragend'));
+        envTabs[1].dispatchEvent(makeDragEvent('dragstart', { _store: envStore }));
+        envPane1.dispatchEvent(makeDragEvent('dragover', { _store: envStore }));
+        assert(envPane1.classList.contains('slot-drop-hover'), 'Dragging non-active Env 2 over env-pane-1 adds slot-drop-hover');
+        envPane1.dispatchEvent(makeDragEvent('drop', { _store: envStore }));
+        assert(!envPane1.classList.contains('slot-drop-hover'), 'Drop on env-pane-1 clears slot-drop-hover');
+        assertEqual(dndProg.getValue('ENV1_ATK'), 64, 'Dropping non-active Env 2 onto env-pane-1 copies ENV2_ATK -> ENV1_ATK');
+        envTabs[1].dispatchEvent(makeDragEvent('dragend'));
+
+        // 3c. LFOs, Mod Matrix, Multipliers & non-droppable Lag Generator via shared helpers
+        const wireTestSection = (type, count, badgeClass, boxClass) => {
+            const boxes = [];
+            const badges = [];
+            for (let idx = 1; idx <= count; idx++) {
+                const box = document.createElement('div');
+                box.className = boxClass;
+                const badge = document.createElement('div');
+                badge.className = badgeClass;
+                box.appendChild(badge);
+                dndApp.wireSectionDragSource(badge, type, idx, { containerEl: box });
+                dndApp.wireSectionDropTarget(box, type, idx, () => dndProg, () => {}, { hoverClass: 'slot-drop-hover' });
+                boxes.push(box);
+                badges.push(badge);
+            }
+            return { boxes, badges };
+        };
+
+        const lfoGroup = wireTestSection('lfo', 2, 'lfo-badge', 'lfo-sub-card');
+        const mtxGroup = wireTestSection('mtx', 2, 'matrix-slot-badge', 'matrix-slot-row');
+        const multGroup = wireTestSection('mult', 2, 'mult-badge', 'math-sub-panel');
+        const lagBox = document.createElement('div');
+        lagBox.className = 'math-sub-panel';
+
+        assert(lfoGroup.badges.every(b => b.attributes.get('draggable') === 'true'), 'lfo-badge elements have draggable="true"');
+        assert(mtxGroup.badges.every(b => b.attributes.get('draggable') === 'true'), 'matrix-slot-badge elements have draggable="true"');
+        assert(multGroup.badges.every(b => b.attributes.get('draggable') === 'true'), 'mult-badge elements have draggable="true"');
+
+        // Multiplier 1 -> Multiplier 2, and Lag Generator stays non-droppable
+        dndProg.setValue('MULT_A1', 19);
+        dndProg.setValue('MULT_B1', 31);
+        dndProg.setValue('MULT_A2', 0);
+        dndProg.setValue('MULT_B2', 0);
+        const multStore = {};
+        multGroup.badges[0].dispatchEvent(makeDragEvent('dragstart', { _store: multStore }));
+        lagBox.dispatchEvent(makeDragEvent('dragover', { _store: multStore }));
+        assert(!lagBox.classList.contains('slot-drop-hover'), 'Lag Generator does not highlight when dragging a Multiplier');
+        multGroup.boxes[1].dispatchEvent(makeDragEvent('dragover', { _store: multStore }));
+        assert(multGroup.boxes[1].classList.contains('slot-drop-hover'), 'Multiplier 2 highlights on Multiplier 1 dragover');
+        multGroup.boxes[1].dispatchEvent(makeDragEvent('drop', { _store: multStore }));
+        assert(!multGroup.boxes[1].classList.contains('slot-drop-hover'), 'Multiplier 2 clears slot-drop-hover on drop');
+        assertEqual(dndProg.getValue('MULT_A2'), 19, 'Multiplier drop copies MULT_A1 -> MULT_A2');
+        assertEqual(dndProg.getValue('MULT_B2'), 31, 'Multiplier drop copies MULT_B1 -> MULT_B2');
+        multGroup.badges[0].dispatchEvent(makeDragEvent('dragend'));
+
+        // LFO 1 -> LFO 2
+        dndProg.setValue('LFO1_WAVE', 8);
+        dndProg.setValue('LFO2_WAVE', 0);
+        const lfoStore = {};
+        lfoGroup.badges[0].dispatchEvent(makeDragEvent('dragstart', { _store: lfoStore }));
+        lfoGroup.boxes[1].dispatchEvent(makeDragEvent('dragover', { _store: lfoStore }));
+        assert(lfoGroup.boxes[1].classList.contains('slot-drop-hover'), 'LFO 2 highlights on LFO 1 dragover');
+        lfoGroup.boxes[1].dispatchEvent(makeDragEvent('drop', { _store: lfoStore }));
+        assertEqual(dndProg.getValue('LFO2_WAVE'), 8, 'LFO drop copies LFO1_WAVE -> LFO2_WAVE');
+        lfoGroup.badges[0].dispatchEvent(makeDragEvent('dragend'));
+
+        // Mod Matrix 1 -> Mod Matrix 2
+        dndProg.setValue('MTX1_SRC', 14);
+        dndProg.setValue('MTX2_SRC', 0);
+        const mtxStore = {};
+        mtxGroup.badges[0].dispatchEvent(makeDragEvent('dragstart', { _store: mtxStore }));
+        mtxGroup.boxes[1].dispatchEvent(makeDragEvent('dragover', { _store: mtxStore }));
+        assert(mtxGroup.boxes[1].classList.contains('slot-drop-hover'), 'Mod Matrix Slot 2 highlights on Slot 1 dragover');
+        mtxGroup.boxes[1].dispatchEvent(makeDragEvent('drop', { _store: mtxStore }));
+        assertEqual(dndProg.getValue('MTX2_SRC'), 14, 'Mod Matrix drop copies MTX1_SRC -> MTX2_SRC');
+        mtxGroup.badges[0].dispatchEvent(makeDragEvent('dragend'));
+
+        // 3d. Sequencer Steps (1-to-1 and 1-to-all "Copy to all" button)
+        const seqProg = new MM2Program();
+        const seqEl = createArpSequencer(() => seqProg, () => {});
+        const stepCols = seqEl.querySelectorAll('.step-col');
+        assertEqual(stepCols.length, 16, 'Sequencer renders 16 step-col elements');
+        assert(stepCols.every(c => c.attributes.get('draggable') === 'true'), 'All step-col elements have draggable="true"');
+
+        const toolsDiv = seqEl.querySelector('.sequencer-tools');
+        const copyAllBtn = seqEl.querySelector('#seq-copy-all-btn');
+        const clearBtn = seqEl.querySelector('#seq-clear-btn');
+        assert(copyAllBtn !== null, 'Sequencer renders #seq-copy-all-btn');
+        assertEqual(copyAllBtn.textContent, 'Copy to all', 'Copy to all button has exact label "Copy to all"');
+        assertEqual(toolsDiv.children[0], copyAllBtn, 'Copy to all button appears to the left of seq-clear-btn');
+        assertEqual(toolsDiv.children[1], clearBtn, 'seq-clear-btn immediately follows Copy to all button');
+        assert(!copyAllBtn.classList.contains('is-visible'), 'Copy to all button is hidden when not dragging');
+
+        // 1-to-1 mode: Step 1 -> Step 3
+        seqProg.setValue('ARP_PTN_STEP01', 6); // 3rd
+        seqProg.setValue('ARP_PTN_STEP_MOD01', 2); // High
+        seqProg.setValue('ARP_PTN_STEP03', 1); // Off
+        seqProg.setValue('ARP_PTN_STEP_MOD03', 0); // Low
+        const stepStore = {};
+        stepCols[0].dispatchEvent(makeDragEvent('dragstart', { _store: stepStore }));
+        assert(copyAllBtn.classList.contains('is-visible'), 'Copy to all button becomes visible on step-col dragstart');
+        stepCols[0].dispatchEvent(makeDragEvent('dragover', { _store: stepStore }));
+        assert(!stepCols[0].classList.contains('slot-drop-hover'), 'Self dragover on step-col 1 does not add slot-drop-hover');
+        stepCols[2].dispatchEvent(makeDragEvent('dragover', { _store: stepStore }));
+        assert(stepCols[2].classList.contains('slot-drop-hover'), 'Valid dragover on step-col 3 adds slot-drop-hover');
+        const step3Num = stepCols[2].querySelector('.step-number');
+        stepCols[2].dispatchEvent(makeDragEvent('dragleave', { relatedTarget: step3Num }));
+        assert(stepCols[2].classList.contains('slot-drop-hover'), 'dragleave to child .step-number preserves slot-drop-hover');
+        stepCols[2].dispatchEvent(makeDragEvent('drop', { _store: stepStore }));
+        assert(!stepCols[2].classList.contains('slot-drop-hover'), 'Drop on step-col 3 clears slot-drop-hover');
+        assert(!copyAllBtn.classList.contains('is-visible'), 'Copy to all button hides after 1-to-1 drop');
+        assertEqual(seqProg.getValue('ARP_PTN_STEP03'), 6, '1-to-1 drop copies ARP_PTN_STEP01 -> ARP_PTN_STEP03');
+        assertEqual(seqProg.getValue('ARP_PTN_STEP_MOD03'), 2, '1-to-1 drop copies ARP_PTN_STEP_MOD01 -> ARP_PTN_STEP_MOD03');
+
+        // 1-to-all mode: Step 2 -> Copy to all
+        seqProg.setValue('ARP_PTN_STEP02', 11); // Chord
+        seqProg.setValue('ARP_PTN_STEP_MOD02', 3); // Random
+        const allStore = {};
+        stepCols[1].dispatchEvent(makeDragEvent('dragstart', { _store: allStore }));
+        assert(copyAllBtn.classList.contains('is-visible'), 'Copy to all button visible during step 2 drag');
+        copyAllBtn.dispatchEvent(makeDragEvent('dragover', { _store: allStore }));
+        assert(copyAllBtn.classList.contains('slot-drop-hover'), 'Copy to all button highlights on dragover');
+        copyAllBtn.dispatchEvent(makeDragEvent('drop', { _store: allStore }));
+        assert(!copyAllBtn.classList.contains('is-visible'), 'Copy to all button hides after drop');
+        assert(!copyAllBtn.classList.contains('slot-drop-hover'), 'Copy to all button clears slot-drop-hover after drop');
+        let allStepsMatched = true;
+        for (let s = 1; s <= 16; s++) {
+            const pad = s.toString().padStart(2, '0');
+            if (seqProg.getValue(`ARP_PTN_STEP${pad}`) !== 11 || seqProg.getValue(`ARP_PTN_STEP_MOD${pad}`) !== 3) {
+                allStepsMatched = false;
+                break;
+            }
+        }
+        assert(allStepsMatched, '1-to-all drop copies step 2 mode and mod to all 16 steps');
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;

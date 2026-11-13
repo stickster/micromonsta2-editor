@@ -873,6 +873,12 @@ main.app-main {
     border-color: rgba(0, 210, 255, 0.3);
 }
 
+.btn-env-tab.tab-drop-hover {
+    background: var(--accent-amber);
+    color: #000;
+    outline: 2px dashed #fff;
+}
+
 .adsr-graphs-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -900,6 +906,18 @@ main.app-main {
     border-color: var(--accent-orange);
     background: rgba(255, 159, 67, 0.05);
     box-shadow: 0 0 8px rgba(255, 159, 67, 0.2);
+}
+
+.adsr-graph-card.slot-drop-hover {
+    border-color: var(--accent-cyan);
+    background: rgba(0, 210, 255, 0.08);
+}
+
+.osc-unified-card .synth-card-body.slot-drop-hover,
+.env-pane.slot-drop-hover {
+    outline: 1px dashed var(--accent-cyan);
+    background: rgba(0, 210, 255, 0.08);
+    border-radius: 6px;
 }
 
 .adsr-graph-label {
@@ -1464,6 +1482,25 @@ main.app-main {
     text-transform: uppercase;
 }
 
+.seq-copy-all-btn {
+    display: none;
+    background: rgba(255, 159, 67, 0.16);
+    border: 1px solid var(--accent-orange);
+    color: var(--accent-orange);
+    font-weight: 700;
+    margin-right: 4px;
+}
+
+.seq-copy-all-btn.is-visible {
+    display: inline-flex;
+}
+
+.seq-copy-all-btn.slot-drop-hover {
+    background: var(--accent-orange);
+    color: #000;
+    outline: 2px dashed #fff;
+}
+
 .steps-grid {
     display: grid;
     grid-template-columns: repeat(16, minmax(0, 1fr));
@@ -1480,13 +1517,22 @@ main.app-main {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    transition: opacity 0.15s ease;
+    cursor: grab;
+    opacity: 1;
+    transition: opacity 0.15s ease, filter 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
+.step-col:active {
+    cursor: grabbing;
+}
 
-.step-col {
-    opacity: 1;
-    transition: opacity 0.15s ease, filter 0.15s ease;
+.step-col.is-dragging {
+    opacity: 0.5;
+}
+
+.step-col.slot-drop-hover {
+    border-color: var(--accent-cyan);
+    background: rgba(0, 210, 255, 0.08);
 }
 
 .step-col.step-disabled {
@@ -2500,6 +2546,11 @@ footer.audition-footer {
     gap: 8px;
 }
 
+.math-sub-panel.slot-drop-hover {
+    border-color: var(--accent-cyan);
+    background: rgba(0, 210, 255, 0.08);
+}
+
 .mult-badge {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -2509,8 +2560,13 @@ footer.audition-footer {
     border: 1px solid rgba(0, 210, 255, 0.3);
     border-radius: 4px;
     padding: 2px 6px;
+    cursor: grab;
     user-select: none;
     align-self: flex-start;
+}
+
+.mult-badge:active {
+    cursor: grabbing;
 }
 
 .math-mult-stack {
