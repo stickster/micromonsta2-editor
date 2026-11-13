@@ -2233,6 +2233,12 @@ footer.audition-footer {
     box-shadow: 0 0 8px rgba(238, 82, 83, 0.4);
 }
 
+.sync-badge.offline {
+    background: rgba(149, 165, 166, 0.15);
+    color: var(--text-secondary);
+    border-color: rgba(149, 165, 166, 0.35);
+}
+
 .undo-redo-group {
     display: flex;
     gap: 3px;

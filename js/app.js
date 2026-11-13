@@ -59,7 +59,7 @@ class App {
         this.soloState = { osc1: false, osc2: false, osc3: false, noise: false };
         this.muteState = { osc1: false, osc2: false, osc3: false, noise: false };
         this.savedMixerLevels = null;
-        this.syncStatus = 'synced'; // 'synced' | 'modified' | 'streaming' | 'fetching'
+        this.syncStatus = 'offline'; // 'synced' | 'modified' | 'streaming' | 'fetching' | 'failed' | 'offline'
         this.modeProbeTimeoutMs = 1500; // How long to wait for a Part B reply before assuming monotimbral
         this._modeProbe = null;
         this._pendingProbe = null;
@@ -99,7 +99,7 @@ class App {
         this.updateMidiPermissionUI();
         this.updateTimbralModeUI();
         this.updateActivePartIndicator();
-        this.updateSyncStatus('synced');
+        this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
         this.updateUndoRedoUI();
         this.updateLiveSyncUI();
         this.updateFirmwareUI();
@@ -226,7 +226,7 @@ class App {
             }
             this.refreshEditorControls();
             this.updateActivePartIndicator();
-            this.updateSyncStatus('synced');
+            this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
             this.showNotification(`Loaded MM2 hardware Patch ${slot === 1 ? 'B' : 'A'} ("${program.name}")`, 'success');
             if (this._enableLiveSyncOnFetch) {
                 this._enableLiveSyncOnFetch = false;
@@ -360,7 +360,7 @@ class App {
                     }
 
                     this.refreshVisualizerFor(paramKey);
-                    this.updateSyncStatus('synced');
+                    this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
                 }
             }
         });
@@ -395,7 +395,7 @@ class App {
             const name = (port && port.name) ? port.name : 'MicroMonsta 2';
             this.showNotification(`✓ MIDI Connection Restored: ${name} (${type})`, 'success');
             if (this.syncStatus === 'failed' && this.midi.inPort && this.midi.outPort) {
-                this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
+                this.updateSyncStatus(this.midi.liveSync && this.isConnectionGood ? 'synced' : 'modified');
             }
             this.updateConnectionStatus();
             this.updateSettingsPortLists();
@@ -417,6 +417,9 @@ class App {
 
     updateConnectionStatus() {
         this.updateLiveSyncUI();
+        if (!this.isConnectionGood && (this.syncStatus === 'synced' || this.syncStatus === 'streaming')) {
+            this.updateSyncStatus(this.midi && this.midi.hardwareResponsive === false ? 'failed' : 'offline');
+        }
 
         const dot = document.getElementById('midi-status-dot');
         const text = document.getElementById('midi-status-text');
@@ -693,7 +696,7 @@ class App {
             this.updateSyncStatus('streaming');
             clearTimeout(this._syncStreamTimeout);
             this._syncStreamTimeout = setTimeout(() => {
-                this.updateSyncStatus('synced');
+                this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
             }, 500);
         } else {
             this.updateSyncStatus('modified');
@@ -1332,6 +1335,9 @@ class App {
     }
 
     updateSyncStatus(status) {
+        if ((status === 'synced' || status === 'streaming') && !this.isConnectionGood) {
+            status = (this.midi && this.midi.hardwareResponsive === false) ? 'failed' : 'offline';
+        }
         this.syncStatus = status;
         if (typeof document === 'undefined') return;
         const badge = document.getElementById('editor-sync-badge');
@@ -1343,7 +1349,7 @@ class App {
                 badge.textContent = this.midi.liveSync ? 'Live Synced' : 'Synced with MM2';
                 badge.title = this.midi.liveSync
                     ? 'Live Parameter Sync active (all tweaks stream immediately via NRPN)'
-                    : 'Sound matches hardware state or loaded SysEx file';
+                    : 'Sound matches hardware state';
                 break;
             case 'streaming':
                 badge.textContent = 'Streaming NRPN...';
@@ -1360,6 +1366,10 @@ class App {
             case 'failed':
                 badge.textContent = 'Sync Failed (Offline)';
                 badge.title = 'Hardware did not respond to SysEx dump request. Check cables and channel settings.';
+                break;
+            case 'offline':
+                badge.textContent = 'Not Synced (Offline)';
+                badge.title = 'Not connected to MicroMonsta 2 hardware';
                 break;
         }
     }
@@ -2775,7 +2785,7 @@ class App {
                     } else if (choice === null) {
                         // Fallback if dialog.showModal not supported
                         this._setLiveSyncState(true);
-                        this.updateSyncStatus('synced');
+                        this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
                     } else {
                         this._setLiveSyncState(false, { broadcast: false });
                     }
@@ -2888,7 +2898,7 @@ class App {
                     this.undoStack = [];
                     this.redoStack = [];
                     this.updateUndoRedoUI();
-                    this.updateSyncStatus('synced');
+                    this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
                     this.refreshEditorControls();
                     if (this.tabSync) {
                         this.tabSync.broadcast('PATCH_LOADED', {
@@ -2997,7 +3007,7 @@ class App {
             this.undoStack = [];
             this.redoStack = [];
             this.updateUndoRedoUI();
-            this.updateSyncStatus('synced');
+            this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
             return true;
         } catch (err) {
             this.updateSyncStatus('failed');
@@ -3122,7 +3132,7 @@ class App {
                     }
                 }, 100);
             }
-            this.updateSyncStatus('synced');
+            this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
             this.showNotification('Successfully pushed settings to MicroMonsta 2!', 'success');
         } catch (err) {
             this.showNotification('Failed to push settings: ' + err.message, 'error');
@@ -3803,7 +3813,7 @@ class App {
             this.undoStack = [];
             this.redoStack = [];
             this.updateUndoRedoUI();
-            this.updateSyncStatus('synced');
+            this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
             this.refreshEditorControls();
         }
     }
@@ -3876,7 +3886,7 @@ class App {
         this.undoStack = [];
         this.redoStack = [];
         this.updateUndoRedoUI();
-        this.updateSyncStatus('synced');
+        this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
         this.refreshEditorControls();
         this.updateActivePartIndicator();
         this.updateConnectionStatus();

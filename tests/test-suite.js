@@ -859,9 +859,13 @@ async function runAllTests(logger = console.log) {
         // 3. App Live Sync & Fetch status transitions
         const app = new App();
         let sentSysEx = null;
+        app.midi.inPort = { id: 'in-1', name: 'MicroMonsta 2' };
         app.midi.outPort = {
+            id: 'out-1',
+            name: 'MicroMonsta 2',
             send: (buf) => { sentSysEx = Array.from(buf); }
         };
+        app.midi.hardwareResponsive = true;
         app.midi.liveSync = true;
         app.updateSyncStatus('synced');
         assertEqual(app.syncStatus, 'synced', 'Initial status is synced');
@@ -3159,7 +3163,9 @@ async function runAllTests(logger = console.log) {
 
         // 2. App dialog confirm / cancel / v2 incompatibility note
         let sentCount = 0;
+        pushMidi.inPort = { id: 'mm2-in', name: 'MicroMonsta 2' };
         pushMidi.outPort = { id: 'mm2-out', name: 'MicroMonsta 2', send: () => { sentCount++; } };
+        pushMidi.hardwareResponsive = true;
         pushApp.activeSlot = 0;
         pushApp.activeTimbre.name = 'PAD_TEST';
         pushApp.updateSyncStatus('modified');
@@ -3643,6 +3649,68 @@ async function runAllTests(logger = console.log) {
 
         document.registerMockElement('settings-midi-in', null);
         document.registerMockElement('settings-midi-out', null);
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    // =========================================================================
+    // Section 49: Non-Connected Sync Status Invariant Tests
+    // =========================================================================
+    logger('\n--- [49] Non-Connected Sync Status Invariant Tests ---');
+    try {
+        const mockBadge = { className: 'sync-badge synced', textContent: 'Synced', title: '' };
+        document.registerMockElement('editor-sync-badge', mockBadge);
+
+        const offApp = new App();
+        const offMidi = offApp.midi;
+        offMidi.saveSettings = () => { };
+        offMidi.liveSync = false;
+        offApp.showNotification = () => { };
+
+        // 1. Fresh App starts offline (not synced)
+        assertEqual(offApp.syncStatus, 'offline', 'Fresh App starts with syncStatus offline');
+
+        // 2. Calling updateSyncStatus('synced') or ('streaming') while Disconnected forces 'offline'
+        offApp.updateSyncStatus('synced');
+        assertEqual(offApp.syncStatus, 'offline', 'Disconnected: updateSyncStatus(synced) resolves to offline');
+        assertEqual(mockBadge.className, 'sync-badge offline', 'Disconnected: badge class is sync-badge offline');
+        assertEqual(mockBadge.textContent, 'Not Synced (Offline)', 'Disconnected: badge text is Not Synced (Offline)');
+
+        offApp.updateSyncStatus('streaming');
+        assertEqual(offApp.syncStatus, 'offline', 'Disconnected: updateSyncStatus(streaming) resolves to offline');
+
+        // 3. Partial (outPort only) cannot be synced
+        offMidi.outPort = { id: 'out-1', name: 'USB Out' };
+        offApp.updateSyncStatus('synced');
+        assertEqual(offApp.syncStatus, 'offline', 'Partial: cannot be synced');
+
+        // 4. Standby (both ports, hardwareResponsive === null) cannot be synced
+        offMidi.inPort = { id: 'in-1', name: 'USB In' };
+        offMidi.hardwareResponsive = null;
+        offApp.updateSyncStatus('synced');
+        assertEqual(offApp.syncStatus, 'offline', 'Standby: cannot be synced');
+
+        // 5. No Response (hardwareResponsive === false) resolves to failed
+        offMidi.hardwareResponsive = false;
+        offApp.updateSyncStatus('synced');
+        assertEqual(offApp.syncStatus, 'failed', 'No Response: updateSyncStatus(synced) resolves to failed');
+        assertEqual(mockBadge.textContent, 'Sync Failed (Offline)', 'No Response: badge text is Sync Failed (Offline)');
+
+        // 6. Connected allows synced, then losing connection via state-change clears synced -> offline
+        offMidi.hardwareResponsive = true;
+        offApp.updateSyncStatus('synced');
+        assertEqual(offApp.syncStatus, 'synced', 'Connected: updateSyncStatus(synced) succeeds');
+        assertEqual(mockBadge.textContent, 'Synced with MM2', 'Connected: badge text is Synced with MM2');
+
+        offMidi.inPort = null;
+        offMidi.hardwareResponsive = null;
+        offMidi.emit('state-change');
+        assertEqual(offApp.syncStatus, 'offline', 'Losing port via state-change clears synced to offline');
+        assertEqual(mockBadge.className, 'sync-badge offline', 'Losing port updates badge class to sync-badge offline');
+        assertEqual(mockBadge.textContent, 'Not Synced (Offline)', 'Losing port updates badge text to Not Synced (Offline)');
+
+        document.registerMockElement('editor-sync-badge', null);
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;
