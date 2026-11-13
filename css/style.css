@@ -437,9 +437,9 @@ main.app-main {
 }
 
 .btn-subtle {
-    background: transparent;
-    border-color: var(--border-color);
-    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--border-highlight);
+    color: var(--text-primary);
 }
 
 /* Editor Grid & Rack Mount Layout */
@@ -2338,6 +2338,28 @@ footer.audition-footer {
     color: var(--text-primary);
     border-color: var(--border-highlight);
     background: var(--bg-card);
+}
+
+.btn-sm-badge:disabled,
+.btn-sm-badge[disabled] {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.undo-redo-group .btn-sm-badge {
+    width: 24px;
+    height: 24px;
+    font-size: 14px;
+    color: var(--text-primary);
+    border-color: var(--border-highlight);
+}
+
+.undo-redo-group .btn-sm-badge:disabled,
+.undo-redo-group .btn-sm-badge[disabled] {
+    opacity: 1;
+    color: var(--text-muted);
+    border-color: var(--border-color);
 }
 
 .btn-mute.active {
