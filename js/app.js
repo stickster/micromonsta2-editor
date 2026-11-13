@@ -67,6 +67,7 @@ class App {
         this._hadBothPortsConnected = false;
         this._isPromptingSync = false;
         this._enableLiveSyncOnFetch = false;
+        this._pendingPortTest = null;
         this._paramControlMap = new Map();
 
         this.bindEvents();
@@ -288,6 +289,13 @@ class App {
         });
 
         this.midi.on('probe-end', ({ success }) => {
+            if (this._pendingPortTest) {
+                const { type, name } = this._pendingPortTest;
+                this._pendingPortTest = null;
+                if (success) {
+                    this.showNotification(`MIDI ${type} "${name}" connected and verified.`, 'success');
+                }
+            }
             if (this.tabSync && this.tabSync.isLeader) {
                 this.tabSync.broadcast('HARDWARE_PROBE_END', { success });
             }
@@ -371,6 +379,7 @@ class App {
             this._pendingProbe = null;
             this._modeProbe = null;
             this._enableLiveSyncOnFetch = false;
+            this._pendingPortTest = null;
             if (this.syncStatus === 'fetching') {
                 this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
             } else if (this.syncStatus === 'synced' || this.syncStatus === 'streaming') {
@@ -3614,6 +3623,25 @@ class App {
         modal.classList.add('open');
     }
 
+    _handlePortSelection(type, portId) {
+        const isInput = type === 'Input';
+        const prevPort = isInput ? this.midi.inPort : this.midi.outPort;
+        const prevPortId = prevPort ? prevPort.id : '';
+
+        if (isInput) {
+            this.midi.setInputPort(portId);
+        } else {
+            this.midi.setOutputPort(portId);
+        }
+
+        const nextPort = isInput ? this.midi.inPort : this.midi.outPort;
+        const otherPort = isInput ? this.midi.outPort : this.midi.inPort;
+        if (nextPort && nextPort.id !== prevPortId && otherPort) {
+            this._pendingPortTest = { type, name: nextPort.name };
+            this.midi.probeHardware(2500);
+        }
+    }
+
     buildSettingsUI() {
         const selIn = document.getElementById('settings-midi-in');
         const selOut = document.getElementById('settings-midi-out');
@@ -3652,23 +3680,10 @@ class App {
         }
 
         if (selIn) {
-            selIn.onchange = () => {
-                const prevPortId = this.midi.inPort ? this.midi.inPort.id : '';
-                this.midi.setInputPort(selIn.value);
-                if (this.midi.inPort && this.midi.inPort.id !== prevPortId && this.midi.outPort) {
-                    this.showNotification(`Testing MIDI Input "${this.midi.inPort.name}"...`, 'info');
-                    this.midi.probeHardware(2500);
-                }
-            };
+            selIn.onchange = () => this._handlePortSelection('Input', selIn.value);
         }
         if (selOut) {
-            selOut.onchange = () => {
-                const prevPortId = this.midi.outPort ? this.midi.outPort.id : '';
-                this.midi.setOutputPort(selOut.value);
-                if (this.midi.outPort && this.midi.outPort.id !== prevPortId && this.midi.inPort) {
-                    this.midi.probeHardware(2500);
-                }
-            };
+            selOut.onchange = () => this._handlePortSelection('Output', selOut.value);
         }
         if (selChan) {
             selChan.value = this.midi.baseChannel;

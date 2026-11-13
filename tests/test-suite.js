@@ -3588,6 +3588,66 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    // Section 48: MIDI I/O Port Change Outcome Notification Tests
+    // =========================================================================
+    logger('\n--- [48] MIDI I/O Port Change Outcome Notification Tests ---');
+    try {
+        const ioApp = new App();
+        const ioMidi = ioApp.midi;
+        ioMidi.saveSettings = () => { };
+        const ioNotifications = [];
+        ioApp.showNotification = (msg, type) => { ioNotifications.push({ msg, type }); };
+
+        const in1 = { id: 'in-1', name: 'USB In 1', state: 'connected', addEventListener: () => { }, removeEventListener: () => { } };
+        const in2 = { id: 'in-2', name: 'USB In 2', state: 'connected', addEventListener: () => { }, removeEventListener: () => { } };
+        const out1 = { id: 'out-1', name: 'USB Out 1', state: 'connected', send: () => { } };
+        const out2 = { id: 'out-2', name: 'USB Out 2', state: 'connected', send: () => { } };
+
+        ioMidi.midiAccess = {
+            inputs: new Map([['in-1', in1], ['in-2', in2]]),
+            outputs: new Map([['out-1', out1], ['out-2', out2]])
+        };
+        ioMidi.setInputPort('in-1');
+        ioMidi.setOutputPort('out-1');
+        ioMidi.probeHardware = () => true;
+
+        const selIn = document.createElement('select');
+        selIn.id = 'settings-midi-in';
+        const selOut = document.createElement('select');
+        selOut.id = 'settings-midi-out';
+        document.registerMockElement('settings-midi-in', selIn);
+        document.registerMockElement('settings-midi-out', selOut);
+
+        ioApp.buildSettingsUI();
+
+        // 1. Changing Input port does not show an attempt popup, shows success on probe-end
+        ioNotifications.length = 0;
+        selIn.value = 'in-2';
+        selIn.onchange();
+        assertEqual(ioNotifications.length, 0, 'Changing MIDI Input port does not show attempt popup');
+        ioMidi.emit('probe-end', { success: true });
+        assertEqual(ioNotifications.length, 1, 'Successful probe shows one notification');
+        assertEqual(ioNotifications[0].type, 'success', 'Successful Input port probe shows success popup');
+        assert(ioNotifications[0].msg.includes('USB In 2'), 'Success popup names the Input port');
+
+        // 2. Changing Output port does not show an attempt popup, shows warning on hardware-timeout
+        ioNotifications.length = 0;
+        selOut.value = 'out-2';
+        selOut.onchange();
+        assertEqual(ioNotifications.length, 0, 'Changing MIDI Output port does not show attempt popup');
+        ioMidi.emit('hardware-timeout', { inPort: in2, outPort: out2 });
+        ioMidi.emit('probe-end', { success: false });
+        assertEqual(ioNotifications.length, 1, 'Failed Output port probe shows one failure notification');
+        assertEqual(ioNotifications[0].type, 'warning', 'Failed Output port probe shows warning popup');
+
+        document.registerMockElement('settings-midi-in', null);
+        document.registerMockElement('settings-midi-out', null);
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

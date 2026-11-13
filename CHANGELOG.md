@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Editor:** Showed fetch notifications on outcome rather than attempt.
 - **Editor:** Updated `Synced` status to `Sync Failed` on connection loss.
 - **MIDI:** Reset responsiveness before port changes and probed Output port selection.
+- **MIDI:** Showed port-change notifications on probe outcome rather than attempt.
 
 ### Documentation & Maintenance
 - Restored standard `## [Unreleased]` workflow in `CHANGELOG.md` and `.agents/rules/git-hygiene.md`.
