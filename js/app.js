@@ -1382,7 +1382,6 @@ class App {
         }, 3000);
 
         this.midi.fetchProgram(slot);
-        this.showNotification(`Fetching Part ${slot === 0 ? 'A' : 'B'} from MicroMonsta 2...`, 'info');
     }
 
     /**
@@ -3070,7 +3069,6 @@ class App {
         });
 
         if (choice === 'fetch') {
-            this.showNotification('Fetching Part A and Part B from MM2...', 'info');
             this.fetchActiveProgram(0, { probe: 'load' });
         } else if (choice === 'push') {
             this.showNotification('Pushing patch settings from editor to MM2...', 'info');

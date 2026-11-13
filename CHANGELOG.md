@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MIDI:** Probed hardware after Ignore or Push to exit `Standby`.
 - **Editor:** Activated Live Sync only after Fetch or Push succeeds.
 - **Editor:** Cleared `Sync Failed` status when MIDI connection is restored.
+- **Editor:** Showed fetch notifications on outcome rather than attempt.
 
 ### Documentation & Maintenance
 - Restored standard `## [Unreleased]` workflow in `CHANGELOG.md` and `.agents/rules/git-hygiene.md`.

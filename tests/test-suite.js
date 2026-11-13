@@ -3479,6 +3479,31 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    // Section 45: Fetch Notification Outcome Tests
+    // =========================================================================
+    logger('\n--- [45] Fetch Notification Outcome Tests ---');
+    try {
+        const fetchApp = new App();
+        const fetchMidi = fetchApp.midi;
+        fetchMidi.saveSettings = () => { };
+        fetchMidi.outPort = { id: 'out-1', name: 'MicroMonsta 2', send: () => { } };
+        const notifications = [];
+        fetchApp.showNotification = (msg, type) => { notifications.push({ msg, type }); };
+
+        // 1. Calling fetchActiveProgram does not emit an attempt popup
+        fetchApp.fetchActiveProgram(0, { probe: false });
+        assertEqual(notifications.length, 0, 'fetchActiveProgram does not show attempt popup');
+
+        // 2. Receiving program-received emits a success popup
+        fetchMidi.emit('program-received', { program: new MM2Program(), slot: 0, isProbe: false });
+        assertEqual(notifications.length, 1, 'program-received emits one notification');
+        assertEqual(notifications[0].type, 'success', 'program-received notification is success');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
