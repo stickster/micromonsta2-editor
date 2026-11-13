@@ -3630,7 +3630,14 @@ class App {
         }
 
         if (selIn) {
-            selIn.onchange = () => this.midi.setInputPort(selIn.value);
+            selIn.onchange = () => {
+                const prevPortId = this.midi.inPort ? this.midi.inPort.id : '';
+                this.midi.setInputPort(selIn.value);
+                if (this.midi.inPort && this.midi.inPort.id !== prevPortId && this.midi.outPort) {
+                    this.showNotification(`Testing MIDI Input "${this.midi.inPort.name}"...`, 'info');
+                    this.midi.probeHardware(2500);
+                }
+            };
         }
         if (selOut) {
             selOut.onchange = () => this.midi.setOutputPort(selOut.value);

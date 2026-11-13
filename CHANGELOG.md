@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MIDI:** Prompted to fetch, push, or ignore on every hardware connection.
 - **UI:** Unified connection sync dialogs into a shared `#sync-action-dialog`.
 
+### Fixed
+- **MIDI:** Probed hardware when selecting a new MIDI Input port.
+
 ### Documentation & Maintenance
 - Restored standard `## [Unreleased]` workflow in `CHANGELOG.md` and `.agents/rules/git-hygiene.md`.
 

@@ -3380,6 +3380,63 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    // Section 43: MIDI Input Port Selection Verification Tests
+    // =========================================================================
+    logger('\n--- [43] MIDI Input Port Selection Verification Tests ---');
+    try {
+        const inApp = new App();
+        const inMidi = inApp.midi;
+        inMidi.saveSettings = () => { };
+        inApp.showNotification = () => { };
+
+        const portIn1 = { id: 'in-1', name: 'Port In 1', state: 'connected', addEventListener: () => { }, removeEventListener: () => { } };
+        const portIn2 = { id: 'in-2', name: 'Port In 2', state: 'connected', addEventListener: () => { }, removeEventListener: () => { } };
+        const portOut = { id: 'out-1', name: 'Port Out 1', state: 'connected', send: () => { } };
+
+        inMidi.midiAccess = {
+            inputs: new Map([['in-1', portIn1], ['in-2', portIn2]]),
+            outputs: new Map([['out-1', portOut]])
+        };
+        inMidi.outPort = portOut;
+
+        let probeCount = 0;
+        inMidi.probeHardware = () => { probeCount++; return true; };
+
+        const selIn = document.createElement('select');
+        selIn.id = 'settings-midi-in';
+        document.registerMockElement('settings-midi-in', selIn);
+
+        inApp.buildSettingsUI();
+
+        // 1. Selecting a new MIDI Input port probes hardware to verify it works
+        selIn.value = 'in-1';
+        selIn.onchange();
+        assertEqual(inMidi.inPort && inMidi.inPort.id, 'in-1', 'inPort updated to in-1');
+        assertEqual(probeCount, 1, 'Selecting new MIDI Input port triggers probeHardware');
+
+        // 2. Selecting the same port again does not trigger a redundant probe
+        selIn.onchange();
+        assertEqual(probeCount, 1, 'Re-selecting same MIDI Input port does not trigger redundant probe');
+
+        // 3. Switching to a different MIDI Input port triggers a new probe
+        selIn.value = 'in-2';
+        selIn.onchange();
+        assertEqual(inMidi.inPort && inMidi.inPort.id, 'in-2', 'inPort updated to in-2');
+        assertEqual(probeCount, 2, 'Switching to a different MIDI Input port triggers probeHardware');
+
+        // 4. Clearing the MIDI Input port does not trigger a probe
+        selIn.value = '';
+        selIn.onchange();
+        assertEqual(inMidi.inPort, null, 'inPort cleared to null');
+        assertEqual(probeCount, 2, 'Clearing MIDI Input port does not trigger probeHardware');
+
+        document.registerMockElement('settings-midi-in', null);
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
