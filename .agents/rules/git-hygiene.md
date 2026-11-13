@@ -63,7 +63,7 @@ All commit messages MUST follow the [Conventional Commits](https://www.conventio
   - Feature & fix branches: Always create separate branches for fixes and features before merging into `main`.
 - **Cutting a Release**: When the user requests a release (e.g., `"bump version and release"`, `"cut release"`, `"prep release"`, `"release new version"`):
   1. Bump `APP_VERSION` in `js/version.js` (`.githooks/pre-commit` syncs `package.json` automatically).
-  2. Add entries to `CHANGELOG.md` summarizing all changes since the last version (moving items out of `[Unreleased]` into the new version heading with the release date).
+  2. Add entries to `CHANGELOG.md` listing all changes since the last version as individual, concise item bullets (not long multi-item summaries), moving any items out of `[Unreleased]` into the new version heading with the release date.
   3. Commit the release changes on `main` (ensuring `node tests/cli-runner.js` passes).
   4. Merge the `main` branch into the `release` branch.
   5. Create an annotated git tag matching the new version (`git tag -a v<APP_VERSION> -m "Release v<APP_VERSION>"`) on the release commit, push `main`, `release`, and the tag (`git push origin v<APP_VERSION>`), and switch back to `main`.
