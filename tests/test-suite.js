@@ -3311,7 +3311,7 @@ async function runAllTests(logger = console.log) {
         let fetchCount = 0;
         let pushAllCount = 0;
         let probeCount = 0;
-        syncApp.fetchActiveProgram = () => { fetchCount++; };
+        syncApp.fetchActiveProgram = () => { fetchCount++; syncApp.updateSyncStatus('fetching'); };
         syncApp.pushAllPartsToHardware = () => { pushAllCount++; };
         syncMidi.probeHardware = () => { probeCount++; return true; };
 
@@ -3355,12 +3355,22 @@ async function runAllTests(logger = console.log) {
         await chkLiveSync.onchange();
         assertEqual(syncMidi.liveSync, false, 'Live sync ignore keeps liveSync disabled');
 
-        // Fetch enables liveSync and fetches
+        // Fetch defers enabling liveSync until program-received completes
         nextChoice = 'fetch';
         chkLiveSync.checked = true;
         await chkLiveSync.onchange();
-        assertEqual(syncMidi.liveSync, true, 'Live sync fetch enables liveSync');
+        assertEqual(syncMidi.liveSync, false, 'Live sync fetch does not enable liveSync before fetch completes');
         assertEqual(fetchCount, 2, 'Live sync fetch triggers fetchActiveProgram');
+        syncMidi.emit('program-received', { program: new MM2Program(), slot: 0, isProbe: false });
+        assertEqual(syncMidi.liveSync, true, 'Live sync fetch enables liveSync after program-received');
+
+        // Failed fetch (connection-lost) keeps liveSync disabled
+        syncApp._setLiveSyncState(false);
+        nextChoice = 'fetch';
+        chkLiveSync.checked = true;
+        await chkLiveSync.onchange();
+        syncMidi.emit('connection-lost', { port: syncMidi.outPort, type: 'output' });
+        assertEqual(syncMidi.liveSync, false, 'Live sync stays disabled when fetch fails');
 
         // Disable and test Push
         syncApp._setLiveSyncState(false);

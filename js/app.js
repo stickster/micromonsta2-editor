@@ -66,6 +66,7 @@ class App {
         this._hasDetectedMM2Once = false;
         this._hadBothPortsConnected = false;
         this._isPromptingSync = false;
+        this._enableLiveSyncOnFetch = false;
         this._paramControlMap = new Map();
 
         this.bindEvents();
@@ -226,6 +227,11 @@ class App {
             this.updateActivePartIndicator();
             this.updateSyncStatus('synced');
             this.showNotification(`Loaded MM2 hardware Patch ${slot === 1 ? 'B' : 'A'} ("${program.name}")`, 'success');
+            if (this._enableLiveSyncOnFetch) {
+                this._enableLiveSyncOnFetch = false;
+                this._setLiveSyncState(true);
+                this.showNotification('Live Sync ENABLED (Fetched MM2 hardware settings)', 'success');
+            }
 
             // Part A was just read: probe Part B to find out whether the MM2 has one or two active layers
             if (slot === 0 && this._pendingProbe) {
@@ -359,6 +365,7 @@ class App {
             }
             this._pendingProbe = null;
             this._modeProbe = null;
+            this._enableLiveSyncOnFetch = false;
             if (this.syncStatus === 'fetching') {
                 this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
             }
@@ -1359,6 +1366,7 @@ class App {
                 this.midi.lastFetchedSlot = 0;
             }
             if (this.syncStatus === 'fetching') {
+                this._enableLiveSyncOnFetch = false;
                 this.updateSyncStatus('failed');
                 this.midi.markHardwareResponsive(false);
                 this.updateConnectionStatus();
@@ -2737,9 +2745,8 @@ class App {
                         pushDetail: 'Transmits this editor\'s current patch settings into the active hardware layer (A or B).'
                     });
                     if (choice === 'fetch') {
-                        this._setLiveSyncState(true);
+                        this._enableLiveSyncOnFetch = true;
                         this.fetchActiveProgram();
-                        this.showNotification('Live Sync ENABLED (Fetched MM2 hardware settings)', 'success');
                     } else if (choice === 'push') {
                         if (this._sendActiveProgramToHardware()) {
                             this._setLiveSyncState(true);
