@@ -240,6 +240,35 @@ header.app-header {
     gap: 12px;
 }
 
+.fw-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card-inner);
+    color: var(--text-muted);
+    user-select: none;
+}
+
+.fw-badge.fw-v2 {
+    border-color: #f59e0b;
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.12);
+}
+
+.fw-badge.fw-v3 {
+    border-color: rgba(56, 189, 248, 0.45);
+    color: #7dd3fc;
+}
+
+.fw-v3-only-hidden {
+    display: none !important;
+}
+
 .midi-status-box {
     display: flex;
     align-items: center;

@@ -26,6 +26,8 @@ class MidiManager {
         this.isLeader = true; // Elected leader runs periodic hardware polling
         this.lastFetchedSlot = 0; // Tracks most recently requested slot (0=Part A, 1=Part B)
         this.hardwareResponsive = null; // null: unknown/untested, true: responding, false: unresponsive
+        this.detectedFirmwareVersion = null; // null: undetected (defaults to 3), 2: v2.x, 3: v3.x
+        this.detectedFwId = null; // Raw OFFSET_FW byte from hardware SysEx dump
         this._probeTimeout = null;
         this._isProbing = false;
         this._periodicCheckInterval = null;
@@ -170,6 +172,9 @@ class MidiManager {
         }
         this.saveSettings();
         this.emit('port-change', { type: 'input', port: this.inPort });
+        if (!this.inPort) {
+            this.setDetectedFirmware(null, null);
+        }
         this.resetHardwareResponsiveness();
         this.checkMM2Detection();
     }
@@ -187,8 +192,30 @@ class MidiManager {
         }
         this.saveSettings();
         this.emit('port-change', { type: 'output', port: this.outPort });
+        if (!this.outPort) {
+            this.setDetectedFirmware(null, null);
+        }
         this.resetHardwareResponsiveness();
         this.checkMM2Detection();
+    }
+
+    get effectiveFirmwareVersion() {
+        return this.detectedFirmwareVersion || 3;
+    }
+
+    setDetectedFirmware(version, fwId = null) {
+        const nextVer = (version === 2 || version === 3) ? version : null;
+        const nextFwId = (nextVer !== null && fwId !== null && fwId !== undefined) ? (fwId & 0x7F) : null;
+        const changed = this.detectedFirmwareVersion !== nextVer || this.detectedFwId !== nextFwId;
+        this.detectedFirmwareVersion = nextVer;
+        this.detectedFwId = nextFwId;
+        if (changed) {
+            this.emit('firmware-detected', {
+                version: this.effectiveFirmwareVersion,
+                detectedVersion: this.detectedFirmwareVersion,
+                fwId: this.detectedFwId
+            });
+        }
     }
 
     isMM2Port(port) {
@@ -329,12 +356,14 @@ class MidiManager {
                 } catch (e) {}
                 this.inPort = null;
                 this.hardwareResponsive = null;
+                this.setDetectedFirmware(null, null);
                 this.emit('connection-lost', { port, type: 'input' });
                 this.emit('port-change', { type: 'input', port: null });
             }
             if (port.type === 'output' && this.outPort && (this.outPort.id === port.id || this.outPort === port)) {
                 this.outPort = null;
                 this.hardwareResponsive = null;
+                this.setDetectedFirmware(null, null);
                 this.emit('connection-lost', { port, type: 'output' });
                 this.emit('port-change', { type: 'output', port: null });
             }
@@ -461,6 +490,7 @@ class MidiManager {
     handleCompleteSysEx(data) {
         const version = validateSysEx(data);
         if (version > 0) {
+            this.setDetectedFirmware(version, data[OFFSET_FW]);
             const normalized = normalizeProgram(data);
             const program = new MM2Program(normalized);
             const targetCmd = normalized[6]; // 1: A, 2: B, 3: Active (every hardware reply uses 0x03)
@@ -489,7 +519,9 @@ class MidiManager {
             return;
         }
         const nrpnNum = (this._incomingNrpnMsb << 7) | this._incomingNrpnLsb;
-        const paramDef = NRPN_TO_PARAM.get(nrpnNum);
+        const paramDef = this.effectiveFirmwareVersion === 2
+            ? V2_NRPN_TO_PARAM.get(nrpnNum)
+            : NRPN_TO_PARAM.get(nrpnNum);
         if (!paramDef) return;
 
         let val;
@@ -550,10 +582,27 @@ class MidiManager {
         if (!this.outPort) return false;
         if (!this.liveSync && !force) return false;
 
-        const def = PARAM_MAP.get(paramKey);
+        const ch = this.targetChannel;
+        const fwVer = this.effectiveFirmwareVersion;
+
+        if (fwVer === 2) {
+            if (paramKey === 'MORPH_KNOB') {
+                const msg = new Uint8Array([MIDI_STATUS_CC | (ch & 0x0F), 70, value & 127]);
+                try {
+                    this.outPort.send(msg);
+                    this.emit('midi-out', { type: 'cc', key: paramKey, value, cc: 70, bytes: msg });
+                    return true;
+                } catch (err) {
+                    console.error('Failed to send MIDI CC:', err);
+                    return false;
+                }
+            }
+            if (V3_ONLY_PARAMS.has(paramKey)) return false;
+        }
+
+        const def = fwVer === 2 ? V2_NRPN_MAP.get(paramKey) : PARAM_MAP.get(paramKey);
         if (!def || def.nrpn === undefined) return false;
 
-        const ch = this.targetChannel;
         const msg = def.long
             ? MidiManager.buildNRPN14(ch, def.nrpn, value)
             : MidiManager.buildNRPN7(ch, def.nrpn, value);
@@ -578,7 +627,11 @@ class MidiManager {
             throw new Error('No MIDI Output port selected');
         }
 
-        const sysex = program.toSysEx(targetSlot);
+        const sysex = program.toSysEx(
+            targetSlot,
+            this.effectiveFirmwareVersion,
+            this.detectedFwId ?? SYSEX_V2_FW_ID
+        );
         try {
             this.outPort.send(sysex);
             console.log(`[MIDI Out] Sent Program "${program.name}" to Slot ${targetSlot}`);

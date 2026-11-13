@@ -370,8 +370,8 @@ class PatchLibrarian {
     /**
      * Export a single program as .syx file download
      */
-    exportProgramFile(program, fileName = null) {
-        const sysex = program.toSysEx();
+    exportProgramFile(program, fileName = null, targetVersion = 3, fwId = SYSEX_V2_FW_ID) {
+        const sysex = program.toSysEx(-1, targetVersion, fwId);
         const cleanName = (program.name || 'patch').replace(/[^a-zA-Z0-9_-]/g, '_');
         const finalName = fileName || `${cleanName}.MM2-PGM.syx`;
         PatchLibrarian.downloadBlob(sysex, finalName);
@@ -380,10 +380,10 @@ class PatchLibrarian {
     /**
      * Export an entire bank as a .syx file download
      */
-    exportBankFile(bankIndex, fileName = null) {
+    exportBankFile(bankIndex, fileName = null, targetVersion = 3, fwId = SYSEX_V2_FW_ID) {
         const bank = this.banks[bankIndex];
         if (!bank || bank.length === 0) return false;
-        const sysex = bank.toBankSysEx();
+        const sysex = bank.toBankSysEx(targetVersion, fwId);
         const cleanName = (bank.name || `bank_${bankIndex + 1}`).replace(/[^a-zA-Z0-9_-]/g, '_');
         const finalName = fileName || `${cleanName}.MM2-BANK.syx`;
         PatchLibrarian.downloadBlob(sysex, finalName);

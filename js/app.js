@@ -23,7 +23,7 @@ class App {
         if (typeof window !== 'undefined') {
             try {
                 this.synthTimbralMode = window.localStorage.getItem('mm2_timbral_mode') || 'monotimbral';
-            } catch (e) {}
+            } catch (e) { }
         }
 
         // Live Editing, History & Compare State
@@ -39,7 +39,7 @@ class App {
                         savedUndoLevels = parsed;
                     }
                 }
-            } catch (e) {}
+            } catch (e) { }
         }
         this.maxHistory = savedUndoLevels;
         this._activeUndoGroup = null;
@@ -99,6 +99,7 @@ class App {
         this.updateSyncStatus('synced');
         this.updateUndoRedoUI();
         this.updateLiveSyncUI();
+        this.updateFirmwareUI();
         this.setupKeyboardShortcuts();
 
         // On load, always start in Editor mode
@@ -156,6 +157,16 @@ class App {
                 // Do not blindly fire an immediate fetch which can time out while the hardware USB/firmware boots up.
                 // Prompt user whether to pull from hardware or push from editor.
                 this.promptReconnectSync();
+            }
+        });
+
+        // Firmware Detection Listener
+        this.midi.on('firmware-detected', ({ version, detectedVersion }) => {
+            this.updateFirmwareUI();
+            if (detectedVersion === 2) {
+                this.showNotification('Firmware v2.x detected: adapted UI, SysEx (176-byte), and v2 NRPNs.', 'info');
+            } else if (detectedVersion === 3 && version === 3) {
+                this.updateFirmwareUI();
             }
         });
 
@@ -485,7 +496,7 @@ class App {
         if (typeof window !== 'undefined') {
             try {
                 window.localStorage.setItem('mm2_timbral_mode', mode);
-            } catch (e) {}
+            } catch (e) { }
         }
         if (mode === 'monotimbral' && this.activeSlot !== 0) {
             this.selectPart(0);
@@ -578,7 +589,7 @@ class App {
         if (typeof window !== 'undefined' && window.localStorage) {
             try {
                 window.localStorage.setItem('mm2_undo_levels', this.maxHistory.toString());
-            } catch (e) {}
+            } catch (e) { }
         }
         this.updateUndoRedoUI();
         const input = typeof document !== 'undefined' ? document.getElementById('settings-undo-levels') : null;
@@ -880,7 +891,7 @@ class App {
                     this.memories[i] = new MM2Program(new Uint8Array(entry));
                 }
             }
-        } catch (e) {}
+        } catch (e) { }
     }
 
     saveMemories() {
@@ -888,7 +899,7 @@ class App {
         try {
             const payload = this.memories.map(m => (m ? Array.from(m.rawData) : null));
             window.localStorage.setItem('mm2_memories', JSON.stringify(payload));
-        } catch (e) {}
+        } catch (e) { }
     }
 
     updateMemoryUI() {
@@ -949,7 +960,7 @@ class App {
         try {
             const raw = e && e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
             if (raw) return JSON.parse(raw);
-        } catch (err) {}
+        } catch (err) { }
         return this._activeMemoryDrag;
     }
 
@@ -1152,6 +1163,48 @@ class App {
                 clearHover();
             });
         }
+    }
+
+    updateFirmwareUI() {
+        if (typeof document === 'undefined') return;
+        const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+        const isV2 = fwVer === 2;
+
+        const badge = document.getElementById('fw-version-badge');
+        if (badge) {
+            badge.textContent = isV2 ? 'FW v2.x' : 'FW v3.x';
+            badge.classList.toggle('fw-v2', isV2);
+            badge.classList.toggle('fw-v3', !isV2);
+            badge.title = isV2
+                ? 'MicroMonsta 2 firmware v2.x detected (176-byte SysEx & v2 NRPNs)'
+                : 'MicroMonsta 2 firmware v3.x mode (216-byte SysEx & v3 NRPNs)';
+        }
+
+        document.querySelectorAll('[data-fw-v3-only="true"]').forEach(el => {
+            el.classList.toggle('fw-v3-only-hidden', isV2);
+            if (el.tagName === 'SELECT' || el.tagName === 'INPUT' || el.tagName === 'BUTTON') {
+                el.disabled = isV2;
+            } else {
+                el.querySelectorAll('select, input, button').forEach(ctrl => {
+                    ctrl.disabled = isV2;
+                });
+            }
+        });
+
+        const toggleOptions = (selector, excludedSet) => {
+            document.querySelectorAll(selector).forEach(selectEl => {
+                for (const opt of selectEl.options) {
+                    const idx = Number(opt.value);
+                    const hide = isV2 && excludedSet.has(idx);
+                    opt.hidden = hide;
+                    opt.disabled = hide;
+                }
+            });
+        };
+
+        toggleOptions('[data-param$="_SRC"] select, [data-param="LAG_SRC1"] select, [data-param^="MULT_"] select', V3_ONLY_SOURCE_INDICES);
+        toggleOptions('[data-param$="_DST"] select', V3_ONLY_DEST_INDICES);
+        toggleOptions('[data-param^="LAY_POT"] select, [data-param^="LAY_ENC"] select', V3_ONLY_ASSIGN_INDICES);
     }
 
     updateLiveSyncUI() {
@@ -1457,7 +1510,7 @@ class App {
                     this._activeDragSection = null;
                     if (onDrop) onDrop(data.sectionIndex, dstIdx);
                 }
-            } catch (err) {}
+            } catch (err) { }
         });
     }
 
@@ -2061,7 +2114,9 @@ class App {
         const fltSelects = document.createElement('div');
         fltSelects.className = 'select-row';
         fltSelects.appendChild(createSelect('FILTER_ALGO', timbre, onChange));
-        fltSelects.appendChild(createSelect('FILTER_CHARACTER', timbre, onChange));
+        const fltCharWrap = createSelect('FILTER_CHARACTER', timbre, onChange);
+        fltCharWrap.setAttribute('data-fw-v3-only', 'true');
+        fltSelects.appendChild(fltCharWrap);
         flt.body.appendChild(fltSelects);
 
         // Filter Knobs — Row 1: Cutoff, Resonance, Tracking, Envelope
@@ -2290,6 +2345,9 @@ class App {
             const slotRow = document.createElement('div');
             slotRow.className = 'matrix-slot-row';
             slotRow.setAttribute('data-slot', m);
+            if (m >= 11) {
+                slotRow.setAttribute('data-fw-v3-only', 'true');
+            }
 
             // Drag badge
             const badge = document.createElement('div');
@@ -2502,6 +2560,7 @@ class App {
         arpControlsRow.appendChild(createKnob('ARP_PTN_LENGTH', timbre, onChange));
         const arpModStack = document.createElement('div');
         arpModStack.className = 'arp-compact-stack';
+        arpModStack.setAttribute('data-fw-v3-only', 'true');
         arpModStack.appendChild(createSelect('ARP_STEPSEQ_DEST', timbre, onChange));
         arpModStack.appendChild(createSelect('ARP_STEPSEQ_POLARITY', timbre, onChange));
         arpControlsRow.appendChild(arpModStack);
@@ -2514,6 +2573,7 @@ class App {
 
         // FW v3 Scaler & Chorder Engine
         const chordSec = makeSection('FW v3 Chorder & Scaler Engine');
+        chordSec.card.setAttribute('data-fw-v3-only', 'true');
 
         // Top Row: Single horizontal flex row
         const chordTopRow = document.createElement('div');
@@ -2755,7 +2815,9 @@ class App {
         const btnSave = document.getElementById('btn-prog-save');
         if (btnSave) {
             btnSave.onclick = () => {
-                this.librarian.exportProgramFile(this.activeTimbre);
+                const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+                const fwId = this.midi && this.midi.detectedFwId !== null ? this.midi.detectedFwId : SYSEX_V2_FW_ID;
+                this.librarian.exportProgramFile(this.activeTimbre, null, fwVer, fwId);
             };
         }
 
@@ -2768,12 +2830,12 @@ class App {
                 if (!file) return;
                 try {
                     const buf = new Uint8Array(await file.arrayBuffer());
-                    const msgs = extractSysExMessages(buf);
+                    const msgs = extractSysExMessagesWithMeta(buf);
                     if (msgs.length === 0) {
                         alert('No valid MicroMonsta 2 SysEx program dump found in this file.');
                         return;
                     }
-                    this.activeTimbre.rawData = msgs[0];
+                    this.activeTimbre.rawData = msgs[0].bytes;
                     if (this.activeSlot === 0) {
                         this.originalSnapshotA = this.activeTimbre.clone();
                     } else {
@@ -2791,7 +2853,16 @@ class App {
                             source: 'file'
                         });
                     }
-                    this.showNotification(`Loaded program "${this.activeTimbre.name}" from ${file.name}`, 'success');
+                    const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+                    const incompat = fwVer === 2 ? detectV3Incompatibilities(this.activeTimbre) : { hasIncompatibilities: false, reasons: [] };
+                    if (incompat.hasIncompatibilities) {
+                        this.showNotification(
+                            `Loaded v3 patch "${this.activeTimbre.name}" in v2.x mode. Omitted on v2.x send/export: ${incompat.reasons.join(', ')}`,
+                            'warning'
+                        );
+                    } else {
+                        this.showNotification(`Loaded program "${this.activeTimbre.name}" from ${file.name}`, 'success');
+                    }
                 } catch (err) {
                     alert('Error loading SysEx file: ' + err.message);
                 }
@@ -2857,10 +2928,15 @@ class App {
 
         const slotLabel = this.activeSlot === 0 ? 'Layer A' : 'Layer B';
         const progName = this.activeTimbre.name;
+        const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+        const incompat = fwVer === 2 ? detectV3Incompatibilities(this.activeTimbre) : { hasIncompatibilities: false, reasons: [] };
+        const incompatNote = incompat.hasIncompatibilities
+            ? `\n\nNote: Firmware v2.x will omit v3-only features: ${incompat.reasons.join(', ')}.`
+            : '';
 
         // Strict Confirmation Gate as required by user!
         const confirmed = confirm(
-            `Hardware Write Confirmation:\n\nSend program "${progName}" to MicroMonsta 2 (${slotLabel}) via port "${this.midi.outPort.name}"?\n\nThis will update the active edit buffer on the synth.`
+            `Hardware Write Confirmation:\n\nSend program "${progName}" to MicroMonsta 2 (${slotLabel}) via port "${this.midi.outPort.name}"?\n\nThis will update the active edit buffer on the synth.${incompatNote}`
         );
 
         if (!confirmed) return;
@@ -2992,7 +3068,9 @@ class App {
         const btnExportBank = document.getElementById('btn-export-bank');
         if (btnExportBank) {
             btnExportBank.onclick = () => {
-                if (!this.librarian.exportBankFile(this.librarian.activeBankIndex)) {
+                const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+                const fwId = this.midi && this.midi.detectedFwId !== null ? this.midi.detectedFwId : SYSEX_V2_FW_ID;
+                if (!this.librarian.exportBankFile(this.librarian.activeBankIndex, null, fwVer, fwId)) {
                     alert('Current bank is empty.');
                 }
             };
@@ -3008,11 +3086,28 @@ class App {
                 if (!file) return;
                 try {
                     const buf = new Uint8Array(await file.arrayBuffer());
-                    const count = this.librarian.activeBank.loadFromSysEx(buf);
+                    const msgs = extractSysExMessagesWithMeta(buf);
+                    const count = msgs.length;
                     if (count > 0) {
+                        const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+                        let incompatCount = 0;
+                        for (const item of msgs) {
+                            const prog = new MM2Program(item.bytes);
+                            this.librarian.activeBank.addProgram(prog);
+                            if (fwVer === 2 && item.version === 3 && detectV3Incompatibilities(prog).hasIncompatibilities) {
+                                incompatCount++;
+                            }
+                        }
                         await this.librarian.saveAllBanks();
                         this.renderLibrarianBank();
-                        this.showNotification(`Imported ${count} patches into "${this.librarian.activeBank.name}"`, 'success');
+                        if (incompatCount > 0) {
+                            this.showNotification(
+                                `Imported ${count} patches into "${this.librarian.activeBank.name}". Warning: ${incompatCount} patch(es) use v3-only features that will be omitted in v2.x mode.`,
+                                'warning'
+                            );
+                        } else {
+                            this.showNotification(`Imported ${count} patches into "${this.librarian.activeBank.name}"`, 'success');
+                        }
                     } else {
                         alert('No valid MicroMonsta 2 SysEx patches found in file.');
                     }
@@ -3186,7 +3281,7 @@ class App {
                         this.librarian.reorderBanks(data.fromIndex, idx);
                         this.renderLibrarianBank();
                     }
-                } catch (err) {}
+                } catch (err) { }
             };
 
             bankTabs.appendChild(tab);
@@ -3306,7 +3401,9 @@ class App {
             };
 
             row.querySelector('[data-action="export"]').onclick = () => {
-                this.librarian.exportProgramFile(program);
+                const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+                const fwId = this.midi && this.midi.detectedFwId !== null ? this.midi.detectedFwId : SYSEX_V2_FW_ID;
+                this.librarian.exportProgramFile(program, null, fwVer, fwId);
             };
 
             row.querySelector('[data-action="delete"]').onclick = () => {
@@ -3344,7 +3441,7 @@ class App {
                         this.librarian.saveAllBanks();
                         this.renderLibrarianBank();
                     }
-                } catch (err) {}
+                } catch (err) { }
             };
 
             progList.appendChild(row);

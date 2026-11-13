@@ -1943,6 +1943,7 @@ function createArpSequencer(program, onChangeCallback) {
 
         const modBtn = document.createElement('select');
         modBtn.className = 'step-mod-btn';
+        modBtn.setAttribute('data-fw-v3-only', 'true');
         modBtn.title = `Step ${i} modulation level`;
         MOD_LEVELS.forEach((txt, idx) => {
             const opt = document.createElement('option');

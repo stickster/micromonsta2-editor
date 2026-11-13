@@ -86,7 +86,7 @@ if (typeof document === 'undefined') {
             for (const fn of list) fn(event);
         }
         click() {
-            const ev = { type: 'click', preventDefault: () => {}, stopPropagation: () => {} };
+            const ev = { type: 'click', preventDefault: () => { }, stopPropagation: () => { } };
             if (this.onclick) this.onclick(ev);
             this.dispatchEvent(ev);
         }
@@ -698,7 +698,7 @@ async function runAllTests(logger = console.log) {
         assertEqual(app.activeTimbre.name, 'MY_PATCH', 'activeTimbre reflects patch name from hardware dump');
         assertEqual(app.activeTimbre.getValue('LAY_POT1_ASSIGN'), 16, 'Hardware dump LAY_POT1_ASSIGN (Pot F) is 16');
         assertEqual(app.activeTimbre.getValue('LAY_POT2_ASSIGN'), 17, 'Hardware dump LAY_POT2_ASSIGN (Pot Q) is 17');
-        assertEqual(app.activeTimbre.getValue('LAY_POT3_ASSIGN'), 1,  'Hardware dump LAY_POT3_ASSIGN (Pot M) is 1');
+        assertEqual(app.activeTimbre.getValue('LAY_POT3_ASSIGN'), 1, 'Hardware dump LAY_POT3_ASSIGN (Pot M) is 1');
         assertEqual(app.activeTimbre.getValue('LAY_ENC1_ASSIGN'), 21, 'Hardware dump LAY_ENC1_ASSIGN (Encoder 1) is 21');
         assertEqual(app.activeTimbre.getValue('LAY_ENC4_ASSIGN'), 24, 'Hardware dump LAY_ENC4_ASSIGN (Encoder 4) is 24');
 
@@ -706,7 +706,7 @@ async function runAllTests(logger = console.log) {
         const sysex = app.activeTimbre.toSysEx(0);
         assertEqual(sysex[17], 16, 'SysEx byte 17 is LAY_POT1_ASSIGN (16 = Cutoff)');
         assertEqual(sysex[18], 17, 'SysEx byte 18 is LAY_POT2_ASSIGN (17 = Resonance)');
-        assertEqual(sysex[19], 1,  'SysEx byte 19 is LAY_POT3_ASSIGN (1 = Mod Knob)');
+        assertEqual(sysex[19], 1, 'SysEx byte 19 is LAY_POT3_ASSIGN (1 = Mod Knob)');
         assertEqual(sysex[20], 21, 'SysEx byte 20 is LAY_ENC1_ASSIGN (21 = Env 1 Attack)');
         assertEqual(sysex[21], 22, 'SysEx byte 21 is LAY_ENC2_ASSIGN (22 = Env 1 Decay)');
         assertEqual(sysex[22], 23, 'SysEx byte 22 is LAY_ENC3_ASSIGN (23 = Env 1 Sustain)');
@@ -803,7 +803,7 @@ async function runAllTests(logger = console.log) {
         midi.baseChannel = 0;
         midi.savedBaseChannel = 0;
         midi.midiAccess = {
-            inputs: new Map([['in-1', { id: 'in-1', name: 'MicroMonsta 2', removeEventListener: () => {}, addEventListener: () => {} }]]),
+            inputs: new Map([['in-1', { id: 'in-1', name: 'MicroMonsta 2', removeEventListener: () => { }, addEventListener: () => { } }]]),
             outputs: new Map([['out-1', { id: 'out-1', name: 'MicroMonsta 2' }]])
         };
         midi.autoSelectPorts();
@@ -816,8 +816,8 @@ async function runAllTests(logger = console.log) {
         const defaultMidi = new MidiManager();
         defaultMidi.midiAccess = {
             inputs: new Map([
-                ['gen-in', { id: 'gen-in', name: 'Keyboard USB', removeEventListener: () => {}, addEventListener: () => {} }],
-                ['mm2-in', { id: 'mm2-in', name: 'MicroMonsta 2', removeEventListener: () => {}, addEventListener: () => {} }]
+                ['gen-in', { id: 'gen-in', name: 'Keyboard USB', removeEventListener: () => { }, addEventListener: () => { } }],
+                ['mm2-in', { id: 'mm2-in', name: 'MicroMonsta 2', removeEventListener: () => { }, addEventListener: () => { } }]
             ]),
             outputs: new Map([
                 ['gen-out', { id: 'gen-out', name: 'Speakers MIDI' }],
@@ -832,8 +832,8 @@ async function runAllTests(logger = console.log) {
         userSelectedMidi.savedInPortName = 'Keyboard USB';
         userSelectedMidi.midiAccess = {
             inputs: new Map([
-                ['gen-in', { id: 'gen-in', name: 'Keyboard USB', removeEventListener: () => {}, addEventListener: () => {} }],
-                ['mm2-in', { id: 'mm2-in', name: 'MicroMonsta 2', removeEventListener: () => {}, addEventListener: () => {} }]
+                ['gen-in', { id: 'gen-in', name: 'Keyboard USB', removeEventListener: () => { }, addEventListener: () => { } }],
+                ['mm2-in', { id: 'mm2-in', name: 'MicroMonsta 2', removeEventListener: () => { }, addEventListener: () => { } }]
             ]),
             outputs: new Map([
                 ['gen-out', { id: 'gen-out', name: 'Speakers MIDI' }],
@@ -847,7 +847,7 @@ async function runAllTests(logger = console.log) {
         // 2b. Verify no greedy auto-selection when only generic/virtual ports exist
         const genericOnlyMidi = new MidiManager();
         genericOnlyMidi.midiAccess = {
-            inputs: new Map([['thru-in', { id: 'thru-in', name: 'Midi Through Port-0', removeEventListener: () => {}, addEventListener: () => {} }]]),
+            inputs: new Map([['thru-in', { id: 'thru-in', name: 'Midi Through Port-0', removeEventListener: () => { }, addEventListener: () => { } }]]),
             outputs: new Map([['thru-out', { id: 'thru-out', name: 'Midi Through Port-0' }]])
         };
         genericOnlyMidi.savedInPortName = '';
@@ -1055,15 +1055,15 @@ async function runAllTests(logger = console.log) {
             name: 'MicroMonsta 2',
             type: 'input',
             state: 'connected',
-            addEventListener: () => {},
-            removeEventListener: () => {}
+            addEventListener: () => { },
+            removeEventListener: () => { }
         };
         const mockOut = {
             id: 'mm2-out-port',
             name: 'MicroMonsta 2',
             type: 'output',
             state: 'connected',
-            send: () => {}
+            send: () => { }
         };
 
         midi.midiAccess = {
@@ -1325,7 +1325,7 @@ async function runAllTests(logger = console.log) {
 
         // Noise Mute & Solo Badges & Right-of-Knob Placement
         const testApp = new App();
-        const oscPanel = testApp.createOscillatorPanel(testApp.activeTimbre, () => {});
+        const oscPanel = testApp.createOscillatorPanel(testApp.activeTimbre, () => { });
         const noiseGroup = oscPanel.querySelector('.osc-noise-group');
         assert(noiseGroup !== null, 'Noise group exists in oscillator panel footer');
         assertEqual(noiseGroup.children[0].getAttribute('data-param'), 'MIX_NOISE', 'Noise knob is first child on left');
@@ -1390,7 +1390,7 @@ async function runAllTests(logger = console.log) {
         const canvas = knobContainer.querySelector('canvas') || knobContainer;
 
         // Simulate pointerdown
-        canvas.dispatchEvent({ type: 'pointerdown', clientX: 100, clientY: 100, preventDefault: () => {} });
+        canvas.dispatchEvent({ type: 'pointerdown', clientX: 100, clientY: 100, preventDefault: () => { } });
         assertEqual(undoApp.undoStack.length, 0, 'Pointerdown does not create undo entry');
 
         // Simulate pointermoves (wiggling)
@@ -1427,7 +1427,7 @@ async function runAllTests(logger = console.log) {
         undoApp.redoStack = [];
         osc1Prog.setValue('FILTER_FREQ', 64);
 
-        canvas.dispatchEvent({ type: 'pointerdown', clientX: 100, clientY: 100, preventDefault: () => {} });
+        canvas.dispatchEvent({ type: 'pointerdown', clientX: 100, clientY: 100, preventDefault: () => { } });
         window.dispatchEvent({ type: 'pointermove', clientX: 100, clientY: 70 });
         window.dispatchEvent({ type: 'pointermove', clientX: 100, clientY: 100 }); // back to starting position
         window.dispatchEvent({ type: 'pointerup' });
@@ -1533,9 +1533,9 @@ async function runAllTests(logger = console.log) {
         assertEqual(formatParamDisplay(downDef, 52), '-12', 'Down displays -12 at minimum');
         assertEqual(formatParamDisplay(downDef, 64), '0', 'Down displays 0 at maximum');
 
-        const downKnob = createKnob('VCE_PBRANGE_DOWN', () => downProg, () => {});
+        const downKnob = createKnob('VCE_PBRANGE_DOWN', () => downProg, () => { });
         const downCanvas = downKnob.querySelector('canvas') || downKnob;
-        downCanvas.dispatchEvent({ type: 'pointerdown', clientX: 100, clientY: 100, preventDefault: () => {} });
+        downCanvas.dispatchEvent({ type: 'pointerdown', clientX: 100, clientY: 100, preventDefault: () => { } });
         window.dispatchEvent({ type: 'pointermove', clientX: 100, clientY: -1000 }); // drag far up
         assertEqual(downProg.getValue('VCE_PBRANGE_DOWN'), 64, 'Dragging Down knob up reaches 0 (raw 64)');
         window.dispatchEvent({ type: 'pointermove', clientX: 100, clientY: 1000 }); // drag far down
@@ -1915,7 +1915,7 @@ async function runAllTests(logger = console.log) {
         pollApp.librarian.activeBankIndex = 0;
         pollApp.currentView = 'librarian';
 
-        const mockOut = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+        const mockOut = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => { } };
         pollApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
         pollApp.midi.outPort = mockOut;
 
@@ -2021,7 +2021,7 @@ async function runAllTests(logger = console.log) {
         catApp.librarian.activeBankIndex = 0;
 
         // Mock document elements
-        const bankTabsEl = { innerHTML: '', appendChild: () => {} };
+        const bankTabsEl = { innerHTML: '', appendChild: () => { } };
         const progListEl = { innerHTML: '', appendChild: (c) => { progListEl.children.push(c); }, children: [] };
         const origDoc = global.document;
         global.document = {
@@ -2040,7 +2040,7 @@ async function runAllTests(logger = console.log) {
                     children: [],
                     innerHTML: '',
                     setAttribute: (k, v) => { el[k] = v; },
-                    classList: { add: () => {}, remove: () => {} },
+                    classList: { add: () => { }, remove: () => { } },
                     querySelector: (sel) => {
                         if (sel === '.prog-cat-select' || sel === '.prog-cat-badge') {
                             return el._catSelect;
@@ -2082,7 +2082,7 @@ async function runAllTests(logger = console.log) {
         // Create a simulated select onchange event
         const mockEvt = {
             target: { value: '3' }, // Keys
-            stopPropagation: () => {}
+            stopPropagation: () => { }
         };
 
         // Invoke the row's category onchange logic
@@ -2194,7 +2194,7 @@ async function runAllTests(logger = console.log) {
         assertEqual(monoApp.synthTimbralMode, 'monotimbral', 'App initialized in monotimbral mode');
 
         // 1. Probing Part B sets lastFetchedSlot to 1, but timeout resets lastFetchedSlot to 0
-        monoApp.midi.outPort = { name: 'Mock MM2', send: () => {} };
+        monoApp.midi.outPort = { name: 'Mock MM2', send: () => { } };
         monoApp.modeProbeTimeoutMs = 30;
         monoApp.probeTimbralMode();
         assertEqual(monoApp.midi.lastFetchedSlot, 1, 'lastFetchedSlot set to 1 during mode probe');
@@ -2319,7 +2319,7 @@ async function runAllTests(logger = console.log) {
         // Triggering ondblclick triggers renameBank
         let renamedIdx = null;
         app.renameBank = (idx) => { renamedIdx = idx; };
-        renderedTitle.ondblclick({ stopPropagation: () => {} });
+        renderedTitle.ondblclick({ stopPropagation: () => { } });
         assertEqual(renamedIdx, 0, 'Double clicking tab title invokes renameBank for that bank index');
     } catch (e) {
         logger(`  Error: ${e.message}`);
@@ -2353,9 +2353,9 @@ async function runAllTests(logger = console.log) {
         };
 
         // 1. Leader starts probeHardware(): emits probe-start and broadcasts HARDWARE_PROBE_START
-        leaderApp.midi.outPort = { name: 'MM2 Mock', send: () => {} };
+        leaderApp.midi.outPort = { name: 'MM2 Mock', send: () => { } };
         leaderApp.midi.inPort = { name: 'MM2 Mock' };
-        followerApp.midi.outPort = { name: 'MM2 Mock', send: () => {} };
+        followerApp.midi.outPort = { name: 'MM2 Mock', send: () => { } };
         followerApp.midi.inPort = { name: 'MM2 Mock' };
 
         leaderApp.midi.probeHardware(2000);
@@ -2417,7 +2417,7 @@ async function runAllTests(logger = console.log) {
         // Setup leader with responsive hardware
         leaderApp.midi.hardwareResponsive = true;
         leaderApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
-        leaderApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+        leaderApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => { } };
 
         // Setup follower DOM status dot and text elements
         const statusDot = document.createElement('span');
@@ -2428,7 +2428,7 @@ async function runAllTests(logger = console.log) {
         document.registerMockElement('midi-status-text', statusText);
 
         followerApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
-        followerApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+        followerApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => { } };
 
         // 1. Follower resetHardwareResponsiveness preserves responsiveness because it is a follower
         followerApp.midi.hardwareResponsive = true;
@@ -2479,11 +2479,11 @@ async function runAllTests(logger = console.log) {
 
         // Both apps have verified MM2 connections
         leaderApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
-        leaderApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+        leaderApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => { } };
         leaderApp.midi.hardwareResponsive = true;
 
         followerApp.midi.inPort = { id: 'mm2_in', name: 'MicroMonsta 2' };
-        followerApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => {} };
+        followerApp.midi.outPort = { id: 'mm2_out', name: 'MicroMonsta 2', send: () => { } };
         followerApp.midi.hardwareResponsive = true;
 
         // Track broadcast messages between tabs
@@ -2561,7 +2561,7 @@ async function runAllTests(logger = console.log) {
         multProg.setValue('MULT_B1', 27);
         multProg.setValue('MULT_A2', 3);
         multProg.setValue('MULT_B2', 5);
-        const multCopied = copySection('mult', 1, 'mult', 2, multProg, () => {});
+        const multCopied = copySection('mult', 1, 'mult', 2, multProg, () => { });
         assertEqual(multCopied, true, 'copySection("mult", 1, "mult", 2) returns true');
         assertEqual(multProg.getValue('MULT_A2'), 12, 'MULT_A2 copied 1:1 from MULT_A1');
         assertEqual(multProg.getValue('MULT_B2'), 27, 'MULT_B2 copied 1:1 from MULT_B1');
@@ -2576,12 +2576,12 @@ async function runAllTests(logger = console.log) {
         envProg.setValue('ENV1_VCA_VEL_SENS', 91);
         envProg.setValue('ENV2_FLT_VEL_SENS', 10);
 
-        copySection('env', 1, 'env', 2, envProg, () => {});
+        copySection('env', 1, 'env', 2, envProg, () => { });
         assertEqual(envProg.getValue('ENV2_ATK'), 15, 'Env 1->2 copies ATK');
         assertEqual(envProg.getValue('ENV2_RESET'), 1, 'Env 1->2 copies RESET');
         assertEqual(envProg.getValue('ENV2_FLT_VEL_SENS'), 91, 'Env 1->2 copies velocity sensitivity');
 
-        copySection('env', 1, 'env', 3, envProg, () => {});
+        copySection('env', 1, 'env', 3, envProg, () => { });
         assertEqual(envProg.getValue('ENV3_ATK'), 15, 'Env 1->3 copies ATK');
         assertEqual(envProg.getValue('ENV3_DCY'), 42, 'Env 1->3 copies DCY');
         assertEqual(envProg.getValue('ENV3_SUS'), 88, 'Env 1->3 copies SUS');
@@ -2589,13 +2589,13 @@ async function runAllTests(logger = console.log) {
         assertEqual(envProg.getValue('ENV3_RESET'), 1, 'Env 1->3 copies RESET');
 
         envProg.setValue('ENV3_ATK', 5);
-        copySection('env', 3, 'env', 1, envProg, () => {});
+        copySection('env', 3, 'env', 1, envProg, () => { });
         assertEqual(envProg.getValue('ENV1_ATK'), 5, 'Env 3->1 copies ATK');
         assertEqual(envProg.getValue('ENV1_VCA_VEL_SENS'), 91, 'Env 3->1 leaves ENV1_VCA_VEL_SENS untouched');
 
         // 3. DOM Drag-and-Drop Simulation Tests
         const dndApp = new App();
-        dndApp.showNotification = () => {};
+        dndApp.showNotification = () => { };
         const dndProg = dndApp.timbreA;
         const makeDragEvent = (type, overrides = {}) => {
             const store = overrides._store || {};
@@ -2616,7 +2616,7 @@ async function runAllTests(logger = console.log) {
         };
 
         // 3a. Oscillator Tabs (createOscillatorPanel)
-        const oscCard = dndApp.createOscillatorPanel(() => dndProg, () => {});
+        const oscCard = dndApp.createOscillatorPanel(() => dndProg, () => { });
         const oscTabs = oscCard.querySelectorAll('.btn-osc-tab');
         assertEqual(oscTabs.length, 3, 'Oscillator panel renders 3 tabs');
         assert(oscTabs.every(t => t.attributes.get('draggable') === 'true'), 'All btn-osc-tab elements have draggable="true"');
@@ -2655,7 +2655,7 @@ async function runAllTests(logger = console.log) {
         oscTabs[1].dispatchEvent(makeDragEvent('dragend'));
 
         // 3b. Envelope Tabs & ADSR Graph Cards (createEnvelopePanel)
-        const envCard = dndApp.createEnvelopePanel(() => dndProg, () => {});
+        const envCard = dndApp.createEnvelopePanel(() => dndProg, () => { });
         const envTabs = envCard.querySelectorAll('.btn-env-tab');
         const envGraphCards = envCard.querySelectorAll('.adsr-graph-card');
         assertEqual(envTabs.length, 3, 'Envelope panel renders 3 tabs');
@@ -2711,7 +2711,7 @@ async function runAllTests(logger = console.log) {
                 badge.className = badgeClass;
                 box.appendChild(badge);
                 dndApp.wireSectionDragSource(badge, type, idx, { containerEl: box });
-                dndApp.wireSectionDropTarget(box, type, idx, () => dndProg, () => {}, { hoverClass: 'slot-drop-hover' });
+                dndApp.wireSectionDropTarget(box, type, idx, () => dndProg, () => { }, { hoverClass: 'slot-drop-hover' });
                 boxes.push(box);
                 badges.push(badge);
             }
@@ -2769,7 +2769,7 @@ async function runAllTests(logger = console.log) {
 
         // 3d. Sequencer Steps (1-to-1 and 1-to-all "Copy to all" button)
         const seqProg = new MM2Program();
-        const seqEl = createArpSequencer(() => seqProg, () => {});
+        const seqEl = createArpSequencer(() => seqProg, () => { });
         const stepCols = seqEl.querySelectorAll('.step-col');
         assertEqual(stepCols.length, 16, 'Sequencer renders 16 step-col elements');
         assert(stepCols.every(c => c.attributes.get('draggable') === 'true'), 'All step-col elements have draggable="true"');
@@ -2835,7 +2835,7 @@ async function runAllTests(logger = console.log) {
     logger('\n--- [39] Multi-Memory & Part Drag-and-Drop Tests ---');
     try {
         const memApp = new App();
-        memApp.showNotification = () => {};
+        memApp.showNotification = () => { };
         memApp.memories = [null, null, null, null];
 
         const makeEvent = (type, overrides = {}) => {
@@ -2987,6 +2987,150 @@ async function runAllTests(logger = console.log) {
         memApp.undo();
         assertEqual(memApp.timbreB.name, 'OLD_B', 'Undo reverts Part A -> editor-grid replacement in 1 step');
         assertEqual(memApp.timbreB.getValue('OSC1_SHAPE'), 33, 'Undo restores Part B OSC1_SHAPE in 1 step');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    // =========================================================================
+    // [39] Firmware 2.x Compatibility Tests
+    // =========================================================================
+    logger('\n--- [39] Firmware 2.x Compatibility Tests ---');
+    try {
+        // 1. v3 -> v2 conversion and round-trip
+        const p3 = new MM2Program();
+        p3.name = 'V2TEST';
+        p3.category = 4; // Organ
+        p3.setValue('OSC1_SHAPE', 77);
+        p3.setValue('FILTER_FREQ', 210);
+        p3.setValue('FILTER_RESO', 68);
+        p3.setValue('FILTER_CHARACTER', 1); // Vintage in v3
+        p3.setValue('DRIVE_VOICE', 45);
+        p3.setValue('MTX1_SRC', 41); // Lag (v2 index 36)
+        p3.setValue('MTX1_DST', 9);  // Mix 1 (v2 index 8)
+        p3.setValue('MTX1_AMT', 175);
+        p3.setValue('MTX2_DST', 32); // Release 1 (v2 index 27)
+        p3.setValue('LAY_POT1_ASSIGN', 48); // Lag (v2 index 46)
+
+        const v2Out = p3.toSysEx(0, 2, SYSEX_V2_FW_ID);
+        assertEqual(v2Out.length, SYSEX_V2_LEN, 'v3->v2 SysEx is 176 bytes');
+        assertEqual(validateSysEx(v2Out), 2, 'v3->v2 SysEx validates as firmware v2');
+        assertEqual(v2Out[OFFSET_FW], SYSEX_V2_FW_ID, 'v3->v2 SysEx sets OFFSET_FW to 0x10');
+        assertEqual(v2Out[151], 2, 'v3->v2 sets v2 FILTER_CHARACTER (offset 151) to Hard (2)');
+
+        const rt = new MM2Program(v2Out);
+        assertEqual(rt.name, 'V2TEST', 'v3->v2->v3 round-trip preserves name');
+        assertEqual(rt.category, 4, 'v3->v2->v3 round-trip preserves category');
+        assertEqual(rt.getValue('OSC1_SHAPE'), 77, 'v3->v2->v3 round-trip preserves OSC1_SHAPE');
+        assertEqual(rt.getValue('FILTER_FREQ'), 210, 'v3->v2->v3 round-trip preserves 14-bit FILTER_FREQ');
+        assertEqual(rt.getValue('FILTER_RESO'), 68, 'v3->v2->v3 round-trip preserves FILTER_RESO');
+        assertEqual(rt.getValue('FILTER_CHARACTER'), 0, 'v2->v3 sets FILTER_CHARACTER to MM2 (0)');
+        assertEqual(rt.getValue('DRIVE_VOICE'), 45, 'v3->v2->v3 round-trip preserves DRIVE_VOICE');
+        assertEqual(rt.getValue('MTX1_SRC'), 41, 'v3->v2->v3 round-trip preserves shifted mod source (Lag)');
+        assertEqual(rt.getValue('MTX1_DST'), 9, 'v3->v2->v3 round-trip preserves shifted mod dest (Mix 1)');
+        assertEqual(rt.getValue('MTX1_AMT'), 175, 'v3->v2->v3 round-trip preserves MTX1_AMT');
+        assertEqual(rt.getValue('MTX2_DST'), 32, 'v3->v2->v3 round-trip preserves shifted mod dest (Release 1)');
+        assertEqual(rt.getValue('LAY_POT1_ASSIGN'), 48, 'v3->v2->v3 round-trip preserves shifted pot assign (Lag)');
+
+        // 2. v3-only feature detection and safe clamping
+        const pIncompat = new MM2Program();
+        pIncompat.setValue('CHORD_TYPE1', 3);
+        pIncompat.setValue('MTX11_SRC', 5);
+        pIncompat.setValue('MTX1_SRC', 36); // Arp (v3-only)
+        pIncompat.setValue('MTX1_DST', 28); // Sustain 1 (v3-only)
+        pIncompat.setValue('LAY_POT1_ASSIGN', 46); // Matrix 11 (v3-only)
+        const incompatInfo = detectV3Incompatibilities(pIncompat);
+        assert(incompatInfo.hasIncompatibilities, 'detectV3Incompatibilities flags v3-only features');
+        assert(incompatInfo.reasons.includes('Chorder & Scaler Engine'), 'Detects Chorder & Scaler incompatibility');
+        assert(incompatInfo.reasons.includes('Mod Matrix Slots 11–12'), 'Detects Matrix 11–12 incompatibility');
+
+        const downgraded = new MM2Program(pIncompat.toSysEx(-1, 2));
+        assertEqual(downgraded.getValue('MTX1_SRC'), 0, 'v3-only Arp mod source clamps to Off (0) in v2');
+        assertEqual(downgraded.getValue('MTX1_DST'), 0, 'v3-only Sustain 1 mod dest clamps to Off (0) in v2');
+        assertEqual(downgraded.getValue('LAY_POT1_ASSIGN'), 0, 'v3-only Matrix 11 assign clamps to SYSTEM (0) in v2');
+
+        // 3. Bank v2 export & extractSysExMessagesWithMeta
+        const v2Bank = new MM2Bank('V2Bank', 0);
+        v2Bank.addProgram(p3);
+        v2Bank.addProgram(new MM2Program());
+        const bankV2Bytes = v2Bank.toBankSysEx(2, 0x10);
+        assertEqual(bankV2Bytes.length, 2 * SYSEX_V2_LEN, 'toBankSysEx(2) produces 2 * 176 bytes');
+        const metaMsgs = extractSysExMessagesWithMeta(bankV2Bytes);
+        assertEqual(metaMsgs.length, 2, 'extractSysExMessagesWithMeta extracts 2 messages');
+        assertEqual(metaMsgs[0].version, 2, 'extractSysExMessagesWithMeta preserves version 2');
+        assertEqual(metaMsgs[0].fwId, 0x10, 'extractSysExMessagesWithMeta preserves fwId 0x10');
+
+        // 4. MidiManager v2 auto-detection, NRPN/CC routing, and disconnect reset
+        const sentMidiPackets = [];
+        const v2Midi = new MidiManager();
+        v2Midi.outPort = {
+            id: 'mock-v2-out',
+            name: 'MicroMonsta 2',
+            send: (bytes) => sentMidiPackets.push(Array.from(bytes))
+        };
+        v2Midi.liveSync = true;
+        v2Midi.baseChannel = 0;
+        v2Midi.activeSlot = 0;
+
+        assertEqual(v2Midi.effectiveFirmwareVersion, 3, 'MidiManager defaults to v3 before hardware dump');
+        v2Midi.handleCompleteSysEx(v2Out);
+        assertEqual(v2Midi.detectedFirmwareVersion, 2, 'Receiving 176-byte dump sets detectedFirmwareVersion to 2');
+        assertEqual(v2Midi.detectedFwId, 0x10, 'Receiving 176-byte dump captures detectedFwId 0x10');
+        assertEqual(v2Midi.effectiveFirmwareVersion, 2, 'effectiveFirmwareVersion switches to 2');
+
+        sentMidiPackets.length = 0;
+        v2Midi.sendProgram(p3, 0);
+        assertEqual(sentMidiPackets[0].length, SYSEX_V2_LEN, 'sendProgram in v2 mode transmits 176-byte SysEx');
+
+        sentMidiPackets.length = 0;
+        v2Midi.sendParameter('DRIVE_VOICE', 55, true);
+        assertEqual(sentMidiPackets[0][5], 48, 'v2 sendParameter sends DRIVE_VOICE on NRPN 48');
+
+        sentMidiPackets.length = 0;
+        v2Midi.sendParameter('MTX1_AMT', 200, true);
+        assertEqual(sentMidiPackets[0][5], 72, 'v2 sendParameter sends MTX1_AMT on NRPN 72');
+        assertEqual(sentMidiPackets[0].length, 12, 'v2 MTX1_AMT is 14-bit NRPN (12 bytes)');
+
+        sentMidiPackets.length = 0;
+        v2Midi.sendParameter('IFX_EQ', 150, true);
+        assertEqual(sentMidiPackets[0][5], 107, 'v2 sendParameter sends IFX_EQ on NRPN 107');
+
+        sentMidiPackets.length = 0;
+        v2Midi.sendParameter('MORPH_KNOB', 64, true);
+        assertEqual(sentMidiPackets[0][0], 0xB0, 'v2 sendParameter sends MORPH_KNOB as CC on channel 1');
+        assertEqual(sentMidiPackets[0][1], 70, 'v2 sendParameter sends MORPH_KNOB on CC 70');
+        assertEqual(sentMidiPackets[0][2], 64, 'v2 sendParameter sends MORPH_KNOB value 64');
+
+        sentMidiPackets.length = 0;
+        const v3OnlySent = v2Midi.sendParameter('CHORD_TYPE1', 2, true);
+        assertEqual(v3OnlySent, false, 'v2 sendParameter skips v3-only CHORD_TYPE1');
+        assertEqual(sentMidiPackets.length, 0, 'v2 sendParameter transmits nothing for v3-only param');
+
+        // Incoming v2 NRPN decoding
+        let receivedV2Param = null;
+        v2Midi.on('parameter-received', (ev) => { receivedV2Param = ev; });
+        v2Midi.onMidiMessage({ data: new Uint8Array([0xB0, 99, 0]) });
+        v2Midi.onMidiMessage({ data: new Uint8Array([0xB0, 98, 48]) });
+        v2Midi.onMidiMessage({ data: new Uint8Array([0xB0, 6, 88]) });
+        assertEqual(receivedV2Param && receivedV2Param.paramKey, 'DRIVE_VOICE', 'v2 incoming NRPN 48 decodes as DRIVE_VOICE');
+        assertEqual(receivedV2Param && receivedV2Param.value, 88, 'v2 incoming NRPN 48 decodes value 88');
+
+        // Disconnect resets firmware detection
+        v2Midi.setOutputPort(null);
+        assertEqual(v2Midi.detectedFirmwareVersion, null, 'Disconnecting port resets detectedFirmwareVersion to null');
+        assertEqual(v2Midi.effectiveFirmwareVersion, 3, 'effectiveFirmwareVersion reverts to 3 on disconnect');
+
+        // 5. UI badge and v3-only element adaptation
+        if (typeof app !== 'undefined' && app && typeof document !== 'undefined') {
+            app.midi.setDetectedFirmware(2, 0x10);
+            const badge = document.getElementById('fw-version-badge');
+            assertEqual(badge && badge.textContent, 'FW v2.x', 'Header badge shows FW v2.x when v2 detected');
+            const v3Els = document.querySelectorAll('[data-fw-v3-only="true"]');
+            assert(v3Els.length > 0 && Array.from(v3Els).every(el => el.classList.contains('fw-v3-only-hidden')), 'All v3-only UI elements are hidden in v2.x mode');
+            app.midi.setDetectedFirmware(null, null);
+            assertEqual(badge && badge.textContent, 'FW v3.x', 'Header badge reverts to FW v3.x when detection resets');
+            assert(Array.from(v3Els).every(el => !el.classList.contains('fw-v3-only-hidden')), 'v3-only UI elements are visible again in v3.x mode');
+        }
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;

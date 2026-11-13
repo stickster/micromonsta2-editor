@@ -9,6 +9,7 @@ const SYSEX_END = 0xF7;
 const SYSEX_V3_LEN = 216;
 const SYSEX_V2_LEN = 176;
 const SYSEX_V3_FW_ID = 0x30; // '0' = 48 decimal
+const SYSEX_V2_FW_ID = 0x10; // 16 decimal (v2.7+ SysEx template)
 
 const CMD_LOAD_A = 0x01;
 const CMD_LOAD_B = 0x02;
@@ -135,7 +136,26 @@ const MM2_CC_MAP = new Map([
     [1,  { key: 'MORPH_KNOB' }],
     [5,  { key: 'VCE_GLIDE' }],
     [7,  { key: 'LAY_MASTER_VOLUME' }],
+    [33, { key: 'VCE_DETUNE' }],
+    [34, { key: 'VCE_DETUNE_OSC' }],
+    [35, { key: 'VCE_PAN_SPREAD' }],
+    [36, { key: 'ENV1_VCA_VEL_SENS' }],
+    [37, { key: 'ENV2_FLT_VEL_SENS' }],
+    [62, { key: 'LAG_AMT1' }],
+    [70, { key: 'MORPH_KNOB' }],
     [91, { key: 'DRIVE_VOICE' }],
+
+    // Matrix Amounts (v2.7 manual Section 7.1)
+    [52, { key: 'MTX1_AMT', scale: 255 / 127 }],
+    [53, { key: 'MTX2_AMT', scale: 255 / 127 }],
+    [54, { key: 'MTX3_AMT', scale: 255 / 127 }],
+    [55, { key: 'MTX4_AMT', scale: 255 / 127 }],
+    [56, { key: 'MTX5_AMT', scale: 255 / 127 }],
+    [57, { key: 'MTX6_AMT', scale: 255 / 127 }],
+    [58, { key: 'MTX7_AMT', scale: 255 / 127 }],
+    [59, { key: 'MTX8_AMT', scale: 255 / 127 }],
+    [60, { key: 'MTX9_AMT', scale: 255 / 127 }],
+    [61, { key: 'MTX10_AMT', scale: 255 / 127 }],
 
     // FX
     [25, { key: 'IFX_EQ', scale: 255 / 127 }],
@@ -146,3 +166,76 @@ const MM2_CC_MAP = new Map([
     [30, { key: 'REV_PARAM2' }],
     [31, { key: 'REV_PARAM3' }]
 ]);
+
+// Firmware v2.x NRPN Map (verified against v2.7+ specification)
+const V2_NRPN_MAP = new Map();
+const V2_NRPN_TO_PARAM = new Map();
+(() => {
+    const v2Entries = [];
+    // NRPN 9..47 match v3 (LAY_CATEGORY .. FILTER_FM)
+    for (const p of MM2_PARAMETERS) {
+        if (p.nrpn !== undefined && p.nrpn >= 9 && p.nrpn <= 47) {
+            v2Entries.push([p.key, p.nrpn, !!p.long]);
+        }
+    }
+    v2Entries.push(
+        ['DRIVE_VOICE', 48, false],
+        ['ENV1_ATK', 49, false], ['ENV1_DCY', 50, false], ['ENV1_SUS', 51, false], ['ENV1_REL', 52, false],
+        ['ENV2_ATK', 53, false], ['ENV2_DCY', 54, false], ['ENV2_SUS', 55, false], ['ENV2_REL', 56, false],
+        ['ENV3_ATK', 57, false], ['ENV3_DCY', 58, false], ['ENV3_SUS', 59, false], ['ENV3_REL', 60, false],
+        ['LFO1_WAVE', 61, false], ['LFO1_SPEED', 62, true], ['LFO1_MODE', 63, false],
+        ['LFO2_WAVE', 64, false], ['LFO2_SPEED', 65, true], ['LFO2_MODE', 66, false],
+        ['LFO3_WAVE', 67, false], ['LFO3_SPEED', 68, true], ['LFO3_MODE', 69, false]
+    );
+    for (let m = 1; m <= 10; m++) {
+        const base = 70 + (m - 1) * 3;
+        v2Entries.push(
+            [`MTX${m}_SRC`, base, false],
+            [`MTX${m}_DST`, base + 1, false],
+            [`MTX${m}_AMT`, base + 2, true]
+        );
+    }
+    v2Entries.push(
+        ['LAG_SRC1', 100, false], ['LAG_AMT1', 101, false],
+        ['MULT_A1', 102, false], ['MULT_B1', 103, false],
+        ['MULT_A2', 104, false], ['MULT_B2', 105, false],
+        // NRPN 106 unused (MORPH_KNOB uses CC 70 in v2.x)
+        ['IFX_EQ', 107, true], ['DLY_PARAM1', 108, true],
+        ['DLY_PARAM2', 109, false], ['DLY_PARAM3', 110, false],
+        ['REV_PARAM1', 111, false], ['REV_PARAM2', 112, false], ['REV_PARAM3', 113, false],
+        ['ARP_TYPE', 114, false], ['ARP_GATE', 115, false], ['ARP_SPEED', 116, false],
+        ['VCE_MODE', 117, false], ['VCE_UNISON', 118, false], ['PAN_MODE', 119, false],
+        ['ENV1_RESET', 120, false], ['ENV2_RESET', 121, false], ['ENV3_RESET', 122, false],
+        // NRPN 123 unused
+        ['OSC_PHASE_RESET', 124, false], ['FILTER_ALGO', 125, false],
+        ['FILTER_CHARACTER', 126, false], ['IFX_CHORUS', 127, false], ['DLY_TYPE', 128, false],
+        // NRPN 129 unused
+        ['ARP_OFF_ON', 130, false], ['ARP_LATCH', 131, false],
+        ['ARP_OCTAVE', 132, false], ['ARP_PTN_LENGTH', 133, false]
+    );
+    for (let s = 1; s <= 16; s++) {
+        const key = `ARP_PTN_STEP${String(s).padStart(2, '0')}`;
+        v2Entries.push([key, 133 + s, false]);
+    }
+    for (const [key, nrpn, long] of v2Entries) {
+        const def = PARAM_MAP.get(key);
+        if (!def) continue;
+        V2_NRPN_MAP.set(key, { nrpn, long });
+        V2_NRPN_TO_PARAM.set(nrpn, def);
+    }
+})();
+
+const V3_ONLY_PARAMS = new Set([
+    'MTX11_SRC', 'MTX11_DST', 'MTX11_AMT',
+    'MTX12_SRC', 'MTX12_DST', 'MTX12_AMT',
+    'ARP_STEPSEQ_DEST', 'ARP_STEPSEQ_POLARITY',
+    'FILTER_CHARACTER',
+    'KBD_MIDI_INPUT', 'KBD_KEY', 'KBD_CHORD_EXPAND', 'KBD_OCTAVE', 'KBD_SCALE',
+    'CHORD_TYPE1', 'CHORD_TYPE2', 'CHORD_TYPE3', 'CHORD_TYPE4',
+    'CHORD_TYPE5', 'CHORD_TYPE6', 'CHORD_TYPE7',
+    ...Array.from({ length: 16 }, (_, i) => `ARP_PTN_STEP_MOD${String(i + 1).padStart(2, '0')}`)
+]);
+
+const V3_ONLY_ASSIGN_INDICES = new Set([46, 47]); // Matrix 11, Matrix 12
+const V3_ONLY_SOURCE_INDICES = new Set([36, 37, 38, 39, 40]); // Arp, Arp*Vel, Arp*Aft, Arp*Wheel, Arp*Knob
+const V3_ONLY_DEST_INDICES = new Set([8, 28, 29, 30, 31]); // Shapes, Sustain 1..3, Sustains

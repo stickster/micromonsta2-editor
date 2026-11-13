@@ -109,6 +109,126 @@ function convertV2toV3(v2Bytes) {
 }
 
 /**
+ * Converts a v3 program dump (216 bytes) to a v2 program dump (176 bytes).
+ * v3-only parameters and choice indices are clamped or reset to safe v2 defaults.
+ */
+function convertV3toV2(v3Bytes, fwId = SYSEX_V2_FW_ID) {
+    if (validateSysEx(v3Bytes) !== 3) {
+        throw new Error('Provided buffer is not a valid MicroMonsta 2 firmware v3 program dump');
+    }
+    const v2 = new Uint8Array(SYSEX_V2_LEN);
+    v2.set(v3Bytes.subarray(0, OFFSET_FW));
+    v2[OFFSET_FW] = (fwId !== null && fwId !== undefined) ? (fwId & 0x7F) : SYSEX_V2_FW_ID;
+    v2[SYSEX_V2_LEN - 1] = SYSEX_END;
+
+    for (const [paramKey, v2Off, v3Off, size, rule] of V2_V3_MAP) {
+        let val = readBytes(v3Bytes, v3Off, size);
+        if (paramKey === 'FILTER_CHARACTER') {
+            val = 2; // v2.x Filter Character: 0=soft, 1=mild, 2=hard, 3=mean
+        } else {
+            switch (rule) {
+                case 'zero':
+                    val = 0;
+                    break;
+                case 'source':
+                    if (V3_ONLY_SOURCE_INDICES.has(val)) {
+                        val = 0;
+                    } else if (val > 40) {
+                        val = clamp(val - 5, 0, 39);
+                    }
+                    break;
+                case 'destination':
+                    if (V3_ONLY_DEST_INDICES.has(val)) {
+                        val = 0;
+                    } else if (val > 31) {
+                        val = clamp(val - 5, 0, 39);
+                    } else if (val > 8) {
+                        val = clamp(val - 1, 0, 39);
+                    }
+                    break;
+                case 'assign':
+                    if (V3_ONLY_ASSIGN_INDICES.has(val)) {
+                        val = 0;
+                    } else if (val > 47) {
+                        val = clamp(val - 2, 0, 57);
+                    }
+                    break;
+            }
+        }
+        writeBytes(v2, v2Off, size, val);
+    }
+
+    return v2;
+}
+
+/**
+ * Detects non-default v3-only features in a program that cannot be represented in firmware v2.x.
+ * @param {MM2Program|Uint8Array} programOrBytes
+ * @returns {{ hasIncompatibilities: boolean, reasons: string[] }}
+ */
+function detectV3Incompatibilities(programOrBytes) {
+    const prog = programOrBytes instanceof MM2Program
+        ? programOrBytes
+        : new MM2Program(programOrBytes);
+    const reasons = [];
+
+    const hasChorder =
+        prog.getValue('KBD_MIDI_INPUT') !== 0 ||
+        prog.getValue('KBD_KEY') !== 0 ||
+        prog.getValue('KBD_CHORD_EXPAND') !== 0 ||
+        prog.getValue('KBD_OCTAVE') !== 64 ||
+        prog.getValue('KBD_SCALE') !== 0 ||
+        [1, 2, 3, 4, 5, 6, 7].some(d => prog.getValue(`CHORD_TYPE${d}`) !== 0);
+    if (hasChorder) reasons.push('Chorder & Scaler Engine');
+
+    const hasMtx1112 = [11, 12].some(m =>
+        prog.getValue(`MTX${m}_SRC`) !== 0 ||
+        prog.getValue(`MTX${m}_DST`) !== 0 ||
+        prog.getValue(`MTX${m}_AMT`) !== 128
+    );
+    if (hasMtx1112) reasons.push('Mod Matrix Slots 11–12');
+
+    let hasArpMod = prog.getValue('ARP_STEPSEQ_DEST') !== 0 || prog.getValue('ARP_STEPSEQ_POLARITY') !== 1;
+    if (!hasArpMod) {
+        for (let s = 1; s <= 16; s++) {
+            const key = `ARP_PTN_STEP_MOD${String(s).padStart(2, '0')}`;
+            if (prog.getValue(key) !== 1) {
+                hasArpMod = true;
+                break;
+            }
+        }
+    }
+    if (hasArpMod) reasons.push('Arp Modulation Sequencer');
+
+    if (prog.getValue('FILTER_CHARACTER') !== 0) {
+        reasons.push('Filter Character');
+    }
+
+    const srcKeys = [
+        'LAG_SRC1', 'MULT_A1', 'MULT_B1', 'MULT_A2', 'MULT_B2',
+        ...Array.from({ length: 10 }, (_, i) => `MTX${i + 1}_SRC`)
+    ];
+    if (srcKeys.some(k => V3_ONLY_SOURCE_INDICES.has(prog.getValue(k)))) {
+        reasons.push('Arp* Mod Sources');
+    }
+
+    const dstKeys = Array.from({ length: 10 }, (_, i) => `MTX${i + 1}_DST`);
+    if (dstKeys.some(k => V3_ONLY_DEST_INDICES.has(prog.getValue(k)))) {
+        reasons.push('Shapes / Sustain Mod Destinations');
+    }
+
+    const assignKeys = [
+        'LAY_POT1_ASSIGN', 'LAY_POT2_ASSIGN', 'LAY_POT3_ASSIGN',
+        'LAY_ENC1_ASSIGN', 'LAY_ENC2_ASSIGN', 'LAY_ENC3_ASSIGN', 'LAY_ENC4_ASSIGN'
+    ];
+    if (assignKeys.some(k => V3_ONLY_ASSIGN_INDICES.has(prog.getValue(k)))) {
+        reasons.push('Matrix 11–12 Knob/Encoder Assignments');
+    }
+
+    return { hasIncompatibilities: reasons.length > 0, reasons };
+}
+
+/**
  * Normalizes any program buffer (v2 or v3) to v3 Uint8Array
  */
 function normalizeProgram(bytes) {
@@ -122,9 +242,10 @@ function normalizeProgram(bytes) {
 }
 
 /**
- * Extracts all valid MM2 SysEx messages from an arbitrary byte array (e.g. .syx file containing a full bank)
+ * Extracts all valid MM2 SysEx messages with source firmware metadata from an arbitrary byte array
+ * @returns {Array<{ bytes: Uint8Array, version: number, fwId: number }>}
  */
-function extractSysExMessages(rawBytes) {
+function extractSysExMessagesWithMeta(rawBytes) {
     const messages = [];
     let startIdx = -1;
     for (let i = 0; i < rawBytes.length; i++) {
@@ -132,13 +253,25 @@ function extractSysExMessages(rawBytes) {
             startIdx = i;
         } else if (rawBytes[i] === SYSEX_END && startIdx >= 0) {
             const msg = rawBytes.subarray(startIdx, i + 1);
-            if (validateSysEx(msg) > 0) {
-                messages.push(normalizeProgram(msg));
+            const version = validateSysEx(msg);
+            if (version > 0) {
+                messages.push({
+                    bytes: normalizeProgram(msg),
+                    version,
+                    fwId: msg[OFFSET_FW]
+                });
             }
             startIdx = -1;
         }
     }
     return messages;
+}
+
+/**
+ * Extracts all valid MM2 SysEx messages from an arbitrary byte array (e.g. .syx file containing a full bank)
+ */
+function extractSysExMessages(rawBytes) {
+    return extractSysExMessagesWithMeta(rawBytes).map(m => m.bytes);
 }
 
 const SHARED_TEXT_DECODER = new TextDecoder();
@@ -231,10 +364,12 @@ class MM2Program {
     }
 
     /**
-     * Serializes program to 216-byte SysEx Uint8Array ready for transmission or export
+     * Serializes program to 216-byte (v3) or 176-byte (v2) SysEx Uint8Array ready for transmission or export
      * @param {number} targetLayer 0 for Layer A, 1 for Layer B, -1/default for Active Layer
+     * @param {number} targetVersion 3 for firmware v3.x (default), 2 for firmware v2.x
+     * @param {number} fwId firmware ID byte for v2.x SysEx (default SYSEX_V2_FW_ID)
      */
-    toSysEx(targetLayer = -1) {
+    toSysEx(targetLayer = -1, targetVersion = 3, fwId = SYSEX_V2_FW_ID) {
         const out = new Uint8Array(this._data);
         for (let i = 0; i < SYSEX_HEADER.length; i++) {
             out[i] = SYSEX_HEADER[i];
@@ -242,6 +377,9 @@ class MM2Program {
         out[OFFSET_CMD] = targetLayer === 0 ? CMD_LOAD_A : (targetLayer === 1 ? CMD_LOAD_B : CMD_LOAD_ACTIVE);
         out[OFFSET_FW] = SYSEX_V3_FW_ID;
         out[SYSEX_V3_LEN - 1] = SYSEX_END;
+        if (targetVersion === 2) {
+            return convertV3toV2(out, fwId);
+        }
         return out;
     }
 
@@ -482,12 +620,15 @@ class MM2Bank {
 
     /**
      * Serializes all programs into a single concatenated SysEx Uint8Array
+     * @param {number} targetVersion 3 for firmware v3.x (default), 2 for firmware v2.x
+     * @param {number} fwId firmware ID byte for v2.x SysEx (default SYSEX_V2_FW_ID)
      */
-    toBankSysEx() {
-        const total = this.programs.length * SYSEX_V3_LEN;
+    toBankSysEx(targetVersion = 3, fwId = SYSEX_V2_FW_ID) {
+        const progLen = targetVersion === 2 ? SYSEX_V2_LEN : SYSEX_V3_LEN;
+        const total = this.programs.length * progLen;
         const out = new Uint8Array(total);
         for (let i = 0; i < this.programs.length; i++) {
-            out.set(this.programs[i].toSysEx(), i * SYSEX_V3_LEN);
+            out.set(this.programs[i].toSysEx(-1, targetVersion, fwId), i * progLen);
         }
         return out;
     }
