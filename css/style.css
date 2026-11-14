@@ -471,15 +471,18 @@ main.app-main {
     color: #fff;
 }
 
-.btn-panic {
+.btn-panic,
+.btn-panic:hover {
     background: transparent;
     border-color: var(--accent-red);
     color: var(--accent-red);
 }
 
-.btn-panic:hover {
-    background: rgba(238, 82, 83, 0.18);
+.btn-panic:active {
+    background: var(--accent-red);
+    border-color: var(--accent-red);
     color: #fff;
+    box-shadow: 0 0 10px rgba(238, 82, 83, 0.5);
 }
 
 .btn-sm {
