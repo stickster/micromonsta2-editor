@@ -4530,6 +4530,43 @@ async function runAllTests(logger = console.log) {
         document.getElementById = prevGetEl58;
     }
 
+    // Section 59: Whole Mod Matrix Reset to Init-Patch Tests
+    logger('\n--- [59] Whole Mod Matrix Reset to Init-Patch Tests ---');
+    try {
+        const mtxResetApp = new App();
+        const initProg = new MM2Program();
+        mtxResetApp.activeTimbre.setValue('OSC1_SHAPE', 77);
+        mtxResetApp.activeTimbre.setValue('MTX1_SRC', 5);
+        mtxResetApp.activeTimbre.setValue('MTX1_DST', 13);
+        mtxResetApp.activeTimbre.setValue('MTX1_AMT', 180);
+        mtxResetApp.activeTimbre.setValue('MTX2_SRC', 18);
+        mtxResetApp.activeTimbre.setValue('MTX2_DST', 14);
+        mtxResetApp.activeTimbre.setValue('MTX2_AMT', 160);
+
+        const onChange = mtxResetApp.createOnChange();
+        resetSectionToInit('mtx_group', 1, mtxResetApp.activeTimbre, onChange);
+
+        assertEqual(mtxResetApp.activeTimbre.getValue('OSC1_SHAPE'), 77, 'Resetting whole mod matrix does not alter non-matrix params');
+        assertEqual(mtxResetApp.activeTimbre.getValue('MTX1_SRC'), initProg.getValue('MTX1_SRC'), 'MTX1_SRC matches Init-patch (21)');
+        assertEqual(mtxResetApp.activeTimbre.getValue('MTX1_DST'), initProg.getValue('MTX1_DST'), 'MTX1_DST matches Init-patch (1)');
+        assertEqual(mtxResetApp.activeTimbre.getValue('MTX1_AMT'), initProg.getValue('MTX1_AMT'), 'MTX1_AMT matches Init-patch (136)');
+        assertEqual(mtxResetApp.activeTimbre.getValue('MTX2_SRC'), 0, 'MTX2_SRC resets to 0');
+        assertEqual(mtxResetApp.activeTimbre.getValue('MTX2_DST'), 0, 'MTX2_DST resets to 0');
+        assertEqual(mtxResetApp.activeTimbre.getValue('MTX2_AMT'), 128, 'MTX2_AMT resets to 128');
+        assertEqual(mtxResetApp.undoStack.length, 1, 'Whole mod matrix reset records 1 atomic undo entry');
+
+        mtxResetApp.undo();
+        assertEqual(mtxResetApp.activeTimbre.getValue('MTX1_SRC'), 5, 'Undo restores previous MTX1_SRC');
+        assertEqual(mtxResetApp.activeTimbre.getValue('MTX2_SRC'), 18, 'Undo restores previous MTX2_SRC');
+
+        mtxResetApp.redo();
+        assertEqual(mtxResetApp.activeTimbre.getValue('MTX1_SRC'), initProg.getValue('MTX1_SRC'), 'Redo reapplies Init-patch MTX1_SRC');
+        assertEqual(mtxResetApp.activeTimbre.getValue('MTX2_SRC'), 0, 'Redo reapplies cleared MTX2_SRC');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

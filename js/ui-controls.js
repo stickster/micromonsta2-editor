@@ -303,6 +303,7 @@ function resetSectionToInit(sectionType, sectionIndex, program, onChangeCallback
     const def = SECTION_DEFINITIONS[sectionType];
     if (!def || !program) return;
     const params = def.getParams(sectionIndex);
+    const initProgram = (sectionType === 'mtx_group' && typeof MM2Program !== 'undefined') ? new MM2Program() : null;
 
     if (onChangeCallback && onChangeCallback.beginGroup) {
         onChangeCallback.beginGroup(`Reset ${sectionType.toUpperCase()} ${sectionIndex}`);
@@ -310,7 +311,7 @@ function resetSectionToInit(sectionType, sectionIndex, program, onChangeCallback
     for (const paramKey of Object.values(params)) {
         const pDef = PARAM_MAP.get(paramKey);
         if (pDef) {
-            const defVal = pDef.default ?? 0;
+            const defVal = initProgram ? initProgram.getValue(paramKey) : (pDef.default ?? 0);
             const prevVal = program.getValue(paramKey);
             program.setValue(paramKey, defVal);
             if (onChangeCallback) onChangeCallback(paramKey, defVal, { isFinal: true, prevVal });

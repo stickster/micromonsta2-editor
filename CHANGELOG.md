@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **Editor:** Made Init button an atomic undoable step preserving history.
 - **Modulation:** Removed redundant copy/paste buttons from LFOs and mod matrix slots.
+- **Mod Matrix:** Restored Init-patch slot defaults when resetting the whole matrix.
 
 ---
 
