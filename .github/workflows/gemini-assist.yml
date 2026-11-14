@@ -3,6 +3,12 @@ name: Gemini Assistant
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: 'Issue number to fix/assist'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -11,15 +17,16 @@ permissions:
 
 jobs:
   assist:
-    # Trigger on authorized comments mentioning @gemini-cli, /gemini, or /fix (excluding bot comments and dedicated commands)
+    # Trigger via workflow_dispatch (e.g. from triage) or authorized comments mentioning @gemini-cli, /gemini, or /fix
     if: >
-      github.event.comment.user.login != 'github-actions[bot]' &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
-      (contains(github.event.comment.body, '@gemini-cli') ||
-       contains(github.event.comment.body, '/gemini') ||
-       contains(github.event.comment.body, '/fix')) &&
-      !contains(github.event.comment.body, '/review') &&
-      !contains(github.event.comment.body, '/triage')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.comment.user.login != 'github-actions[bot]' &&
+       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+       (contains(github.event.comment.body, '@gemini-cli') ||
+        contains(github.event.comment.body, '/gemini') ||
+        contains(github.event.comment.body, '/fix')) &&
+       !contains(github.event.comment.body, '/review') &&
+       !contains(github.event.comment.body, '/triage'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -62,26 +69,25 @@ jobs:
               }
             }
           prompt: |
-            Respond to comment by @${{ github.event.comment.user.login }}:
-            "${{ github.event.comment.body }}"
+            Trigger: ${{ github.event_name == 'workflow_dispatch' && 'Automated triage handoff (/fix)' || format('Comment by @{0}: "{1}"', github.event.comment.user.login, github.event.comment.body) }}
 
             Context:
-            Issue/PR #${{ github.event.issue.number }}: "${{ github.event.issue.title }}"
-            Is PR: ${{ github.event.issue.pull_request != null }}
+            Issue/PR #${{ github.event.inputs.issue_number || github.event.issue.number }}
+            Is PR: ${{ github.event_name != 'workflow_dispatch' && github.event.issue.pull_request != null }}
 
-            First, inspect the full issue or PR details using `gh issue view ${{ github.event.issue.number }}` (or `gh pr view ${{ github.event.issue.number }}` if Is PR is true) and follow all guidelines in AGENTS.md, .agents/rules/, and GEMINI.md.
+            First, inspect the full issue or PR details using `gh issue view ${{ github.event.inputs.issue_number || github.event.issue.number }}` (or `gh pr view ${{ github.event.inputs.issue_number || github.event.issue.number }}` if Is PR is true) and follow all guidelines in AGENTS.md, .agents/rules/, and GEMINI.md.
 
-            If a bug fix, feature, or code change is requested (e.g. via `/fix` or `/gemini`):
-            1. If Is PR is false: create and check out a new branch `fix/issue-${{ github.event.issue.number }}` (or `feat/issue-${{ github.event.issue.number }}` if it is a feature). If Is PR is true: check out the PR branch with `gh pr checkout ${{ github.event.issue.number }}`.
+            If a bug fix, feature, or code change is requested (including automated triage handoff `/fix`, or `/gemini` / `/fix` comments):
+            1. If Is PR is false: create and check out a new branch `fix/issue-${{ github.event.inputs.issue_number || github.event.issue.number }}` (or `feat/issue-${{ github.event.inputs.issue_number || github.event.issue.number }}` if it is a feature). If Is PR is true: check out the PR branch with `gh pr checkout ${{ github.event.inputs.issue_number || github.event.issue.number }}`.
             2. Implement surgical, minimal edits adhering to the Vanilla JS architecture (no bundlers or external dependencies) and add regression tests in `tests/test-suite.js`.
             3. Run `node tests/cli-runner.js` and verify all tests pass with 0 failures.
             4. Stage and commit the changes using Conventional Commits (`<type>(<scope>): <summary>`, under 72 chars, no trailing period) and include `Co-authored-by: Google Gemini <gemini@google.com>`.
             5. Push the branch to `origin` (`git push -u origin HEAD`).
-            6. If Is PR is false: create a Pull Request targeting `main` using `gh pr create --base main --title "<commit subject>" --body "Closes #${{ github.event.issue.number }}\n\n<summary of fix and test results>"`, then post a comment on issue #${{ github.event.issue.number }} via `gh issue comment` with the link to the new PR.
-            7. If Is PR is true: post a comment on PR #${{ github.event.issue.number }} via `gh pr comment` summarizing the pushed changes.
+            6. If Is PR is false: create a Pull Request targeting `main` using `gh pr create --base main --title "<commit subject>" --body "Closes #${{ github.event.inputs.issue_number || github.event.issue.number }}\n\n<summary of fix and test results>"`, then post a comment on issue #${{ github.event.inputs.issue_number || github.event.issue.number }} via `gh issue comment` with the link to the new PR.
+            7. If Is PR is true: post a comment on PR #${{ github.event.inputs.issue_number || github.event.issue.number }} via `gh pr comment` summarizing the pushed changes.
 
             If only a question or explanation is requested (no code changes):
-            Post a clear, concise response as a comment using `gh issue comment ${{ github.event.issue.number }} --body "..."`.
+            Post a clear, concise response as a comment using `gh issue comment ${{ github.event.inputs.issue_number || github.event.issue.number }} --body "..."`.
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

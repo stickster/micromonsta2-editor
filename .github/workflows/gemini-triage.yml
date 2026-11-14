@@ -15,6 +15,13 @@ on:
 permissions:
   contents: read
   issues: write
+  actions: write
+
+env:
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GEMINI_CLI_TRUST_WORKSPACE: 'true'
 
 jobs:
   triage:
@@ -63,13 +70,11 @@ jobs:
             Triage issue #${{ github.event.inputs.issue_number || github.event.issue.number }}: "${{ github.event.issue.title }}".
             First, inspect the full issue details and comments using `gh issue view ${{ github.event.inputs.issue_number || github.event.issue.number }}`.
             Evaluate the issue against AGENTS.md, .agents/rules/, and GEMINI.md:
-            1. Check if the issue involves hardware limitations that cannot be handled over MIDI (such as combi parameters or global system settings). If so, politely explain this limitation in a comment on the issue.
+            1. Check if the issue involves hardware limitations that cannot be handled over MIDI (such as combi parameters or global system settings). If so, politely explain this limitation in a comment on the issue via `gh issue comment ${{ github.event.inputs.issue_number || github.event.issue.number }} --body "..."` and do NOT queue a fix.
             2. Classify the issue (`bug`, `enhancement`, `question`) and apply relevant labels using `gh issue edit ${{ github.event.inputs.issue_number || github.event.issue.number }} --add-label "..."`.
-            3. If the bug report is missing essential reproduction steps or firmware details, post a helpful comment requesting the missing information.
-            4. If the issue is clear and actionable, summarize the implementation plan.
-            5. You MUST post your triage response (hardware limitation note, request for missing info, or implementation plan summary) directly on the issue using `gh issue comment ${{ github.event.inputs.issue_number || github.event.issue.number }} --body "..."`. Do not only output the response to stdout.
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GEMINI_CLI_TRUST_WORKSPACE: 'true'
+            3. If the bug report is missing essential reproduction steps or firmware details, add the `triage:needs-info` label (`gh issue edit ${{ github.event.inputs.issue_number || github.event.issue.number }} --add-label "triage:needs-info"`), post a helpful comment requesting the missing information via `gh issue comment`, and do NOT queue a fix.
+            4. If the issue is clear and actionable (a `bug` or `enhancement` with sufficient detail):
+               - Add the `triage:ready-for-fix` label using `gh issue edit ${{ github.event.inputs.issue_number || github.event.issue.number }} --add-label "triage:ready-for-fix"`.
+               - Post a comment on the issue summarizing the implementation plan using `gh issue comment ${{ github.event.inputs.issue_number || github.event.issue.number }} --body "..."`.
+               - Dispatch the assistant workflow to attempt a fix/PR using `gh workflow run gemini-assist.yml -f issue_number=${{ github.event.inputs.issue_number || github.event.issue.number }}`.
+            5. Always post your triage response directly on the issue using `gh issue comment`; do not only output the response to stdout.

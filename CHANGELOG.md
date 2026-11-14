@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - **CI:** Instruct `gemini-triage` and `gemini-review` workflows to fetch full issue/PR details and post comments/reviews via `gh` CLI.
+- **CI:** Add `workflow_dispatch` handoff from `gemini-triage` to `gemini-assist` for actionable issues.
 
 ---
 
