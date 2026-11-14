@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.4.1] - 2026-11-13
+
 ### Changed
 - **UI:** Refactor: Rearranged panels; improved space efficiency in Math, Chord, and Oscillator panels; improved Envelope readability.
 
