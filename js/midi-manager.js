@@ -688,6 +688,15 @@ class MidiManager {
         this.outPort.send(new Uint8Array([status, noteNumber & 127, velocity & 127]));
     }
 
+    /**
+     * Sends MIDI All Notes Off (CC 123 = 0) on the active target channel
+     */
+    sendAllNotesOff() {
+        if (!this.outPort) return;
+        const status = 0xB0 | this.targetChannel;
+        this.outPort.send(new Uint8Array([status, 123, 0]));
+    }
+
     loadSettings() {
         if (typeof window === 'undefined') return;
         try {

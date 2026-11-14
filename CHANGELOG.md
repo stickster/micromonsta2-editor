@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **MIDI:** Added MIDI Panic button (All Notes Off CC 123) beside Mod wheel.
+
 ### Changed
 - **Editor:** Made patch rewrite on Fetch an atomic undoable step.
 

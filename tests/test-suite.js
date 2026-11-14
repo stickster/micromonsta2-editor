@@ -1288,6 +1288,34 @@ async function runAllTests(logger = console.log) {
         assert(kbdArea.children[0].classList.contains('audition-hint'), 'Keys legend is placed immediately to the left of the keyboard');
         assert(kbdArea.children[1].classList.contains('keyboard-wrapper'), 'Keyboard wrapper follows Keys legend inside keyboard area');
         assertEqual(kbd.querySelector('.audition-controls').querySelector('.audition-hint'), null, 'Keys legend is not inside audition-controls');
+
+        const panicBtn = kbd.querySelector('#kbd-panic');
+        assert(panicBtn !== null, 'MIDI Panic button exists in audition controls');
+        assert(panicBtn.classList.contains('btn-panic'), 'Panic button has .btn-panic red-outline class');
+        const auditionControls = kbd.querySelector('.audition-controls');
+        assert(auditionControls.children[auditionControls.children.length - 1] === panicBtn, 'Panic button is placed to the right of Mod wheel control');
+
+        // Verify MidiManager.sendAllNotesOff dispatches CC 123 = 0
+        const panicMidi = new MidiManager();
+        let panicSentBytes = null;
+        panicMidi.baseChannel = 14;
+        panicMidi.outPort = { id: 'out-1', name: 'MicroMonsta 2', send: (bytes) => { panicSentBytes = Array.from(bytes); } };
+        panicMidi.sendAllNotesOff();
+        assertEqual(panicSentBytes[0], 0xBE, 'sendAllNotesOff uses CC status on targetChannel (0xB0 | 14)');
+        assertEqual(panicSentBytes[1], 123, 'sendAllNotesOff sends CC 123 (All Notes Off)');
+        assertEqual(panicSentBytes[2], 0, 'sendAllNotesOff sends value 0');
+
+        // Verify clicking Panic releases latched notes and triggers sendAllNotesOff
+        let kbdAllNotesOffCalled = 0;
+        mockMidi.sendAllNotesOff = () => { kbdAllNotesOffCalled++; };
+        const latchBtnEl = kbd.querySelector('#kbd-latch');
+        latchBtnEl.click();
+        assert(latchBtnEl.classList.contains('active'), 'Latch button activates');
+        kbd.noteOn(60);
+        panicBtn.click();
+        assert(!latchBtnEl.classList.contains('active'), 'Panic deactivates Latch');
+        assert(!kbd.querySelector('[data-offset="0"]').classList.contains('pressed'), 'Panic releases held/latched keys');
+        assertEqual(kbdAllNotesOffCalled, 1, 'Panic calls midiManager.sendAllNotesOff()');
         kbd.setOctave(3); // Octave 3 base is (3+1)*12 = 48. Offsets 0..24 span notes 48..72
 
         const key0 = kbd.querySelector('[data-offset="0"]');

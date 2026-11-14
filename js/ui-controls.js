@@ -2118,6 +2118,7 @@ function createKeyboard(midiManager, getActiveProgram) {
                 <input type="range" class="wheel-slider" id="mod-wheel" min="0" max="127" value="0">
             </div>
         </div>
+        <button class="btn btn-sm btn-panic" id="kbd-panic" title="MIDI Panic — All Notes Off (CC 123)">Panic</button>
     `;
 
     const kbdWrapper = document.createElement('div');
@@ -2337,6 +2338,22 @@ function createKeyboard(midiManager, getActiveProgram) {
             latchBtn.classList.toggle('active', latchActive);
             if (!latchActive) {
                 releaseAllNotes();
+            }
+        });
+    }
+
+    // MIDI Panic (All Notes Off)
+    const panicBtn = controls.querySelector('#kbd-panic');
+    if (panicBtn) {
+        panicBtn.addEventListener('click', () => {
+            latchActive = false;
+            if (latchBtn) latchBtn.classList.remove('active');
+            releaseAllNotes();
+            if (typeof midiManager.sendAllNotesOff === 'function') {
+                midiManager.sendAllNotesOff();
+            } else if (midiManager.outPort) {
+                const ch = midiManager.targetChannel;
+                midiManager.outPort.send(new Uint8Array([0xB0 | ch, 123, 0]));
             }
         });
     }
