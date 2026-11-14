@@ -27,7 +27,9 @@
 }
 
 /* Resolution-Dependent Minimum Width (2× on HiDPI Displays) */
-@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi), (min-resolution: 2dppx) {
+@media (-webkit-min-device-pixel-ratio: 2),
+(min-resolution: 192dpi),
+(min-resolution: 2dppx) {
     :root {
         --min-app-width: 1200px;
         --max-app-width: 1600px;
@@ -586,11 +588,24 @@ main.app-main {
     cursor: grabbing;
 }
 
-/* Filter Main Knobs Prominence */
+/* Filter Hero Row & Main Knobs */
+.flt-hero-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+}
+
 .flt-main-knobs {
-    justify-content: center;
-    gap: 28px;
-    padding: 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.flt-secondary-knobs {
+    flex-wrap: nowrap;
+    gap: 4px;
 }
 
 /* Modulation Matrix Single-Row Slots */
@@ -1742,9 +1757,17 @@ main.app-main {
 }
 
 @keyframes pulse {
-    0% { opacity: 1; }
-    50% { opacity: 0.5; }
-    100% { opacity: 1; }
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
 }
 
 .bank-toolbar {
@@ -1759,7 +1782,8 @@ main.app-main {
     flex-wrap: wrap;
 }
 
-.bank-tools-left, .bank-tools-right {
+.bank-tools-left,
+.bank-tools-right {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1893,7 +1917,7 @@ footer.audition-footer {
     border-top: 1px solid var(--border-color);
     padding: 8px 20px;
     z-index: 90;
-    box-shadow: 0 -4px 16px rgba(0,0,0,0.4);
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .audition-bar {
@@ -2033,7 +2057,7 @@ footer.audition-footer {
     max-width: 90vw;
     max-height: 85vh;
     overflow-y: auto;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
 }
 
 .modal-header {
@@ -2166,7 +2190,7 @@ footer.audition-footer {
     font-weight: 600;
     z-index: 1001;
     display: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
     animation: fadeIn 0.2s ease;
 }
 
@@ -2193,8 +2217,15 @@ footer.audition-footer {
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .empty-state {
@@ -2228,8 +2259,13 @@ footer.audition-footer {
 }
 
 @keyframes pulse-compare {
-    from { box-shadow: 0 0 6px rgba(255, 159, 67, 0.4); }
-    to { box-shadow: 0 0 14px rgba(255, 159, 67, 0.9); }
+    from {
+        box-shadow: 0 0 6px rgba(255, 159, 67, 0.4);
+    }
+
+    to {
+        box-shadow: 0 0 14px rgba(255, 159, 67, 0.9);
+    }
 }
 
 .sync-badge {
@@ -2547,7 +2583,7 @@ footer.audition-footer {
     background: var(--bg-panel);
     border: 1px solid var(--border-highlight);
     border-radius: 6px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
     z-index: 150;
     min-width: 170px;
     display: none;
@@ -2613,10 +2649,10 @@ footer.audition-footer {
 }
 
 .filter-visualizer {
-    height: 56px;
-    max-width: 240px;
-    margin: 0 auto;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
+    height: 94px;
+    margin: 0;
 }
 
 .filter-stroke {

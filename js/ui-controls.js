@@ -1164,7 +1164,7 @@ function createFilterCurveVisualizer(program, onChange) {
     container.title = 'Filter Magnitude Response (20 Hz–20 kHz, log; +24 to −48 dB) — Drag dot to adjust Cutoff & Resonance';
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 200 48');
+    svg.setAttribute('viewBox', '0 0 200 84');
     svg.setAttribute('class', 'visualizer-svg');
 
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -1212,7 +1212,7 @@ function createFilterCurveVisualizer(program, onChange) {
 
         const w = 200;
         const x0 = 6, x1 = w - 6;
-        const yTop = 4, yBot = 44;
+        const yTop = 6, yBot = 78;
         const DB_MAX = 24, DB_MIN = -48;
         const dbToY = (db) => yBot - ((Math.max(DB_MIN, Math.min(DB_MAX, db)) - DB_MIN) / (DB_MAX - DB_MIN)) * (yBot - yTop);
         const hzToX = (hz) => x0 + (Math.log(hz / F_MIN) / Math.log(F_MAX / F_MIN)) * (x1 - x0);
@@ -1321,7 +1321,7 @@ function createFilterCurveVisualizer(program, onChange) {
     if (onChange) {
         const X_MIN = 6;
         const X_MAX = 194;
-        const RESO_DRAG_SPAN = 24; // SVG Y units for full 0..127 resonance sweep
+        const RESO_DRAG_SPAN = 42; // SVG Y units for full 0..127 resonance sweep
 
         const toSvgCoords = (clientX, clientY) => {
             const rect = svg.getBoundingClientRect ? svg.getBoundingClientRect() : null;
@@ -1330,7 +1330,7 @@ function createFilterCurveVisualizer(program, onChange) {
             }
             return {
                 x: ((clientX - rect.left) / rect.width) * 200,
-                y: ((clientY - rect.top) / rect.height) * 48
+                y: ((clientY - rect.top) / rect.height) * 84
             };
         };
 
@@ -1774,7 +1774,7 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
                         window.app.showNotification(`Copied Section ${data.sectionIndex} to ${sectionIndex}`, 'success');
                     }
                 }
-            } catch (err) {}
+            } catch (err) { }
         });
     }
 
@@ -1862,7 +1862,7 @@ function createArpSequencer(program, onChangeCallback) {
                     window.app.showNotification(`Copied Step ${srcIdx} to all steps`, 'success');
                 }
             }
-        } catch (err) {}
+        } catch (err) { }
         activeStepDrag = null;
     });
     toolsDiv.appendChild(copyToAllBtn);
@@ -2026,7 +2026,7 @@ function createArpSequencer(program, onChangeCallback) {
                         window.app.showNotification(`Copied Step ${srcIdx} to Step ${i}`, 'success');
                     }
                 }
-            } catch (err) {}
+            } catch (err) { }
             activeStepDrag = null;
         });
 

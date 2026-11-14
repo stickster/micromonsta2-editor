@@ -2208,7 +2208,17 @@ class App {
 
         // FILTER
         const flt = createSectionCard('Filter', 'flt', 1, timbre, onChange);
-        flt.body.appendChild(createFilterCurveVisualizer(timbre, onChange));
+
+        const fltHeroRow = document.createElement('div');
+        fltHeroRow.className = 'flt-hero-row';
+        fltHeroRow.appendChild(createFilterCurveVisualizer(timbre, onChange));
+
+        const fltMainKnobs = document.createElement('div');
+        fltMainKnobs.className = 'flt-main-knobs';
+        fltMainKnobs.appendChild(createKnob('FILTER_FREQ', timbre, onChange, { large: true }));
+        fltMainKnobs.appendChild(createKnob('FILTER_RESO', timbre, onChange, { large: true }));
+        fltHeroRow.appendChild(fltMainKnobs);
+        flt.body.appendChild(fltHeroRow);
 
         const fltSelects = document.createElement('div');
         fltSelects.className = 'select-row';
@@ -2218,22 +2228,15 @@ class App {
         fltSelects.appendChild(fltCharWrap);
         flt.body.appendChild(fltSelects);
 
-        // Filter Knobs — Row 1: Cutoff, Resonance, Tracking, Envelope
-        const fltRow1Knobs = document.createElement('div');
-        fltRow1Knobs.className = 'knob-row flt-main-knobs';
-        fltRow1Knobs.appendChild(createKnob('FILTER_FREQ', timbre, onChange, { large: true }));
-        fltRow1Knobs.appendChild(createKnob('FILTER_RESO', timbre, onChange, { large: true }));
-        fltRow1Knobs.appendChild(createKnob('FILTER_TRACKING', timbre, onChange));
-        fltRow1Knobs.appendChild(createKnob('FILTER_ENV2', timbre, onChange));
-        flt.body.appendChild(fltRow1Knobs);
-
-        // Filter Knobs — Row 2: FM, Drive, Mix / Volume
-        const fltRow2Knobs = document.createElement('div');
-        fltRow2Knobs.className = 'knob-row';
-        fltRow2Knobs.appendChild(createKnob('FILTER_FM', timbre, onChange));
-        fltRow2Knobs.appendChild(createKnob('DRIVE_VOICE', timbre, onChange));
-        fltRow2Knobs.appendChild(createKnob('LAY_MASTER_VOLUME', timbre, onChange));
-        flt.body.appendChild(fltRow2Knobs);
+        // Filter Knobs: Tracking, Envelope, FM, Drive, Mix / Volume
+        const fltKnobs = document.createElement('div');
+        fltKnobs.className = 'knob-row flt-secondary-knobs';
+        fltKnobs.appendChild(createKnob('FILTER_TRACKING', timbre, onChange));
+        fltKnobs.appendChild(createKnob('FILTER_ENV2', timbre, onChange));
+        fltKnobs.appendChild(createKnob('FILTER_FM', timbre, onChange));
+        fltKnobs.appendChild(createKnob('DRIVE_VOICE', timbre, onChange));
+        fltKnobs.appendChild(createKnob('LAY_MASTER_VOLUME', timbre, onChange));
+        flt.body.appendChild(fltKnobs);
         row1.appendChild(flt.card);
 
         // ENVELOPES (1–3 Unified)

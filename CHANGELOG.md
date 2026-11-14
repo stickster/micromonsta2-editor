@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Editor:** Made patch rewrite on Fetch an atomic undoable step.
 - **UI:** Brightened Panic button on click instead of hover.
+- **Filter:** Moved Cutoff and Resonance knobs beside a taller response curve.
 
 ### Fixed
 - **Oscillators:** Cancelled opposite solo/mute state when toggling a single oscillator.
