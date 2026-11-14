@@ -4334,6 +4334,41 @@ async function runAllTests(logger = console.log) {
         global.confirm = prevConfirm55;
     }
 
+    // Section 56: LFO & Mod Matrix Inline Action Cleanup Tests
+    logger('\n--- [56] LFO & Mod Matrix Inline Action Cleanup Tests ---');
+    const prevGetEl56 = document.getElementById;
+    try {
+        const modGrid = document.createElement('div');
+        modGrid.id = 'editor-grid';
+        document.getElementById = (id) => (id === 'editor-grid' ? modGrid : prevGetEl56(id));
+
+        const cleanApp = new App();
+        cleanApp.buildEditorUI();
+
+        const lfoCards = modGrid.querySelectorAll('.lfo-sub-card');
+        assertEqual(lfoCards.length, 3, 'Renders 3 LFO sub-cards');
+        lfoCards.forEach((card, idx) => {
+            const actionsEl = card.querySelector('.matrix-slot-actions');
+            const btns = actionsEl ? actionsEl.querySelectorAll('.btn-slot-icon') : [];
+            assertEqual(btns.length, 2, `LFO ${idx + 1} has only Randomize and Reset buttons (no Copy/Paste)`);
+            assert(btns.every(b => !/copy|paste/i.test(b.title || '')), `LFO ${idx + 1} has no Copy/Paste button`);
+        });
+
+        const mtxRows = modGrid.querySelectorAll('.matrix-slot-row');
+        assertEqual(mtxRows.length, 12, 'Renders 12 Mod Matrix slot rows');
+        mtxRows.forEach((row, idx) => {
+            const actionsEl = row.querySelector('.matrix-slot-actions');
+            const btns = actionsEl ? actionsEl.querySelectorAll('.btn-slot-icon') : [];
+            assertEqual(btns.length, 2, `Matrix Slot ${idx + 1} has only Randomize and Clear buttons (no Copy/Paste)`);
+            assert(btns.every(b => !/copy|paste/i.test(b.title || '')), `Matrix Slot ${idx + 1} has no Copy/Paste button`);
+        });
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    } finally {
+        document.getElementById = prevGetEl56;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

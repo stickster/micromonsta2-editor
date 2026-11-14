@@ -2378,33 +2378,6 @@ class App {
             const actions = document.createElement('div');
             actions.className = 'matrix-slot-actions';
 
-            const btnCopy = document.createElement('button');
-            btnCopy.type = 'button';
-            btnCopy.className = 'btn-slot-icon';
-            btnCopy.title = `Copy LFO ${l} to clipboard`;
-            btnCopy.innerHTML = ICON_COPY_SVG;
-            btnCopy.onclick = () => {
-                copySectionToClipboard('lfo', l, timbre());
-                this.showNotification(`Copied LFO ${l} to clipboard`, 'info');
-            };
-
-            const btnPaste = document.createElement('button');
-            btnPaste.type = 'button';
-            btnPaste.className = 'btn-slot-icon';
-            btnPaste.title = `Paste into LFO ${l}`;
-            btnPaste.innerHTML = ICON_PASTE_SVG;
-            btnPaste.onclick = () => {
-                const res = pasteSectionFromClipboard('lfo', l, timbre(), onChange);
-                if (res) {
-                    subLfo.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
-                    const viz = subLfo.querySelector('.lfo-visualizer');
-                    if (viz && viz.refresh) viz.refresh();
-                    this.showNotification(`Pasted into LFO ${l}`, 'success');
-                } else {
-                    this.showNotification('Clipboard is empty or contains non-LFO data', 'warning');
-                }
-            };
-
             const btnRandom = document.createElement('button');
             btnRandom.type = 'button';
             btnRandom.className = 'btn-slot-icon';
@@ -2431,8 +2404,6 @@ class App {
                 this.showNotification(`Reset LFO ${l} to defaults`, 'info');
             };
 
-            actions.appendChild(btnCopy);
-            actions.appendChild(btnPaste);
             actions.appendChild(btnRandom);
             actions.appendChild(btnClear);
 
@@ -2569,34 +2540,9 @@ class App {
 
             const amtSlider = createBipolarSlider(`MTX${m}_AMT`, timbre, onChange, { label: 'Amt' });
 
-            // Action buttons: Copy, Paste, Randomize, Clear
+            // Action buttons: Randomize, Clear
             const actions = document.createElement('div');
             actions.className = 'matrix-slot-actions';
-
-            const btnCopy = document.createElement('button');
-            btnCopy.type = 'button';
-            btnCopy.className = 'btn-slot-icon';
-            btnCopy.title = `Copy Slot ${m} routing to clipboard`;
-            btnCopy.innerHTML = ICON_COPY_SVG;
-            btnCopy.onclick = () => {
-                copySectionToClipboard('mtx', m, timbre());
-                this.showNotification(`Copied Matrix Slot ${m} to clipboard`, 'info');
-            };
-
-            const btnPaste = document.createElement('button');
-            btnPaste.type = 'button';
-            btnPaste.className = 'btn-slot-icon';
-            btnPaste.title = `Paste into Slot ${m}`;
-            btnPaste.innerHTML = ICON_PASTE_SVG;
-            btnPaste.onclick = () => {
-                const res = pasteSectionFromClipboard('mtx', m, timbre(), onChange);
-                if (res) {
-                    slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
-                    this.showNotification(`Pasted into Matrix Slot ${m}`, 'success');
-                } else {
-                    this.showNotification('Clipboard is empty or contains non-matrix data', 'warning');
-                }
-            };
 
             const btnRandom = document.createElement('button');
             btnRandom.type = 'button';
@@ -2619,8 +2565,6 @@ class App {
                 slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
             };
 
-            actions.appendChild(btnCopy);
-            actions.appendChild(btnPaste);
             actions.appendChild(btnRandom);
             actions.appendChild(btnClear);
 
