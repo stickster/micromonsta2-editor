@@ -3720,23 +3720,34 @@ class App {
         input.onblur = () => finish(true);
     }
 
-    deleteBank(index = this.librarian.activeBankIndex) {
+    async deleteBank(index = this.librarian.activeBankIndex) {
         const bank = this.librarian.banks[index];
-        if (!bank) return;
+        if (!bank) return false;
         if (this.librarian.banks.length <= 1) {
             this.showNotification('Cannot delete the only bank. At least one bank is required.', 'warning');
-            return;
+            return false;
         }
         const patchNote = bank.length > 0 ? ` and all of its ${bank.length} patch(es)` : '';
-        const confirmed = confirm(`Delete bank "${bank.name}"${patchNote}?\n\nThis cannot be undone.`);
-        if (confirmed) {
-            const bankName = bank.name;
-            const ok = this.librarian.removeBank(index);
-            if (ok) {
-                this.renderLibrarianBank();
-                this.showNotification(`Deleted bank "${bankName}".`, 'success');
-            }
+        const confirmed = await this._promptDeleteBank(bank.name, patchNote);
+        if (!confirmed) return false;
+
+        const bankName = bank.name;
+        const ok = this.librarian.removeBank(index);
+        if (ok) {
+            this.renderLibrarianBank();
+            this.showNotification(`Deleted bank "${bankName}".`, 'success');
         }
+        return ok;
+    }
+
+    async _promptDeleteBank(bankName, patchNote) {
+        const result = await this._openDialog('delete-bank-dialog', () => {
+            const desc = document.getElementById('delete-bank-desc');
+            if (desc) {
+                desc.textContent = `Delete bank "${bankName}"${patchNote}? This cannot be undone.`;
+            }
+        });
+        return result === 'confirm';
     }
 
     renderLibrarianBank() {

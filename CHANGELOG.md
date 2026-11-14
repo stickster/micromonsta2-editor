@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - **UI:** Create Bank now creates a bank tab button immediately and enters inline rename mode without a browser `prompt()` dialog.
+- **UI:** Delete Bank now uses an app-styled `<dialog>` (`#delete-bank-dialog`) instead of a browser `confirm()` dialog.
 
 - **UI:** Make librarian bank tab titles directly editable on single-click with Enter/Escape handling.
 - **CI:** Instruct `gemini-triage` and `gemini-review` workflows to fetch full issue/PR details and post comments/reviews via `gh` CLI.
