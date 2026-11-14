@@ -99,6 +99,17 @@ header.app-header {
     color: var(--accent-cyan);
     border-color: rgba(0, 229, 255, 0.25);
     background: rgba(0, 229, 255, 0.05);
+    text-decoration: none;
+}
+
+a.brand-badge.app-version-badge[href] {
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+a.brand-badge.app-version-badge[href]:hover {
+    background: rgba(0, 229, 255, 0.15);
+    border-color: rgba(0, 229, 255, 0.55);
 }
 
 .header-center {

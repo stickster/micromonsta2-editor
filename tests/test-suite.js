@@ -2124,6 +2124,19 @@ async function runAllTests(logger = console.log) {
         appInstance.buildSettingsUI();
         assertEqual(mockSettingsVer.textContent, `v${App.VERSION}`, 'Settings panel displays current version');
         assertEqual(mockHeaderVer.textContent, `v${App.VERSION}`, 'Header badge displays current version');
+
+        if (typeof globalThis !== 'undefined' && globalThis.INDEX_HTML) {
+            const repoUrl = 'https://github.com/stickster/micromonsta2-editor';
+            for (const badgeId of ['app-version-badge', 'settings-app-version']) {
+                const match = globalThis.INDEX_HTML.match(new RegExp(`<a\\b[^>]*id="${badgeId}"[^>]*>`, 'i'));
+                assert(!!match, `${badgeId} is rendered as an <a> link in index.html`);
+                if (match) {
+                    assert(match[0].includes(`href="${repoUrl}"`), `${badgeId} links to ${repoUrl}`);
+                    assert(match[0].includes('target="_blank"'), `${badgeId} opens in a new tab`);
+                    assert(match[0].includes('rel="noopener noreferrer"'), `${badgeId} includes rel="noopener noreferrer"`);
+                }
+            }
+        }
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }

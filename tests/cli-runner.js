@@ -9,6 +9,7 @@ const vm = require('vm');
 
 const rootDir = path.resolve(__dirname, '..');
 global.PKG_JSON = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
+global.INDEX_HTML = fs.readFileSync(path.join(rootDir, 'index.html'), 'utf8');
 const scriptFiles = [
     'js/version.js',
     'js/mm2-specs.js',
