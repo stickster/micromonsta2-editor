@@ -63,8 +63,10 @@ All commit messages MUST follow the [Conventional Commits](https://www.conventio
   - `release`: Deploy/publish branch.
   - Feature & fix branches: Always create separate branches for fixes and features before merging into `main`.
 - **Cutting a Release**: When the user requests a release (e.g., `"bump version and release"`, `"cut release"`, `"prep release"`, `"release new version"`):
-  1. Bump `APP_VERSION` in `js/version.js` (`.githooks/pre-commit` syncs `package.json` automatically).
-  2. Update `CHANGELOG.md` by moving all items from `## [Unreleased]` into a new `## [<APP_VERSION>] - YYYY-MM-DD` section (listing each change as an individual, concise item bullet, and keeping an empty `## [Unreleased]` heading at the top for future commits).
-  3. Commit the release changes on `main` (ensuring `node tests/cli-runner.js` passes).
-  4. Merge the `main` branch into the `release` branch.
-  5. Create an annotated git tag matching the new version (`git tag -a v<APP_VERSION> -m "Release v<APP_VERSION>"`) on the release commit, push `main`, `release`, and the tag (`git push origin v<APP_VERSION>`), and switch back to `main`.
+  1. Capture a full-page screenshot of the running app using Chrome DevTools after successful MicroMonsta 2 detection and fetch/push: use `emulate` at the app's minimum desktop width (`--min-app-width`, `1200px`) and full document height (`scrollHeight`, so `position: fixed` elements like `footer.audition-footer` sit at the bottom without overlapping or clipping) before calling `take_screenshot` (`fullPage: true`), reset `emulate`, shrink the image to 50% size, and save it as `assets/screenshot.png` (PNG for crisp UI rendering; unversioned, always overwriting the previous file).
+  2. Ensure `README.md` (`## Screenshots`) embeds `assets/screenshot.png` (e.g., `![MicroMonsta 2 Editor & Patch Librarian](assets/screenshot.png)`).
+  3. Bump `APP_VERSION` in `js/version.js` (`.githooks/pre-commit` syncs `package.json` automatically).
+  4. Update `CHANGELOG.md` by moving all items from `## [Unreleased]` into a new `## [<APP_VERSION>] - YYYY-MM-DD` section (listing each change as an individual, concise item bullet, and keeping an empty `## [Unreleased]` heading at the top for future commits).
+  5. Stage and commit all release changes (`js/version.js`, `CHANGELOG.md`, `assets/screenshot.png`, and `README.md` if updated) together in the release commit on `main` (ensuring `node tests/cli-runner.js` passes).
+  6. Merge the `main` branch into the `release` branch.
+  7. Create an annotated git tag matching the new version (`git tag -a v<APP_VERSION> -m "Release v<APP_VERSION>"`) on the release commit, push `main`, `release`, and the tag (`git push origin v<APP_VERSION>`), and switch back to `main`.
