@@ -18,14 +18,25 @@ This page runs on your system only. No data is shared or sent to me or GitHub. F
 
 ## Features
 
-- **Editor**: Edit Part A and Part B (the synth's two layers) using the synthesis rack panels, with live hardware sync, undo/redo, and compare.
-- **Librarian**: Browse, search, and filter patches by category. Detect and manage duplicates.
-- **Settings**: MIDI port selection and app preferences, such as undo levels.
-- **SysEx handling**: Parses and builds MM2 SysEx patch data (firmware v3.x).
+- **Single-Screen Synthesis Rack**: View and edit all synthesis sections at once, without hunting through deep menus or modal tabs.
+- **Interactive Visualizers**: Real-time response curves and waveform previews for the Filter, Envelopes, and LFOs update as you shape a sound.
+- **Drag-and-Drop Modulation**: Drag LFOs, Envelopes, or Math Multipliers directly onto destination controls to wire up modulation slots
+- **Drag-and-Drop Copy**: Drag Oscillators, LFOs, Envelopes, Math Multipliers, Mod Matrix (sources, destinations, or whole slots) to copy. Reorder Mod Matrix slots by dragging them around.
+- **Fast Parameter Editing**: Click any knob value to type an exact number (or hold `Shift`/`Ctrl` for fine control).
+- **Oscillator Listening**: Toggle oscillator Mute and Solo (including noise) to isolate and fine tune.
+- **Hardware Sync and Bitimbral Workflow**: Automatic MicroMonsta 2 port detection and timbral mode tracking.
+- **Patch Convenience:** `Part A ↔ Part B` copying built in. Two modes available:
+   - Use **Fetch from MM2** / **Push to MM2** for quick transfers from/to current hardware state. Use the `Compare` toggle to hear differences quickly, OR:
+   - Use **Live Sync** mode which streams changes directly to hardware over 7-bit/14-bit NRPN (great for testing modulations).
+- **Full Multi-step Undo / Redo:** Uses`Cmd/Ctrl+Z`, `Cmd/Ctrl+Y` to make it easy to rewind or replay changes.
+- **Built-In Keyboard and Chorder Preview**: Always-available bottom keyboard with QWERTY note input, octave controls, latch, pitch/mod wheels, MIDI Panic, and dual-color highlighting of Chorder chords.
+- **Patch Librarian and Duplicate Manager**: Organize banks locally, search and filter by category, import/export `.syx` files, and detect or condense redundant duplicate patches.
+- **Privacy Respecting and Zero Setup**: Runs **100% LOCALLY** in your browser with zero dependencies, no account, and no data leaving your machine. 
+- **Multi-window coordination**: Supports multiple instances in case you want to see Parts A and B simultaneously. Extra browser windows don't collide over MIDI.
 
 ## Hardware Limitations (System & Combi Settings)
 
-Due to the MicroMonsta 2 firmware implementation, certain settings cannot be read or managed remotely over USB-MIDI or 5-pin DIN:
+Due to the MicroMonsta 2 firmware implementation, certain settings cannot be read or managed remotely over USB-MIDI or TRS/DIN:
 
 - **Combination Settings:** Combination definitions (such as Stack vs. Split mode, split point note, layer mix/balance, transpose, and performance controller assignments) cannot be read, edited, or backed up over MIDI. While MIDI Program Change (0–99) selects stored combination presets on the hardware, configuring combination parameters must be done directly using the MM2's screen and encoders.
 - **System Settings:** Global hardware options (master tuning, MIDI base channel, screen timeout, button-hold times) are not accessible via SysEx or NRPN.

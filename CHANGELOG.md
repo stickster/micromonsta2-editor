@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation & Maintenance
 - Require capturing a full-page Chrome DevTools screenshot shrunk to 50% as `assets/screenshot.png` in every release commit.
 - Added app screenshot to `assets/screenshot.png` and embedded it in `README.md`.
+- Expanded the `Features` section in `README.md` to highlight core capabilities and usability.
 
 ---
 
