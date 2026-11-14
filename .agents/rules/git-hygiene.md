@@ -7,7 +7,7 @@ You MUST follow strict Git commit hygiene on every task in this repository:
 - **Minimal Diffs**: Make surgical, minimal edits directly relevant to the issue; avoid unrelated refactorings or unnecessary whitespace adjustments.
 - **Stage Selectively**: Stage only the files or hunks (`git add <file>` / `git add -p`) that belong to the specific logical change being committed.
 - **Commit As You Go**: When completing a multi-part request, create a separate commit for each distinct feature or fix once its tests pass, rather than waiting to commit everything at the end.
-- **Update `CHANGELOG.md` (`[Unreleased]`)**: Every commit MUST include a concise, individual item bullet in the `## [Unreleased]` section of `CHANGELOG.md` under the appropriate [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) category (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`, or `CI & Maintenance`).
+- **Update `CHANGELOG.md` (`[Unreleased]`)**: Every commit MUST include a **short**, single-line item bullet (ideally ≤12–15 words, no multi-clause explanations) in the `## [Unreleased]` section of `CHANGELOG.md` under the appropriate [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) category (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`, or `CI & Maintenance`).
 - **Always Pass Tests**: Every commit must leave the repository in a working state where `node tests/cli-runner.js` passes with zero failures.
 
 ## 2. Conventional Commits Format

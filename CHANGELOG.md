@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation & Maintenance
 - Restored standard `## [Unreleased]` workflow in `CHANGELOG.md` and `.agents/rules/git-hygiene.md`.
+- Required short, single-line `CHANGELOG.md` bullets in `.agents/rules/git-hygiene.md`.
 
 ---
 
