@@ -2383,24 +2383,49 @@ async function runAllTests(logger = console.log) {
         delApp.showNotification = (msg, type) => {
             if (type === 'warning') notifiedWarning = true;
         };
-        delApp.deleteBank();
+        await delApp.deleteBank();
         assertEqual(notifiedWarning, true, 'deleteBank warns user when trying to delete the only bank');
         assertEqual(delApp.librarian.banks.length, 1, 'Single bank was not deleted');
 
-        // Two banks with confirm rejection
+        // Two banks with app-styled dialog rejection (never calls browser confirm)
         delApp.librarian.banks = [new MM2Bank('Bank A', 0), new MM2Bank('Bank B', 1)];
-        global.confirm = () => false;
-        delApp.deleteBank(1);
-        assertEqual(delApp.librarian.banks.length, 2, 'Bank not deleted when confirm rejected');
+        let confirmCalled = false;
+        global.confirm = () => { confirmCalled = true; return true; };
 
-        // Confirm accepted
-        global.confirm = () => true;
+        const deleteDialog = document.createElement('dialog');
+        deleteDialog.id = 'delete-bank-dialog';
+        deleteDialog.open = false;
+        deleteDialog.returnValue = '';
+        deleteDialog._listeners = {};
+        deleteDialog.addEventListener = (evt, fn) => { deleteDialog._listeners[evt] = fn; };
+        deleteDialog.removeEventListener = (evt, fn) => {
+            if (deleteDialog._listeners[evt] === fn) delete deleteDialog._listeners[evt];
+        };
+        const deleteDesc = document.createElement('p');
+        deleteDesc.id = 'delete-bank-desc';
+        document.registerMockElement('delete-bank-dialog', deleteDialog);
+        document.registerMockElement('delete-bank-desc', deleteDesc);
+
+        let nextDialogAction = 'cancel';
+        deleteDialog.showModal = () => {
+            deleteDialog.returnValue = nextDialogAction;
+            if (deleteDialog._listeners.close) deleteDialog._listeners.close();
+        };
+
+        await delApp.deleteBank(1);
+        assertEqual(confirmCalled, false, 'deleteBank does not invoke browser confirm()');
+        assert(deleteDesc.textContent.includes('Bank B'), 'Delete bank dialog description includes bank name');
+        assertEqual(delApp.librarian.banks.length, 2, 'Bank not deleted when dialog canceled');
+
+        // App-styled dialog accepted
+        nextDialogAction = 'confirm';
         let notifiedSuccess = false;
         delApp.showNotification = (msg, type) => {
             if (type === 'success') notifiedSuccess = true;
         };
-        delApp.deleteBank(1);
-        assertEqual(delApp.librarian.banks.length, 1, 'Bank deleted when confirm accepted');
+        await delApp.deleteBank(1);
+        assertEqual(confirmCalled, false, 'deleteBank does not invoke browser confirm() on confirm');
+        assertEqual(delApp.librarian.banks.length, 1, 'Bank deleted when app dialog confirmed');
         assertEqual(notifiedSuccess, true, 'Success notification shown on bank deletion');
         delete global.confirm;
     } catch (e) {
