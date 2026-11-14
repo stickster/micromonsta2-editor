@@ -359,7 +359,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     container.className = `knob-container ${isLarge ? 'knob-large' : ''} ${isSmall ? 'knob-small' : ''}`;
     container.setAttribute('data-param', paramKey);
     container.setAttribute('tabindex', '0');
-    container.title = `${def.title || def.label || paramKey} (Default: ${formatParamDisplay(def, def.default ?? 0)}) • Double-click/Right-click to reset • Click value to type`;
+    container.title = `${def.title || def.label || paramKey} (Default: ${formatParamDisplay(def, def.default ?? 0)}) • Double-click/Right-click/Alt/Opt-click to reset • Click value to type`;
 
     const min = def.min ?? 0;
     const max = def.max ?? (def.values ? def.values.length - 1 : 127);
@@ -499,7 +499,18 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         if (isDisabled) return;
         if (e.button === 2) return; // Ignore right-click on pointerdown (handled by contextmenu)
         if (e.target && e.target.tagName === 'INPUT') return;
+        if (typeof document !== 'undefined' && document.activeElement &&
+            document.activeElement.classList && document.activeElement.classList.contains('knob-value-input') &&
+            document.activeElement !== e.target) {
+            document.activeElement.blur();
+        }
         e.preventDefault();
+        if (e.altKey && e.button === 0) {
+            suppressNextClick = true;
+            setTimeout(() => { suppressNextClick = false; }, 0);
+            resetToDefault();
+            return;
+        }
         startX = e.clientX;
         startY = e.clientY;
         const prog = getProg();
@@ -617,6 +628,8 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     let keyStartVal = null;
     container.addEventListener('keydown', (e) => {
         if (isDisabled) return;
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
+        if (valueEl.querySelector('input')) return;
         const prog = getProg();
         if (!prog) return;
 
@@ -683,39 +696,58 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
             suppressNextClick = false;
             return;
         }
+        if (e.altKey) {
+            resetToDefault();
+            return;
+        }
         if (valueEl.querySelector('input')) return;
 
         const prog = getProg();
-        const curVal = prog ? prog.getValue(paramKey) : 0;
+        const initialVal = prog ? prog.getValue(paramKey) : 0;
+        const formatInputValue = (val) => {
+            if (def.displayOffset) return `${val + def.displayOffset}`;
+            if (def.offset && def.offset > 0) return `${val - def.offset}`;
+            return `${val}`;
+        };
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'knob-value-input';
-        input.value = offsetIsRelative ? `${curVal - def.offset}` : curVal + (def.displayOffset || 0);
+        input.value = formatInputValue(initialVal);
 
         valueEl.textContent = '';
         valueEl.appendChild(input);
-        input.focus();
-        input.select();
+        if (input.focus) input.focus();
+        if (input.select) input.select();
 
         let committed = false;
+        const closeInput = () => {
+            if (input.parentNode === valueEl && valueEl.removeChild) {
+                valueEl.removeChild(input);
+            } else {
+                valueEl.innerHTML = '';
+            }
+            updateVisual();
+        };
+
         function commit() {
             if (committed) return;
             committed = true;
             const raw = input.value.trim();
             let parsed = parseInt(raw, 10);
             if (!isNaN(parsed)) {
-                parsed -= (def.displayOffset || 0);
-                if (def.offset && (offsetIsRelative || raw.startsWith('+') || raw.startsWith('-'))) {
-                    parsed = parsed + def.offset;
+                if (def.displayOffset) {
+                    parsed -= def.displayOffset;
+                } else if (def.offset && def.offset > 0) {
+                    parsed += def.offset;
                 }
                 parsed = Math.min(Math.max(parsed, min), max);
                 const currentProg = getProg();
-                if (currentProg && parsed !== curVal) {
+                if (currentProg && parsed !== initialVal) {
                     currentProg.setValue(paramKey, parsed);
-                    if (onChangeCallback) onChangeCallback(paramKey, parsed, { isFinal: true, prevVal: curVal });
+                    if (onChangeCallback) onChangeCallback(paramKey, parsed, { isFinal: true, prevVal: initialVal });
                 }
             }
-            updateVisual();
+            closeInput();
         }
 
         input.addEventListener('keydown', (ev) => {
@@ -725,7 +757,40 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
             } else if (ev.key === 'Escape') {
                 ev.preventDefault();
                 committed = true;
-                updateVisual();
+                const currentProg = getProg();
+                if (currentProg && currentProg.getValue(paramKey) !== initialVal) {
+                    currentProg.setValue(paramKey, initialVal);
+                    if (onChangeCallback) onChangeCallback(paramKey, initialVal, { isInterim: true, prevVal: initialVal });
+                }
+                closeInput();
+            } else if (['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'Home', 'End'].includes(ev.key)) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                const currentProg = getProg();
+                const cur = currentProg ? currentProg.getValue(paramKey) : initialVal;
+                let nextVal;
+                if (ev.key === 'Home') {
+                    nextVal = min;
+                } else if (ev.key === 'End') {
+                    nextVal = max;
+                } else {
+                    const delta = (ev.key === 'ArrowUp' || ev.key === 'ArrowRight') ? 1 : -1;
+                    nextVal = Math.min(Math.max(cur + delta, min), max);
+                }
+                if (currentProg && nextVal !== cur) {
+                    currentProg.setValue(paramKey, nextVal);
+                    if (onChangeCallback) onChangeCallback(paramKey, nextVal, { isInterim: true, prevVal: initialVal });
+                    drawKnob();
+                }
+                input.value = formatInputValue(nextVal);
+                if (input.select) input.select();
+            } else {
+                const visibleMin = def.displayOffset ? (min + def.displayOffset) : (def.offset && def.offset > 0 ? min - def.offset : min);
+                const allowsNegative = visibleMin < 0;
+                const isAllowedChar = ev.key === '-' ? allowsNegative : /^[0-9+]$/.test(ev.key);
+                if (!ev.ctrlKey && !ev.metaKey && !['Backspace', 'Delete', 'Tab'].includes(ev.key) && !isAllowedChar) {
+                    ev.preventDefault();
+                }
             }
         });
         input.addEventListener('blur', commit);

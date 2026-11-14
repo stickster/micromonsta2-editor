@@ -1509,9 +1509,9 @@ async function runAllTests(logger = console.log) {
         // Regression test: Focused <select> arrow keys increment/decrement without opening menu
         {
             const selProg = new MM2Program();
-            selProg.setValue('FILTER_TYPE', 2); // Lowpass 3
+            selProg.setValue('FILTER_ALGO', 2); // Lowpass 3
             const selChanges = [];
-            const selWrap = createSelect('FILTER_TYPE', selProg, (k, v) => selChanges.push({ k, v }));
+            const selWrap = createSelect('FILTER_ALGO', selProg, (k, v) => selChanges.push({ k, v }));
             const selEl = selWrap.querySelector('select');
 
             const sendArrow = (key, extra = {}) => {
@@ -1520,28 +1520,28 @@ async function runAllTests(logger = console.log) {
                 return prevented;
             };
 
-            assertEqual(sendArrow('ArrowUp'), true, 'ArrowUp on focused select calls preventDefault()');
-            assertEqual(selProg.getValue('FILTER_TYPE'), 3, 'ArrowUp increments select value');
-            assertEqual(selEl.value, '3', 'ArrowUp updates select.value');
-            assertEqual(selChanges.length, 1, 'ArrowUp fires onChangeCallback');
+            assertEqual(sendArrow('ArrowDown'), true, 'ArrowDown on focused select calls preventDefault()');
+            assertEqual(selProg.getValue('FILTER_ALGO'), 3, 'ArrowDown increments select value');
+            assertEqual(selEl.value, '3', 'ArrowDown updates select.value');
+            assertEqual(selChanges.length, 1, 'ArrowDown fires onChangeCallback');
 
             assertEqual(sendArrow('ArrowRight'), true, 'ArrowRight on focused select calls preventDefault()');
-            assertEqual(selProg.getValue('FILTER_TYPE'), 4, 'ArrowRight increments select value');
+            assertEqual(selProg.getValue('FILTER_ALGO'), 4, 'ArrowRight increments select value');
 
-            assertEqual(sendArrow('ArrowDown'), true, 'ArrowDown on focused select calls preventDefault()');
-            assertEqual(selProg.getValue('FILTER_TYPE'), 3, 'ArrowDown decrements select value');
+            assertEqual(sendArrow('ArrowUp'), true, 'ArrowUp on focused select calls preventDefault()');
+            assertEqual(selProg.getValue('FILTER_ALGO'), 3, 'ArrowUp decrements select value');
 
             assertEqual(sendArrow('ArrowLeft'), true, 'ArrowLeft on focused select calls preventDefault()');
-            assertEqual(selProg.getValue('FILTER_TYPE'), 2, 'ArrowLeft decrements select value');
+            assertEqual(selProg.getValue('FILTER_ALGO'), 2, 'ArrowLeft decrements select value');
 
             // Skips disabled options
             selEl.children[3].disabled = true;
-            sendArrow('ArrowUp');
-            assertEqual(selProg.getValue('FILTER_TYPE'), 4, 'ArrowUp skips disabled option');
+            sendArrow('ArrowDown');
+            assertEqual(selProg.getValue('FILTER_ALGO'), 4, 'ArrowDown skips disabled option');
 
             // Ignores modifier-key arrow combos
-            assertEqual(sendArrow('ArrowUp', { metaKey: true }), false, 'Cmd+ArrowUp is not intercepted on select');
-            assertEqual(selProg.getValue('FILTER_TYPE'), 4, 'Cmd+ArrowUp does not change select value');
+            assertEqual(sendArrow('ArrowDown', { metaKey: true }), false, 'Cmd+ArrowDown is not intercepted on select');
+            assertEqual(selProg.getValue('FILTER_ALGO'), 4, 'Cmd+ArrowDown does not change select value');
         }
 
         // Regression test: Arrow keys move +1/-1 on 0-127 value knobs
@@ -1564,6 +1564,150 @@ async function runAllTests(logger = console.log) {
             assertEqual(knobProg.getValue('FILTER_FREQ'), 121, 'ArrowUp increments Cutoff (0-255) knob by +1');
             cutoffKnob.dispatchEvent({ type: 'keydown', key: 'ArrowDown', preventDefault: () => { } });
             assertEqual(knobProg.getValue('FILTER_FREQ'), 120, 'ArrowDown decrements Cutoff (0-255) knob by -1');
+        }
+
+        // Regression test: Direct numerical entry on knob (Enter, blur, arrow keys, Alt-click reset)
+        {
+            const entryProg = new MM2Program();
+            entryProg.setValue('OSC1_SHAPE', 40);
+            const entryEvents = [];
+            const entryKnob = createKnob('OSC1_SHAPE', entryProg, (k, v, meta) => entryEvents.push({ k, v, meta }));
+            assert(entryKnob.title.includes('Alt/Opt-click'), 'Knob tooltip mentions Alt/Opt-click reset');
+            const valEl = entryKnob.querySelector('.knob-value');
+
+            // 1. Click value -> opens input, Enter commits and removes input
+            valEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            let inputEl = valEl.querySelector('input');
+            assert(inputEl !== null, 'Clicking knob value opens input');
+            inputEl.value = '75';
+            inputEl.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault: () => { } });
+            assertEqual(entryProg.getValue('OSC1_SHAPE'), 75, 'Enter commits typed knob value');
+            assertEqual(valEl.querySelector('input'), null, 'Enter removes input and deactivates entry mode');
+
+            // 2. Blur accepts value and deactivates entry mode
+            valEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            inputEl = valEl.querySelector('input');
+            assert(inputEl !== null, 'Clicking knob value opens input again');
+            inputEl.value = '82';
+            inputEl.dispatchEvent({ type: 'blur' });
+            assertEqual(entryProg.getValue('OSC1_SHAPE'), 82, 'Blur commits typed knob value');
+            assertEqual(valEl.querySelector('input'), null, 'Blur removes input and deactivates entry mode');
+
+            // 3. Arrow keys work while value input is focused, and Enter commits
+            valEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            inputEl = valEl.querySelector('input');
+            inputEl.dispatchEvent({ type: 'keydown', key: 'ArrowUp', preventDefault: () => { }, stopPropagation: () => { } });
+            assertEqual(entryProg.getValue('OSC1_SHAPE'), 83, 'ArrowUp inside value input increments parameter by +1');
+            assertEqual(inputEl.value, '83', 'ArrowUp updates input.value');
+            inputEl.dispatchEvent({ type: 'keydown', key: 'ArrowDown', preventDefault: () => { }, stopPropagation: () => { } });
+            assertEqual(entryProg.getValue('OSC1_SHAPE'), 82, 'ArrowDown inside value input decrements parameter by -1');
+            inputEl.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => { }, stopPropagation: () => { } });
+            assertEqual(entryProg.getValue('OSC1_SHAPE'), 83, 'ArrowRight inside value input increments parameter by +1');
+            inputEl.dispatchEvent({ type: 'keydown', key: 'ArrowLeft', preventDefault: () => { }, stopPropagation: () => { } });
+            assertEqual(entryProg.getValue('OSC1_SHAPE'), 82, 'ArrowLeft inside value input decrements parameter by -1');
+            inputEl.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault: () => { } });
+            assertEqual(valEl.querySelector('input'), null, 'Enter after arrow stepping deactivates entry mode');
+
+            // 4. Alt/Opt-click resets knob to default value without opening input
+            entryProg.setValue('OSC1_SHAPE', 99);
+            const canvasEl = entryKnob.querySelector('canvas');
+            canvasEl.dispatchEvent({ type: 'pointerdown', button: 0, altKey: true, preventDefault: () => { } });
+            assertEqual(entryProg.getValue('OSC1_SHAPE'), 0, 'Alt-click on knob canvas resets to default (0)');
+            await new Promise(r => setTimeout(r, 10));
+            entryProg.setValue('OSC1_SHAPE', 99);
+            valEl.dispatchEvent({ type: 'click', altKey: true, stopPropagation: () => { } });
+            assertEqual(entryProg.getValue('OSC1_SHAPE'), 0, 'Alt-click on knob value resets to default (0)');
+            assertEqual(valEl.querySelector('input'), null, 'Alt-click on knob value does not open entry mode');
+
+            // 5. Visible scale & clamping for offset (OSC1_TUNE: -24..+24, raw 40..88, offset 64)
+            entryProg.setValue('OSC1_TUNE', 64); // visible 0
+            const tuneKnob = createKnob('OSC1_TUNE', entryProg, () => { });
+            const tuneValEl = tuneKnob.querySelector('.knob-value');
+            tuneValEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            let tuneInput = tuneValEl.querySelector('input');
+            assertEqual(tuneInput.value, '0', 'Offset knob opens with visible scale (0, not internal 64)');
+            tuneInput.value = '10';
+            tuneInput.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault: () => { } });
+            assertEqual(entryProg.getValue('OSC1_TUNE'), 74, 'Typing unsigned 10 on offset knob sets internal 64+10=74');
+            tuneValEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            tuneInput = tuneValEl.querySelector('input');
+            tuneInput.value = '999';
+            tuneInput.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault: () => { } });
+            assertEqual(entryProg.getValue('OSC1_TUNE'), 88, 'Typing above visible max clamps to raw max (88 / +24)');
+            tuneValEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            tuneInput = tuneValEl.querySelector('input');
+            tuneInput.value = '-999';
+            tuneInput.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault: () => { } });
+            assertEqual(entryProg.getValue('OSC1_TUNE'), 40, 'Typing below visible min clamps to raw min (40 / -24)');
+
+            entryProg.setValue('OSC1_TUNE', 64); // visible 0
+            tuneValEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            tuneInput = tuneValEl.querySelector('input');
+            let minusPrevented = false;
+            tuneKnob.dispatchEvent({ type: 'keydown', key: '-', target: tuneInput, preventDefault: () => { minusPrevented = true; } });
+            assert(!minusPrevented, 'Knob keydown does not preventDefault("-") while numerical entry input is active');
+            assertEqual(entryProg.getValue('OSC1_TUNE'), 64, 'Typing "-" during numerical entry does not decrement knob');
+            tuneInput.value = '-12';
+            tuneInput.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault: () => { } });
+            assertEqual(entryProg.getValue('OSC1_TUNE'), 52, 'Typing negative value (-12) on bipolar knob sets internal 64-12=52');
+
+            // 5b. Home/End keys set min/max both when knob is focused and during numerical entry
+            tuneKnob.dispatchEvent({ type: 'keydown', key: 'Home', preventDefault: () => { } });
+            assertEqual(entryProg.getValue('OSC1_TUNE'), 40, 'Home key on focused knob sets raw min (40)');
+            tuneKnob.dispatchEvent({ type: 'keydown', key: 'End', preventDefault: () => { } });
+            assertEqual(entryProg.getValue('OSC1_TUNE'), 88, 'End key on focused knob sets raw max (88)');
+            entryProg.setValue('OSC1_TUNE', 64);
+            tuneValEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            tuneInput = tuneValEl.querySelector('input');
+            tuneInput.dispatchEvent({ type: 'keydown', key: 'Home', preventDefault: () => { }, stopPropagation: () => { } });
+            assertEqual(tuneInput.value, '-24', 'Home key during numerical entry updates input to visible min (-24)');
+            assertEqual(entryProg.getValue('OSC1_TUNE'), 40, 'Home key during numerical entry sets raw min (40)');
+            tuneInput.dispatchEvent({ type: 'keydown', key: 'End', preventDefault: () => { }, stopPropagation: () => { } });
+            assertEqual(tuneInput.value, '24', 'End key during numerical entry updates input to visible max (24)');
+            assertEqual(entryProg.getValue('OSC1_TUNE'), 88, 'End key during numerical entry sets raw max (88)');
+            tuneInput.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault: () => { } });
+
+            // 5c. Disallow non-numeric keystrokes during numerical entry
+            tuneValEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            tuneInput = tuneValEl.querySelector('input');
+            const isKeyPrevented = (key, extra = {}) => {
+                let prevented = false;
+                tuneInput.dispatchEvent({ type: 'keydown', key, preventDefault: () => { prevented = true; }, stopPropagation: () => { }, ...extra });
+                return prevented;
+            };
+            assert(isKeyPrevented('a'), 'Letter "a" is disallowed during numerical entry');
+            assert(isKeyPrevented('.'), 'Decimal point "." is disallowed during numerical entry');
+            assert(isKeyPrevented(' '), 'Space is disallowed during numerical entry');
+            assert(!isKeyPrevented('5'), 'Digit "5" is allowed during numerical entry');
+            assert(!isKeyPrevented('+'), 'Plus "+" is allowed during numerical entry');
+            assert(!isKeyPrevented('-'), 'Minus "-" is allowed during numerical entry');
+            assert(!isKeyPrevented('Backspace'), 'Backspace is allowed during numerical entry');
+            assert(!isKeyPrevented('Tab'), 'Tab is allowed during numerical entry');
+            assert(!isKeyPrevented('a', { metaKey: true }), 'Cmd+A shortcut is allowed during numerical entry');
+            tuneInput.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault: () => { } });
+
+            valEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            const unipolarInput = valEl.querySelector('input');
+            let unipolarMinusPrevented = false;
+            unipolarInput.dispatchEvent({ type: 'keydown', key: '-', preventDefault: () => { unipolarMinusPrevented = true; }, stopPropagation: () => { } });
+            assert(unipolarMinusPrevented, 'Minus "-" is disallowed during numerical entry on unipolar knobs');
+            unipolarInput.dispatchEvent({ type: 'keydown', key: 'Escape', preventDefault: () => { } });
+
+            // 6. Visible scale & clamping for displayOffset (LAY_TEMPO: 40..295, raw 0..255, displayOffset 40)
+            entryProg.setValue('LAY_TEMPO', 80); // visible 120
+            const tempoKnob = createKnob('LAY_TEMPO', entryProg, () => { });
+            const tempoValEl = tempoKnob.querySelector('.knob-value');
+            tempoValEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            let tempoInput = tempoValEl.querySelector('input');
+            assertEqual(tempoInput.value, '120', 'displayOffset knob opens with visible scale (120)');
+            tempoInput.value = '10';
+            tempoInput.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault: () => { } });
+            assertEqual(entryProg.getValue('LAY_TEMPO'), 0, 'Typing below visible min (10 < 40) clamps to raw min (0)');
+            tempoValEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            tempoInput = tempoValEl.querySelector('input');
+            tempoInput.value = '500';
+            tempoInput.dispatchEvent({ type: 'keydown', key: 'Enter', preventDefault: () => { } });
+            assertEqual(entryProg.getValue('LAY_TEMPO'), 255, 'Typing above visible max (500 > 295) clamps to raw max (255)');
         }
 
         // Oscillator Solo/Mute Mutual Cancellation (single oscillator)

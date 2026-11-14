@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expanded the `Features` section in `README.md` to highlight core capabilities and usability.
 
 ### Fixed
+- **UI:** Disallow `-` during direct numerical entry on unipolar knobs whose visible range is non-negative.
+- **UI:** Disallow non-numeric keystrokes (other than digits, `+`, `-`, `Home`, `End`, arrows, `Backspace`/`Delete`/`Tab`, `Esc`, and `Enter`) during knob numerical entry.
+- **UI:** Support `Home` and `End` keys to set min/max during knob numerical entry as well as when a knob is focused.
+- **UI:** Allow typing `-` (negative numbers) during direct numerical entry on bipolar knobs without triggering knob key-stepping.
+- **UI:** Use visible scale (not internal offset values) and clamp out-of-range inputs in knob numerical entry.
+- **UI:** Deactivate knob numerical entry on Enter/blur, support arrow-key stepping while focused, and reset on Alt/Opt-click (updated knob tooltip).
 - **UI:** Step all knobs (including 0–255 Cutoff) by `+1`/`-1` on arrow keys.
 - **UI:** Step focused `<select>` dropdowns with arrow keys instead of opening the native menu.
 
