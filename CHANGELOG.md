@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added app screenshot to `assets/screenshot.png` and embedded it in `README.md`.
 - Expanded the `Features` section in `README.md` to highlight core capabilities and usability.
 
+### Fixed
+- **UI:** Step all knobs (including 0–255 Cutoff) by `+1`/`-1` on arrow keys.
+- **UI:** Step focused `<select>` dropdowns with arrow keys instead of opening the native menu.
+
 ---
 
 ## [0.4.2] - 2026-11-13

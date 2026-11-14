@@ -1506,6 +1506,66 @@ async function runAllTests(logger = console.log) {
             assert(!shapeKnob.classList.contains('is-disabled'), `${shapeKey} becomes active on oscPanel.refresh() when ${algoKey}=Sawtooth`);
         }
 
+        // Regression test: Focused <select> arrow keys increment/decrement without opening menu
+        {
+            const selProg = new MM2Program();
+            selProg.setValue('FILTER_TYPE', 2); // Lowpass 3
+            const selChanges = [];
+            const selWrap = createSelect('FILTER_TYPE', selProg, (k, v) => selChanges.push({ k, v }));
+            const selEl = selWrap.querySelector('select');
+
+            const sendArrow = (key, extra = {}) => {
+                let prevented = false;
+                selEl.dispatchEvent({ type: 'keydown', key, ...extra, preventDefault: () => { prevented = true; } });
+                return prevented;
+            };
+
+            assertEqual(sendArrow('ArrowUp'), true, 'ArrowUp on focused select calls preventDefault()');
+            assertEqual(selProg.getValue('FILTER_TYPE'), 3, 'ArrowUp increments select value');
+            assertEqual(selEl.value, '3', 'ArrowUp updates select.value');
+            assertEqual(selChanges.length, 1, 'ArrowUp fires onChangeCallback');
+
+            assertEqual(sendArrow('ArrowRight'), true, 'ArrowRight on focused select calls preventDefault()');
+            assertEqual(selProg.getValue('FILTER_TYPE'), 4, 'ArrowRight increments select value');
+
+            assertEqual(sendArrow('ArrowDown'), true, 'ArrowDown on focused select calls preventDefault()');
+            assertEqual(selProg.getValue('FILTER_TYPE'), 3, 'ArrowDown decrements select value');
+
+            assertEqual(sendArrow('ArrowLeft'), true, 'ArrowLeft on focused select calls preventDefault()');
+            assertEqual(selProg.getValue('FILTER_TYPE'), 2, 'ArrowLeft decrements select value');
+
+            // Skips disabled options
+            selEl.children[3].disabled = true;
+            sendArrow('ArrowUp');
+            assertEqual(selProg.getValue('FILTER_TYPE'), 4, 'ArrowUp skips disabled option');
+
+            // Ignores modifier-key arrow combos
+            assertEqual(sendArrow('ArrowUp', { metaKey: true }), false, 'Cmd+ArrowUp is not intercepted on select');
+            assertEqual(selProg.getValue('FILTER_TYPE'), 4, 'Cmd+ArrowUp does not change select value');
+        }
+
+        // Regression test: Arrow keys move +1/-1 on 0-127 value knobs
+        {
+            const knobProg = new MM2Program();
+            knobProg.setValue('OSC1_SHAPE', 50);
+            const shapeKnob = createKnob('OSC1_SHAPE', knobProg, () => { });
+            shapeKnob.dispatchEvent({ type: 'keydown', key: 'ArrowUp', preventDefault: () => { } });
+            assertEqual(knobProg.getValue('OSC1_SHAPE'), 51, 'ArrowUp increments 0-127 knob by +1');
+            shapeKnob.dispatchEvent({ type: 'keydown', key: 'ArrowRight', preventDefault: () => { } });
+            assertEqual(knobProg.getValue('OSC1_SHAPE'), 52, 'ArrowRight increments 0-127 knob by +1');
+            shapeKnob.dispatchEvent({ type: 'keydown', key: 'ArrowDown', preventDefault: () => { } });
+            assertEqual(knobProg.getValue('OSC1_SHAPE'), 51, 'ArrowDown decrements 0-127 knob by -1');
+            shapeKnob.dispatchEvent({ type: 'keydown', key: 'ArrowLeft', preventDefault: () => { } });
+            assertEqual(knobProg.getValue('OSC1_SHAPE'), 50, 'ArrowLeft decrements 0-127 knob by -1');
+
+            knobProg.setValue('FILTER_FREQ', 120);
+            const cutoffKnob = createKnob('FILTER_FREQ', knobProg, () => { });
+            cutoffKnob.dispatchEvent({ type: 'keydown', key: 'ArrowUp', preventDefault: () => { } });
+            assertEqual(knobProg.getValue('FILTER_FREQ'), 121, 'ArrowUp increments Cutoff (0-255) knob by +1');
+            cutoffKnob.dispatchEvent({ type: 'keydown', key: 'ArrowDown', preventDefault: () => { } });
+            assertEqual(knobProg.getValue('FILTER_FREQ'), 120, 'ArrowDown decrements Cutoff (0-255) knob by -1');
+        }
+
         // Oscillator Solo/Mute Mutual Cancellation (single oscillator)
         const oscApp = new App();
         oscApp.activeTimbre.setValue('MIX_OSC1', 100);

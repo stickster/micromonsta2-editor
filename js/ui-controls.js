@@ -620,10 +620,11 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         const prog = getProg();
         if (!prog) return;
 
+        const step = 1;
+
         if (['ArrowUp', 'ArrowRight', '+', '='].includes(e.key)) {
             e.preventDefault();
             if (keyStartVal === null) keyStartVal = prog.getValue(paramKey);
-            const step = (e.shiftKey || e.ctrlKey) ? 1 : Math.max(1, Math.round(range / 64));
             let newVal = Math.min(max, prog.getValue(paramKey) + step);
             if (newVal !== prog.getValue(paramKey)) {
                 prog.setValue(paramKey, newVal);
@@ -641,7 +642,6 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         } else if (['ArrowDown', 'ArrowLeft', '-', '_'].includes(e.key)) {
             e.preventDefault();
             if (keyStartVal === null) keyStartVal = prog.getValue(paramKey);
-            const step = (e.shiftKey || e.ctrlKey) ? 1 : Math.max(1, Math.round(range / 64));
             let newVal = Math.max(min, prog.getValue(paramKey) - step);
             if (newVal !== prog.getValue(paramKey)) {
                 prog.setValue(paramKey, newVal);
@@ -1040,8 +1040,7 @@ function createSelect(paramKey, program, onChangeCallback) {
         }
     }
 
-    select.addEventListener('change', () => {
-        const val = parseInt(select.value, 10);
+    const commitSelectValue = (val) => {
         const prog = getProg();
         let curVal = val;
         if (prog) {
@@ -1049,6 +1048,36 @@ function createSelect(paramKey, program, onChangeCallback) {
             prog.setValue(paramKey, val);
         }
         if (onChangeCallback) onChangeCallback(paramKey, val, { isFinal: true, prevVal: curVal });
+    };
+
+    select.addEventListener('change', () => {
+        commitSelectValue(parseInt(select.value, 10));
+    });
+
+    select.addEventListener('keydown', (e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        let delta = 0;
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') delta = 1;
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') delta = -1;
+        if (!delta) return;
+
+        e.preventDefault();
+        const opts = Array.from(select.options || select.children || []);
+        if (opts.length === 0) return;
+
+        const curStr = String(select.value);
+        let curIdx = opts.findIndex(o => String(o.value) === curStr);
+        if (curIdx === -1) curIdx = 0;
+
+        let nextIdx = curIdx + delta;
+        while (nextIdx >= 0 && nextIdx < opts.length && opts[nextIdx].disabled) {
+            nextIdx += delta;
+        }
+        if (nextIdx >= 0 && nextIdx < opts.length && nextIdx !== curIdx) {
+            const nextVal = parseInt(opts[nextIdx].value, 10);
+            select.value = String(nextVal);
+            commitSelectValue(nextVal);
+        }
     });
 
     container.appendChild(label);
