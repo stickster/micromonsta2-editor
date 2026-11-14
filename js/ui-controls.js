@@ -491,10 +491,12 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     let startY = 0;
     let startVal = 0;
     let isDragging = false;
+    let isDisabled = false;
     let hasDragged = false;
     let suppressNextClick = false;
 
     function onPointerDown(e) {
+        if (isDisabled) return;
         if (e.button === 2) return; // Ignore right-click on pointerdown (handled by contextmenu)
         if (e.target && e.target.tagName === 'INPUT') return;
         e.preventDefault();
@@ -555,6 +557,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     let wheelTimer = null;
     let wheelStartVal = null;
     container.addEventListener('wheel', (e) => {
+        if (isDisabled) return;
         e.preventDefault();
         const step = (e.shiftKey || e.ctrlKey) ? 1 : Math.max(1, Math.round(range / 64));
         const dir = e.deltaY < 0 ? 1 : -1;
@@ -597,12 +600,14 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
 
     // Double click to reset
     container.addEventListener('dblclick', (e) => {
+        if (isDisabled) return;
         e.preventDefault();
         resetToDefault();
     });
 
     // Right click (contextmenu) to reset
     container.addEventListener('contextmenu', (e) => {
+        if (isDisabled) return;
         e.preventDefault();
         resetToDefault();
     });
@@ -611,6 +616,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     let keyTimer = null;
     let keyStartVal = null;
     container.addEventListener('keydown', (e) => {
+        if (isDisabled) return;
         const prog = getProg();
         if (!prog) return;
 
@@ -671,6 +677,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
 
     // Click-to-Type Value Editing
     valueEl.addEventListener('click', (e) => {
+        if (isDisabled) return;
         e.stopPropagation();
         if (suppressNextClick) {
             suppressNextClick = false;
@@ -723,6 +730,14 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         });
         input.addEventListener('blur', commit);
     });
+
+    container.setDisabled = (disabled) => {
+        isDisabled = !!disabled;
+        container.classList.toggle('is-disabled', isDisabled);
+        container.setAttribute('aria-disabled', isDisabled ? 'true' : 'false');
+        container.setAttribute('tabindex', isDisabled ? '-1' : '0');
+        valueEl.classList.toggle('editable', !isDisabled);
+    };
 
     container.refresh = updateVisual;
     updateVisual();

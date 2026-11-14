@@ -1459,6 +1459,53 @@ async function runAllTests(logger = console.log) {
         assert(noiseMuteBtn.classList.contains('active'), 'Noise mute button regains .active class');
         assert(!noiseSoloBtn.classList.contains('active'), 'Noise solo button loses .active class when muted');
 
+        // Oscillator Shape Inactive State for Sine / Sine Full / Sine Half
+        for (let oscNum = 1; oscNum <= 3; oscNum++) {
+            const algoKey = `OSC${oscNum}_ALGO`;
+            const shapeKey = `OSC${oscNum}_SHAPE`;
+            const algoSelectWrap = oscPanel.querySelector(`[data-param="${algoKey}"]`);
+            const algoSelect = algoSelectWrap.querySelector('select');
+            const shapeKnob = oscPanel.querySelector(`[data-param="${shapeKey}"]`);
+            assert(shapeKnob !== null, `${shapeKey} knob exists`);
+
+            // Default Sawtooth (6) -> Shape is active
+            assert(!shapeKnob.classList.contains('is-disabled'), `${shapeKey} is active for Sawtooth`);
+            assertEqual(shapeKnob.getAttribute('tabindex'), '0', `${shapeKey} has tabindex=0 when active`);
+
+            // Sine (0), Sine Full (1), Sine Half (2) -> Shape is inactive
+            for (const [idx, label] of [[0, 'Sine'], [1, 'Sine Full'], [2, 'Sine Half']]) {
+                testApp.activeTimbre.setValue(algoKey, idx);
+                algoSelect.value = String(idx);
+                algoSelect.dispatchEvent({ type: 'change' });
+                assert(shapeKnob.classList.contains('is-disabled'), `${shapeKey} has .is-disabled for ${label}`);
+                assertEqual(shapeKnob.getAttribute('aria-disabled'), 'true', `${shapeKey} has aria-disabled=true for ${label}`);
+                assertEqual(shapeKnob.getAttribute('tabindex'), '-1', `${shapeKey} has tabindex=-1 for ${label}`);
+            }
+
+            // Disabled Shape knob ignores keyboard stepping and dblclick reset
+            testApp.activeTimbre.setValue(shapeKey, 64);
+            shapeKnob.dispatchEvent({ type: 'keydown', key: 'ArrowUp', preventDefault: () => { } });
+            assertEqual(testApp.activeTimbre.getValue(shapeKey), 64, `Disabled ${shapeKey} ignores ArrowUp`);
+            shapeKnob.dispatchEvent({ type: 'dblclick', preventDefault: () => { } });
+            assertEqual(testApp.activeTimbre.getValue(shapeKey), 64, `Disabled ${shapeKey} ignores dblclick reset`);
+
+            // Switching back to Sawtooth (6) re-enables Shape knob
+            testApp.activeTimbre.setValue(algoKey, 6);
+            algoSelect.value = '6';
+            algoSelect.dispatchEvent({ type: 'change' });
+            assert(!shapeKnob.classList.contains('is-disabled'), `${shapeKey} re-enabled when switching back to Sawtooth`);
+            assertEqual(shapeKnob.getAttribute('aria-disabled'), 'false', `${shapeKey} aria-disabled=false when active`);
+            assertEqual(shapeKnob.getAttribute('tabindex'), '0', `${shapeKey} tabindex=0 when active`);
+
+            // Refreshing panel updates Shape state from program values (e.g. after Fetch/Load)
+            testApp.activeTimbre.setValue(algoKey, 2); // Sine Half
+            oscPanel.refresh();
+            assert(shapeKnob.classList.contains('is-disabled'), `${shapeKey} becomes inactive on oscPanel.refresh() when ${algoKey}=Sine Half`);
+            testApp.activeTimbre.setValue(algoKey, 6);
+            oscPanel.refresh();
+            assert(!shapeKnob.classList.contains('is-disabled'), `${shapeKey} becomes active on oscPanel.refresh() when ${algoKey}=Sawtooth`);
+        }
+
         // Oscillator Solo/Mute Mutual Cancellation (single oscillator)
         const oscApp = new App();
         oscApp.activeTimbre.setValue('MIX_OSC1', 100);

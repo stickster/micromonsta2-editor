@@ -2034,6 +2034,19 @@ class App {
         const panes = [];
         const muteBtns = {};
         const soloBtns = {};
+        const shapeKnobs = {};
+        const SINE_ALGOS = new Set(['Sine', 'Sine Full', 'Sine Half']);
+        const updateOscShapeState = (oscNum) => {
+            const shapeKnob = shapeKnobs[oscNum];
+            if (!shapeKnob || !shapeKnob.setDisabled) return;
+            const prog = typeof timbre === 'function' ? timbre() : timbre;
+            const algoKey = `OSC${oscNum}_ALGO`;
+            const algoDef = PARAM_MAP.get(algoKey);
+            const algoVal = prog ? prog.getValue(algoKey) : (algoDef ? algoDef.default : 0);
+            const algoName = algoDef && algoDef.values ? algoDef.values[algoVal] : '';
+            shapeKnob.setDisabled(SINE_ALGOS.has(algoName));
+        };
+
         for (let i = 1; i <= 3; i++) {
             const pane = document.createElement('div');
             pane.className = `osc-pane osc-pane-${i}`;
@@ -2042,7 +2055,10 @@ class App {
             // Algorithm select + Mute/Solo buttons
             const algoRow = document.createElement('div');
             algoRow.className = 'osc-algo-row';
-            algoRow.appendChild(createSelect(`OSC${i}_ALGO`, timbre, onChange));
+            algoRow.appendChild(createSelect(`OSC${i}_ALGO`, timbre, (k, v, meta) => {
+                updateOscShapeState(i);
+                if (onChange) onChange(k, v, meta);
+            }));
 
             const soloMuteGroup = document.createElement('div');
             soloMuteGroup.className = 'solo-mute-group';
@@ -2080,7 +2096,9 @@ class App {
             // Knobs row: Shape, Tune, Fine Tune, Mix
             const knobs = document.createElement('div');
             knobs.className = 'knob-row';
-            knobs.appendChild(createKnob(`OSC${i}_SHAPE`, timbre, onChange));
+            const shapeKnob = createKnob(`OSC${i}_SHAPE`, timbre, onChange);
+            shapeKnobs[i] = shapeKnob;
+            knobs.appendChild(shapeKnob);
             knobs.appendChild(createKnob(`OSC${i}_TUNE`, timbre, onChange));
             knobs.appendChild(createKnob(`OSC${i}_FINETUNE`, timbre, onChange));
             knobs.appendChild(createKnob(`MIX_OSC${i}`, timbre, onChange));
@@ -2160,16 +2178,19 @@ class App {
                 if (muteBtns[n]) muteBtns[n].classList.toggle('active', !!this.muteState['osc' + n]);
                 if (soloBtns[n]) soloBtns[n].classList.toggle('active', !!this.soloState['osc' + n]);
             }
+            updateOscShapeState(idx);
         };
 
         card.refresh = () => {
             card.querySelectorAll('[data-param]').forEach(el => {
                 if (el.refresh) el.refresh();
             });
+            [1, 2, 3].forEach(updateOscShapeState);
             updateOscSelection();
         };
 
         // Initialize state
+        [1, 2, 3].forEach(updateOscShapeState);
         updateOscSelection();
 
         return card;

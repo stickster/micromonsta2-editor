@@ -1426,6 +1426,18 @@ main.app-main {
     outline: none;
 }
 
+.knob-container.is-disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+}
+
+.knob-container.is-disabled .knob-dial,
+.knob-container.is-disabled .knob-canvas,
+.knob-container.is-disabled .knob-value {
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
 .knob-container.knob-large {
     width: 80px;
 }

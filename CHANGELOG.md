@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **UI:** Dim and disable Oscillator Shape knobs when Algorithm is Sine, Sine Full, or Sine Half.
+
 ### Documentation & Maintenance
 - Require capturing a full-page Chrome DevTools screenshot shrunk to 50% as `assets/screenshot.png` in every release commit.
 - Added app screenshot to `assets/screenshot.png` and embedded it in `README.md`.
