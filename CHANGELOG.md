@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Oscillators:** Cancelled opposite solo/mute state when toggling a single oscillator.
 - **UI:** Moved Keys legend next to the left side of the keyboard.
 - **Editor:** Disabled Compare mode while Live Sync is active.
+- **Editor:** Shortened Live Sync disabled notification text.
 
 ---
 

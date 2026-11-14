@@ -2836,7 +2836,7 @@ class App {
                 } else {
                     this._setLiveSyncState(false);
                     this.updateSyncStatus('modified');
-                    this.showNotification('Live Parameter Sync DISABLED (Staged Commit)', 'info');
+                    this.showNotification('Live Sync DISABLED', 'info');
                 }
             };
         }
