@@ -4408,6 +4408,128 @@ async function runAllTests(logger = console.log) {
         document.getElementById = prevGetEl57;
     }
 
+    // Section 58: LFO Drag-to-Destination Mod Matrix Mapping Tests
+    logger('\n--- [58] LFO Drag-to-Destination Mod Matrix Mapping Tests ---');
+    const prevGetEl58 = document.getElementById;
+    try {
+        const modGrid = document.createElement('div');
+        modGrid.id = 'editor-grid';
+        document.getElementById = (id) => (id === 'editor-grid' ? modGrid : prevGetEl58(id));
+
+        const lfoDstApp = new App();
+        // Occupy slot 1 so next empty slot should be slot 2
+        lfoDstApp.activeTimbre.setValue('MTX1_SRC', 1);
+        lfoDstApp.activeTimbre.setValue('MTX1_DST', 2);
+        lfoDstApp.buildEditorUI();
+
+        const lfoBadges = modGrid.querySelectorAll('.lfo-badge');
+        assertEqual(lfoBadges.length, 3, 'Renders 3 LFO badges');
+        const cutoffControl = modGrid.querySelectorAll('[data-param]').find(el => el.getAttribute('data-param') === 'FILTER_FREQ');
+        assert(cutoffControl !== undefined, 'FILTER_FREQ control exists in editor grid');
+
+        const makeLfoDragEvent = (type, extra = {}) => {
+            const store = extra._store || {};
+            return {
+                type,
+                relatedTarget: extra.relatedTarget || null,
+                preventDefault() { },
+                stopPropagation() { },
+                dataTransfer: {
+                    effectAllowed: '',
+                    dropEffect: '',
+                    setData(k, v) { store[k] = v; },
+                    getData(k) { return store[k] || ''; }
+                }
+            };
+        };
+
+        // 1. Drag LFO 1 onto Cutoff when slot 2 is empty
+        const lfo1Store = {};
+        lfoBadges[0].dispatchEvent(makeLfoDragEvent('dragstart', { _store: lfo1Store }));
+        cutoffControl.dispatchEvent(makeLfoDragEvent('dragover', { _store: lfo1Store }));
+        assert(cutoffControl.classList.contains('lfo-dst-drop-hover'), 'Dragover with LFO 1 adds lfo-dst-drop-hover to Cutoff');
+
+        cutoffControl.dispatchEvent(makeLfoDragEvent('drop', { _store: lfo1Store }));
+        assert(!cutoffControl.classList.contains('lfo-dst-drop-hover'), 'Drop clears lfo-dst-drop-hover');
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX2_SRC'), 18, 'Drop sets MTX2_SRC to LFO1 (18)');
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX2_DST'), 13, 'Drop sets MTX2_DST to Cutoff (13)');
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX2_AMT'), 160, 'Drop initializes MTX2_AMT to non-zero depth (160)');
+        assertEqual(lfoDstApp.undoStack.length, 1, 'LFO-to-destination drop records 1 atomic undo entry');
+
+        // 2. Undo & Redo
+        lfoDstApp.undo();
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX2_SRC'), 0, 'Undo clears MTX2_SRC');
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX2_DST'), 0, 'Undo clears MTX2_DST');
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX2_AMT'), 128, 'Undo restores MTX2_AMT to 128');
+
+        lfoDstApp.redo();
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX2_SRC'), 18, 'Redo restores MTX2_SRC');
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX2_DST'), 13, 'Redo restores MTX2_DST');
+
+        // 3. Drag Env 2 (tab button and graph card) and Mult 1 onto destination controls
+        const envTabs = modGrid.querySelectorAll('.btn-env-tab');
+        const envGraphCards = modGrid.querySelectorAll('.adsr-graph-card');
+        const multBadges = modGrid.querySelectorAll('.mult-badge');
+        const resoControl = modGrid.querySelectorAll('[data-param]').find(el => el.getAttribute('data-param') === 'FILTER_RESO');
+        const driveControl = modGrid.querySelectorAll('[data-param]').find(el => el.getAttribute('data-param') === 'DRIVE_VOICE');
+        const shape1Control = modGrid.querySelectorAll('[data-param]').find(el => el.getAttribute('data-param') === 'OSC1_SHAPE');
+
+        const env2TabStore = {};
+        envTabs[1].dispatchEvent(makeLfoDragEvent('dragstart', { _store: env2TabStore }));
+        resoControl.dispatchEvent(makeLfoDragEvent('dragover', { _store: env2TabStore }));
+        assert(resoControl.classList.contains('lfo-dst-drop-hover'), 'Dragover with Env 2 tab adds lfo-dst-drop-hover to Resonance');
+        resoControl.dispatchEvent(makeLfoDragEvent('drop', { _store: env2TabStore }));
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX3_SRC'), 14, 'Drop from Env 2 tab sets MTX3_SRC to Env2 (14)');
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX3_DST'), 14, 'Drop from Env 2 tab sets MTX3_DST to Resonance (14)');
+
+        const env3CardStore = {};
+        envGraphCards[2].dispatchEvent(makeLfoDragEvent('dragstart', { _store: env3CardStore }));
+        driveControl.dispatchEvent(makeLfoDragEvent('dragover', { _store: env3CardStore }));
+        assert(driveControl.classList.contains('lfo-dst-drop-hover'), 'Dragover with Env 3 graph card adds lfo-dst-drop-hover to Drive');
+        driveControl.dispatchEvent(makeLfoDragEvent('drop', { _store: env3CardStore }));
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX4_SRC'), 16, 'Drop from Env 3 graph card sets MTX4_SRC to Env3 (16)');
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX4_DST'), 16, 'Drop from Env 3 graph card sets MTX4_DST to Drive (16)');
+
+        const mult1Store = {};
+        multBadges[0].dispatchEvent(makeLfoDragEvent('dragstart', { _store: mult1Store }));
+        shape1Control.dispatchEvent(makeLfoDragEvent('dragover', { _store: mult1Store }));
+        assert(shape1Control.classList.contains('lfo-dst-drop-hover'), 'Dragover with Mult 1 adds lfo-dst-drop-hover to Shape 1');
+        shape1Control.dispatchEvent(makeLfoDragEvent('drop', { _store: mult1Store }));
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX5_SRC'), 42, 'Drop from Mult 1 sets MTX5_SRC to Mult 1 (42)');
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX5_DST'), 5, 'Drop from Mult 1 sets MTX5_DST to Shape 1 (5)');
+
+        // 4. Dragging LFO 1 over LFO 2 Speed clears slot-drop-hover on LFO 2 sub-card
+        const lfo2Card = modGrid.querySelectorAll('.lfo-sub-card').find(c => String(c.getAttribute('data-lfo')) === '2');
+        const lfo2Speed = modGrid.querySelectorAll('[data-param]').find(el => el.getAttribute('data-param') === 'LFO2_SPEED');
+        const lfo1ToLfo2Store = {};
+        lfoBadges[0].dispatchEvent(makeLfoDragEvent('dragstart', { _store: lfo1ToLfo2Store }));
+        lfo2Card.dispatchEvent(makeLfoDragEvent('dragover', { _store: lfo1ToLfo2Store }));
+        assert(lfo2Card.classList.contains('slot-drop-hover'), 'Dragover on LFO 2 card adds slot-drop-hover');
+        lfo2Speed.dispatchEvent(makeLfoDragEvent('dragover', { _store: lfo1ToLfo2Store }));
+        assert(!lfo2Card.classList.contains('slot-drop-hover'), 'Entering LFO 2 speed knob clears slot-drop-hover on LFO 2 card');
+        assert(lfo2Speed.classList.contains('lfo-dst-drop-hover'), 'Entering LFO 2 speed knob adds lfo-dst-drop-hover');
+        lfo2Speed.dispatchEvent(makeLfoDragEvent('drop', { _store: lfo1ToLfo2Store }));
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX6_SRC'), 18, 'Drop on LFO 2 speed sets MTX6_SRC to LFO1 (18)');
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX6_DST'), 37, 'Drop on LFO 2 speed sets MTX6_DST to LFO 2 (37)');
+
+        // 5. When all 12 mod matrix slots are occupied, dragover/drop does nothing
+        for (let m = 1; m <= 12; m++) {
+            lfoDstApp.activeTimbre.setValue(`MTX${m}_SRC`, 1);
+            lfoDstApp.activeTimbre.setValue(`MTX${m}_DST`, 2);
+        }
+        const lfo2Store = {};
+        lfoBadges[1].dispatchEvent(makeLfoDragEvent('dragstart', { _store: lfo2Store }));
+        resoControl.dispatchEvent(makeLfoDragEvent('dragover', { _store: lfo2Store }));
+        assert(!resoControl.classList.contains('lfo-dst-drop-hover'), 'No lfo-dst-drop-hover when mod matrix is full');
+        resoControl.dispatchEvent(makeLfoDragEvent('drop', { _store: lfo2Store }));
+        assertEqual(lfoDstApp.activeTimbre.getValue('MTX12_DST'), 2, 'Drop does not overwrite any slot when mod matrix is full');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    } finally {
+        document.getElementById = prevGetEl58;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

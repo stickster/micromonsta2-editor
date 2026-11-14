@@ -723,6 +723,13 @@ main.app-main {
     opacity: 0.55;
 }
 
+[data-param].lfo-dst-drop-hover {
+    outline: 2px dashed var(--accent-cyan);
+    outline-offset: 2px;
+    border-radius: 6px;
+    background: rgba(0, 210, 255, 0.08);
+}
+
 .matrix-slot-row .select-container .control-label,
 .matrix-slot-row .bipolar-label {
     display: none;

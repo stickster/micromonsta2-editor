@@ -1567,8 +1567,8 @@ class App {
             this._activeDragSection = null;
             dragContainer.classList.remove('is-dragging');
             if (typeof document !== 'undefined' && document.querySelectorAll) {
-                document.querySelectorAll('.tab-drop-hover, .slot-drop-hover').forEach(el => {
-                    el.classList.remove('tab-drop-hover', 'slot-drop-hover');
+                document.querySelectorAll('.tab-drop-hover, .slot-drop-hover, .lfo-dst-drop-hover').forEach(el => {
+                    el.classList.remove('tab-drop-hover', 'slot-drop-hover', 'lfo-dst-drop-hover');
                 });
             }
         });
@@ -1706,6 +1706,169 @@ class App {
             if (el.refresh) el.refresh();
             this._activeDragMtxField = null;
             this.showNotification(`Copied Slot ${data.slotIndex} ${kindLabel} to Slot ${slotIndex}`, 'success');
+        });
+    }
+
+    /**
+     * Returns the 1-based index of the first empty mod matrix slot, or null if full.
+     */
+    _findFirstEmptyMtxSlot(prog) {
+        if (!prog) return null;
+        const maxSlots = (this.midi && this.midi.effectiveFirmwareVersion === 2) ? 10 : 12;
+        for (let m = 1; m <= maxSlots; m++) {
+            if (prog.getValue(`MTX${m}_SRC`) === 0 && prog.getValue(`MTX${m}_DST`) === 0) {
+                return m;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Wires GUI controls matching mod-matrix destinations as drop targets for dragged
+     * modulation sources (LFOs 1-3, Envelopes 1-3, Multipliers 1-2) whenever the mod
+     * matrix has at least one empty slot.
+     */
+    wireModSourceToDestinationDropTargets(containerEl, timbre, onChange) {
+        if (!containerEl || typeof containerEl.querySelectorAll !== 'function') return;
+
+        const SECTION_TO_MTX_SRC = {
+            lfo: { label: 'LFO', indices: { 1: 18, 2: 24, 3: 30 } },
+            env: { label: 'Env', indices: { 1: 12, 2: 14, 3: 16 } },
+            mult: { label: 'Mult', indices: { 1: 42, 2: 43 } }
+        };
+        const resolveModSource = (payload) => {
+            if (!payload || payload.kind !== 'section') return null;
+            const spec = SECTION_TO_MTX_SRC[payload.sectionType];
+            if (!spec) return null;
+            const srcVal = spec.indices[payload.sectionIndex];
+            if (!srcVal) return null;
+            return { srcVal, srcLabel: `${spec.label} ${payload.sectionIndex}` };
+        };
+
+        const PARAM_TO_MTX_DST = {
+            OSC1_TUNE: 2,
+            OSC2_TUNE: 3,
+            OSC3_TUNE: 4,
+            OSC1_SHAPE: 5,
+            OSC2_SHAPE: 6,
+            OSC3_SHAPE: 7,
+            MIX_OSC1: 9,
+            MIX_OSC2: 10,
+            MIX_OSC3: 11,
+            MIX_NOISE: 12,
+            FILTER_FREQ: 13,
+            FILTER_RESO: 14,
+            FILTER_FM: 15,
+            DRIVE_VOICE: 16,
+            VCE_GLIDE: 17,
+            LAY_MASTER_VOLUME: 18,
+            VCE_PAN_SPREAD: 19,
+            ENV1_ATK: 20,
+            ENV2_ATK: 21,
+            ENV3_ATK: 22,
+            ENV1_DCY: 24,
+            ENV2_DCY: 25,
+            ENV3_DCY: 26,
+            ENV1_SUS: 28,
+            ENV2_SUS: 29,
+            ENV3_SUS: 30,
+            ENV1_REL: 32,
+            ENV2_REL: 33,
+            ENV3_REL: 34,
+            LFO1_SPEED: 36,
+            LFO2_SPEED: 37,
+            LFO3_SPEED: 38,
+            DLY_PARAM1: 40,
+            DLY_PARAM2: 41,
+            DLY_PARAM3: 42,
+            REV_PARAM3: 43,
+            ARP_GATE: 44
+        };
+
+        containerEl.querySelectorAll('[data-param]').forEach(el => {
+            const paramKey = el.getAttribute('data-param');
+            const dstVal = PARAM_TO_MTX_DST[paramKey];
+            if (!dstVal) return;
+
+            el.addEventListener('dragover', (e) => {
+                if (!resolveModSource(this._activeDragSection)) return;
+                if (this._findFirstEmptyMtxSlot(timbre()) === null) return;
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                if (typeof el.closest === 'function') {
+                    const parentCard = el.closest('.lfo-sub-card, .env-pane');
+                    if (parentCard) parentCard.classList.remove('slot-drop-hover');
+                } else {
+                    for (const sel of ['.lfo-sub-card', '.env-pane']) {
+                        containerEl.querySelectorAll(sel).forEach(card => {
+                            if (typeof card.contains === 'function' && card.contains(el)) {
+                                card.classList.remove('slot-drop-hover');
+                            }
+                        });
+                    }
+                }
+                el.classList.add('lfo-dst-drop-hover');
+            });
+
+            el.addEventListener('dragleave', (e) => {
+                if (e.relatedTarget && typeof el.contains === 'function' && el.contains(e.relatedTarget)) {
+                    return;
+                }
+                el.classList.remove('lfo-dst-drop-hover');
+            });
+
+            el.addEventListener('drop', (e) => {
+                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+                let data = null;
+                try {
+                    data = raw ? JSON.parse(raw) : this._activeDragSection;
+                } catch (err) {
+                    data = this._activeDragSection;
+                }
+                const modSrc = resolveModSource(data);
+                if (!modSrc) return;
+                const prog = timbre();
+                const emptySlot = this._findFirstEmptyMtxSlot(prog);
+                if (emptySlot === null) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+                el.classList.remove('lfo-dst-drop-hover');
+
+                const { srcVal, srcLabel } = modSrc;
+                const dstLabel = (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get('MTX1_DST')?.values?.[dstVal]) || paramKey;
+                if (onChange && onChange.beginGroup) {
+                    onChange.beginGroup(`Map ${srcLabel} → ${dstLabel} (Slot ${emptySlot})`);
+                }
+                const prevSrc = prog.getValue(`MTX${emptySlot}_SRC`);
+                const prevDst = prog.getValue(`MTX${emptySlot}_DST`);
+                const prevAmt = prog.getValue(`MTX${emptySlot}_AMT`);
+                if (onChange) {
+                    onChange(`MTX${emptySlot}_SRC`, srcVal, { isFinal: true, prevVal: prevSrc });
+                    onChange(`MTX${emptySlot}_DST`, dstVal, { isFinal: true, prevVal: prevDst });
+                    if (prevAmt === 128) {
+                        onChange(`MTX${emptySlot}_AMT`, 160, { isFinal: true, prevVal: prevAmt });
+                    }
+                } else {
+                    prog.setValue(`MTX${emptySlot}_SRC`, srcVal);
+                    prog.setValue(`MTX${emptySlot}_DST`, dstVal);
+                    if (prevAmt === 128) {
+                        prog.setValue(`MTX${emptySlot}_AMT`, 160);
+                    }
+                }
+                if (onChange && onChange.endGroup) {
+                    onChange.endGroup();
+                }
+
+                this._activeDragSection = null;
+                const slotRow = Array.from(containerEl.querySelectorAll('.matrix-slot-row'))
+                    .find(r => String(r.getAttribute('data-slot')) === String(emptySlot));
+                if (slotRow) {
+                    slotRow.querySelectorAll('[data-param]').forEach(node => node.refresh && node.refresh());
+                }
+                this.showNotification(`Mapped ${srcLabel} → ${dstLabel} (Matrix Slot ${emptySlot})`, 'success');
+            });
         });
     }
 
@@ -2791,6 +2954,8 @@ class App {
         row4.appendChild(chordSec.card);
 
         grid.appendChild(row4);
+
+        this.wireModSourceToDestinationDropTargets(grid, timbre, onChange);
 
         // Hook up Program Bar controls
         this.setupProgramBar();
