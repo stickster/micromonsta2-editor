@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Specs:** Formatted all lookup tables, SysEx byte arrays, and parameter definitions for readability.
+- **Specs:** Standardized indentation and spacing inside `js/mm2-specs.js`.
 
 ### Fixed
 - **Editor:** Made Init button an atomic undoable step preserving history.
