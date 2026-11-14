@@ -2524,6 +2524,7 @@ function createKeyboard(midiManager, getActiveProgram) {
 
     if (typeof window !== 'undefined') {
         window.addEventListener('keydown', (e) => {
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
             const activeTag = document.activeElement ? document.activeElement.tagName : '';
             if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
 

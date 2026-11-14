@@ -1385,6 +1385,45 @@ async function runAllTests(logger = console.log) {
         assert(!key16.classList.contains('chord-note'), 'Key 16 cleared on noteOff');
         assert(!key19.classList.contains('chord-note'), 'Key 19 cleared on noteOff');
 
+        // Regression test: QWERTY keyboard handler must ignore modifier shortcuts (e.g. Cmd-L)
+        {
+            const modMidi = {
+                sentNotes: [],
+                sendNote(note, vel, on) { this.sentNotes.push({ note, vel, on }); },
+                outPort: null,
+                targetChannel: 14
+            };
+            const singleNoteProg = new MM2Program();
+            const modKbd = createKeyboard(modMidi, () => singleNoteProg);
+            modKbd.setOctave(3);
+
+            const dispatchWinKey = (type, opts) => {
+                if (typeof KeyboardEvent !== 'undefined') {
+                    const ev = new KeyboardEvent(type, { ...opts, cancelable: true });
+                    window.dispatchEvent(ev);
+                    return ev.defaultPrevented;
+                }
+                let prevented = false;
+                window.dispatchEvent({
+                    type,
+                    ...opts,
+                    preventDefault: () => { prevented = true; }
+                });
+                return prevented;
+            };
+
+            assertEqual(dispatchWinKey('keydown', { code: 'KeyL', metaKey: true }), false, 'Cmd+L is not preventDefaulted by QWERTY keyboard');
+            assertEqual(modMidi.sentNotes.length, 0, 'Cmd+L does not trigger MIDI noteOn');
+            assertEqual(dispatchWinKey('keydown', { code: 'KeyL', ctrlKey: true }), false, 'Ctrl+L is not preventDefaulted by QWERTY keyboard');
+            assertEqual(dispatchWinKey('keydown', { code: 'KeyL', altKey: true }), false, 'Alt+L is not preventDefaulted by QWERTY keyboard');
+            assertEqual(dispatchWinKey('keydown', { code: 'KeyZ', metaKey: true }), false, 'Cmd+Z is not preventDefaulted by QWERTY keyboard');
+            assertEqual(modKbd.getCurrentOctave(), 3, 'Cmd+Z does not decrement keyboard octave');
+
+            assertEqual(dispatchWinKey('keydown', { code: 'KeyL' }), true, 'Unmodified KeyL is handled and preventDefaulted by QWERTY keyboard');
+            assertEqual(modMidi.sentNotes.length, 1, 'Unmodified KeyL triggers MIDI noteOn');
+            dispatchWinKey('keyup', { code: 'KeyL' });
+        }
+
         // Noise Mute & Solo Badges & Right-of-Knob Placement
         const testApp = new App();
         const oscPanel = testApp.createOscillatorPanel(testApp.activeTimbre, () => { });
