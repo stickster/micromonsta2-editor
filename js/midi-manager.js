@@ -313,25 +313,40 @@ class MidiManager {
 
     /**
      * Probes downstream MM2 reachability by requesting Part A.
-     * If no reply arrives within timeoutMs, marks hardware as unresponsive.
+     * If no reply arrives within timeoutMs (and optional retries are exhausted), marks hardware as unresponsive.
      * Flagged as a probe so background health checks do not overwrite active editor patch data.
      */
-    probeHardware(timeoutMs = 2000) {
+    probeHardware(timeoutMs = 2000, { retries = 0 } = {}) {
         if (!this.inPort || !this.outPort) return false;
         if (this._probeTimeout) clearTimeout(this._probeTimeout);
 
         this._isProbing = true;
         this.emit('probe-start', { timeoutMs });
-        this._probeTimeout = setTimeout(() => {
-            this._probeTimeout = null;
-            // Mark unresponsive, but preserve _isProbing so any late-arriving SysEx response
-            // to this probe is still recognized as a probe response (isProbe=true) and does
-            // not leak as an unsolicited dump into active banks or overwrite editor data.
-            this.markHardwareResponsive(false);
-            this.emit('hardware-timeout', { inPort: this.inPort, outPort: this.outPort });
-            this.emit('probe-end', { success: false });
-        }, timeoutMs);
 
+        let remainingRetries = Math.max(0, retries);
+        const scheduleAttemptTimeout = () => {
+            this._probeTimeout = setTimeout(() => {
+                this._probeTimeout = null;
+                if (!this.inPort || !this.outPort) {
+                    this._isProbing = false;
+                    return;
+                }
+                if (remainingRetries > 0) {
+                    remainingRetries--;
+                    this.fetchProgram(0);
+                    scheduleAttemptTimeout();
+                    return;
+                }
+                // Mark unresponsive, but preserve _isProbing so any late-arriving SysEx response
+                // to this probe is still recognized as a probe response (isProbe=true) and does
+                // not leak as an unsolicited dump into active banks or overwrite editor data.
+                this.markHardwareResponsive(false);
+                this.emit('hardware-timeout', { inPort: this.inPort, outPort: this.outPort });
+                this.emit('probe-end', { success: false });
+            }, timeoutMs);
+        };
+
+        scheduleAttemptTimeout();
         return this.fetchProgram(0);
     }
 

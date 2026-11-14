@@ -274,6 +274,7 @@
         <div class="dialog-native-box">
             <h3 id="sync-action-title" class="dialog-title"></h3>
             <p id="sync-action-desc" class="dialog-desc"></p>
+            <p id="sync-action-status" class="dialog-status" style="display: none;"></p>
             <div class="dialog-options-list">
                 <div class="dialog-option-item">
                     <strong>Fetch from MM2:</strong> <span id="sync-action-fetch-detail"></span>
@@ -284,8 +285,8 @@
             </div>
             <form method="dialog" class="dialog-button-bar">
                 <button type="submit" value="ignore" id="sync-action-ignore-btn" class="btn btn-secondary" autofocus>Ignore</button>
-                <button type="submit" value="fetch" class="btn btn-primary">Fetch from MM2</button>
-                <button type="submit" value="push" class="btn btn-warning">Push to MM2</button>
+                <button type="submit" value="fetch" id="sync-action-fetch-btn" class="btn btn-primary">Fetch from MM2</button>
+                <button type="submit" value="push" id="sync-action-push-btn" class="btn btn-warning">Push to MM2</button>
             </form>
         </div>
     </dialog>

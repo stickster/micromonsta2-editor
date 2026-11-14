@@ -112,7 +112,7 @@ class App {
         this._probeIfNeeded();
     }
 
-    _probeIfNeeded(timeoutMs = 2500) {
+    _probeIfNeeded(timeoutMs = 2500, options = {}) {
         const isFollowerTab = this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower);
         if (
             !isFollowerTab &&
@@ -122,7 +122,7 @@ class App {
             this.midi.hardwareResponsive === null &&
             !this.midi._isProbing
         ) {
-            return this.midi.probeHardware(timeoutMs);
+            return this.midi.probeHardware(timeoutMs, options);
         }
         return false;
     }
@@ -419,7 +419,8 @@ class App {
             }
             this.updateConnectionStatus();
             this.updateSettingsPortLists();
-            this._probeIfNeeded();
+            // Retry probing across a few seconds so USB-powered MM2 hardware has time to boot
+            this._probeIfNeeded(1200, { retries: 4 });
         });
 
         this.midi.on('error', (err) => {
@@ -438,6 +439,7 @@ class App {
 
     updateConnectionStatus() {
         this.updateLiveSyncUI();
+        this._updateSyncActionDialogState();
         if (!this.isConnectionGood && (this.syncStatus === 'synced' || this.syncStatus === 'streaming')) {
             this.updateSyncStatus(this.midi && this.midi.hardwareResponsive === false ? 'failed' : 'offline');
         }
@@ -2997,10 +2999,14 @@ class App {
         }
     }
 
-    _openDialog(dialogId, setupFn = null) {
-        if (typeof document === 'undefined') return Promise.resolve(null);
+    _openDialog(dialogId, setupFn = null, cleanupFn = null) {
+        if (typeof document === 'undefined') {
+            if (cleanupFn) cleanupFn();
+            return Promise.resolve(null);
+        }
         const dialog = document.getElementById(dialogId);
         if (!dialog || typeof dialog.showModal !== 'function' || dialog.open) {
+            if (cleanupFn) cleanupFn();
             return Promise.resolve(null);
         }
         if (setupFn) setupFn(dialog);
@@ -3008,6 +3014,7 @@ class App {
         return new Promise((resolve) => {
             const onClose = () => {
                 dialog.removeEventListener('close', onClose);
+                if (cleanupFn) cleanupFn();
                 resolve(dialog.returnValue || null);
             };
             dialog.addEventListener('close', onClose);
@@ -3015,6 +3022,7 @@ class App {
                 dialog.showModal();
             } catch (e) {
                 dialog.removeEventListener('close', onClose);
+                if (cleanupFn) cleanupFn();
                 resolve(null);
             }
         });
@@ -3085,7 +3093,45 @@ class App {
         return result === 'confirm';
     }
 
-    promptSyncAction({ title, description, fetchDetail, pushDetail, ignoreLabel = 'Ignore' } = {}) {
+    _updateSyncActionDialogState() {
+        if (typeof document === 'undefined') return;
+        const fetchBtn = document.getElementById('sync-action-fetch-btn');
+        const pushBtn = document.getElementById('sync-action-push-btn');
+        const statusEl = document.getElementById('sync-action-status');
+        const ready = !this._syncActionRequireVerified || this.isConnectionGood;
+
+        if (fetchBtn) {
+            fetchBtn.disabled = !ready;
+            fetchBtn.title = ready ? '' : 'Waiting for MicroMonsta 2 hardware to respond';
+        }
+        if (pushBtn) {
+            pushBtn.disabled = !ready;
+            pushBtn.title = ready ? '' : 'Waiting for MicroMonsta 2 hardware to respond';
+        }
+        if (statusEl) {
+            if (!this._syncActionRequireVerified) {
+                statusEl.style.display = 'none';
+                statusEl.textContent = '';
+                statusEl.className = 'dialog-status';
+            } else if (!this.isConnectionGood) {
+                statusEl.style.display = '';
+                if (this.midi && this.midi.hardwareResponsive === false) {
+                    statusEl.textContent = 'MicroMonsta 2 did not respond yet. Check power/MIDI cables or click Ignore.';
+                    statusEl.className = 'dialog-status warning';
+                } else {
+                    statusEl.textContent = 'Waiting for MicroMonsta 2 hardware to finish booting and respond...';
+                    statusEl.className = 'dialog-status waiting';
+                }
+            } else {
+                statusEl.style.display = '';
+                statusEl.textContent = 'MicroMonsta 2 hardware is ready.';
+                statusEl.className = 'dialog-status ready';
+            }
+        }
+    }
+
+    promptSyncAction({ title, description, fetchDetail, pushDetail, ignoreLabel = 'Ignore', requireVerified = false } = {}) {
+        this._syncActionRequireVerified = !!requireVerified;
         return this._openDialog('sync-action-dialog', () => {
             const titleEl = document.getElementById('sync-action-title');
             if (titleEl && title !== undefined) titleEl.textContent = title;
@@ -3097,6 +3143,9 @@ class App {
             if (pushEl && pushDetail !== undefined) pushEl.textContent = pushDetail;
             const ignoreBtn = document.getElementById('sync-action-ignore-btn');
             if (ignoreBtn) ignoreBtn.textContent = ignoreLabel;
+            this._updateSyncActionDialogState();
+        }, () => {
+            this._syncActionRequireVerified = false;
         });
     }
 
@@ -3112,7 +3161,8 @@ class App {
                 ? `Communication with your MicroMonsta 2 synthesizer${portSuffix} has been restored. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`
                 : `Connected to your MicroMonsta 2 synthesizer${portSuffix}. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`,
             fetchDetail: 'Reads active edit buffer settings from the synth hardware into Part A and Part B.',
-            pushDetail: 'Transmits current patch parameters in the editor to the synth hardware.'
+            pushDetail: 'Transmits current patch parameters in the editor to the synth hardware.',
+            requireVerified: true
         });
 
         if (choice === 'fetch') {

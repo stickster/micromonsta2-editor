@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MIDI:** Showed port-change notifications on probe outcome rather than attempt.
 - **MIDI:** Automatically probe MicroMonsta 2 hardware on initial app load, reconnect, and sync dialog dismissal so connection status exits `Standby` without waiting for manual interaction.
 - **Sync:** Prevented patch sync state and `#editor-sync-badge` indicator from showing `Synced` when MIDI connection mode is not `Connected`, introducing the `offline` (`Not Synced (Offline)`) state.
+- **MIDI:** Gated Fetch/Push in `#sync-action-dialog` until hardware responds and retried reconnect probes so USB-powered MM2 units can finish booting.
 
 ### Documentation & Maintenance
 - Restored standard `## [Unreleased]` workflow in `CHANGELOG.md` and `.agents/rules/git-hygiene.md`.

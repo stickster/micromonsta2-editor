@@ -3832,6 +3832,138 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    logger('\n--- [51] USB Power-On Reconnect Probe Retries & Sync Dialog Gating Tests ---');
+    try {
+        const gateApp = new App();
+        gateApp.midi.saveSettings = () => { };
+        gateApp.showNotification = () => { };
+        gateApp.bindEvents();
+
+        const fetchBtn = { disabled: false, title: '' };
+        const pushBtn = { disabled: false, title: '' };
+        const statusEl = { style: { display: 'none' }, textContent: '', className: '' };
+        const titleEl = { textContent: '' };
+        const descEl = { textContent: '' };
+        const fetchDetailEl = { textContent: '' };
+        const pushDetailEl = { textContent: '' };
+        const ignoreBtn = { textContent: '' };
+        const gateListeners = {};
+        const gateDialog = {
+            open: false,
+            returnValue: '',
+            addEventListener: (ev, fn) => { gateListeners[ev] = fn; },
+            removeEventListener: (ev, fn) => { if (gateListeners[ev] === fn) delete gateListeners[ev]; },
+            showModal: () => {
+                gateDialog.open = true;
+            }
+        };
+
+        document.registerMockElement('sync-action-dialog', gateDialog);
+        document.registerMockElement('sync-action-title', titleEl);
+        document.registerMockElement('sync-action-desc', descEl);
+        document.registerMockElement('sync-action-fetch-detail', fetchDetailEl);
+        document.registerMockElement('sync-action-push-detail', pushDetailEl);
+        document.registerMockElement('sync-action-ignore-btn', ignoreBtn);
+        document.registerMockElement('sync-action-fetch-btn', fetchBtn);
+        document.registerMockElement('sync-action-push-btn', pushBtn);
+        document.registerMockElement('sync-action-status', statusEl);
+
+        gateApp.midi.inPort = { id: 'mm2-in', name: 'MicroMonsta 2' };
+        gateApp.midi.outPort = { id: 'mm2-out', name: 'MicroMonsta 2', send: () => { } };
+        gateApp.midi.hardwareResponsive = null;
+
+        // 1. Opening reconnect dialog before MM2 responds disables Fetch/Push
+        const promptPromise = gateApp.promptReconnectSync({ isReconnect: true, portName: 'MicroMonsta 2' });
+        assertEqual(fetchBtn.disabled, true, 'Reconnect dialog disables Fetch while MM2 is unverified');
+        assertEqual(pushBtn.disabled, true, 'Reconnect dialog disables Push while MM2 is unverified');
+        assertEqual(statusEl.style.display, '', 'Reconnect dialog shows waiting status while MM2 is unverified');
+        assert(statusEl.className.includes('waiting'), 'Reconnect dialog status has waiting class');
+
+        // 2. When MM2 finishes booting and responds, Fetch/Push unlock automatically
+        gateApp.midi.markHardwareResponsive(true);
+        assertEqual(fetchBtn.disabled, false, 'Reconnect dialog enables Fetch once MM2 responds');
+        assertEqual(pushBtn.disabled, false, 'Reconnect dialog enables Push once MM2 responds');
+        assert(statusEl.className.includes('ready'), 'Reconnect dialog status transitions to ready');
+
+        // Close dialog as ignore
+        gateDialog.open = false;
+        gateDialog.returnValue = 'ignore';
+        if (gateListeners.close) gateListeners.close();
+        await promptPromise;
+
+        // 3. Non-reconnect promptSyncAction (e.g. Live Sync) does not gate Fetch/Push
+        const livePromptPromise = gateApp.promptSyncAction({
+            title: 'Enable Live Sync',
+            description: 'Test',
+            fetchDetail: 'Fetch',
+            pushDetail: 'Push'
+        });
+        assertEqual(fetchBtn.disabled, false, 'Live sync dialog keeps Fetch enabled when connected');
+        assertEqual(pushBtn.disabled, false, 'Live sync dialog keeps Push enabled when connected');
+        assertEqual(statusEl.style.display, 'none', 'Live sync dialog hides reconnect waiting status');
+        gateDialog.open = false;
+        gateDialog.returnValue = 'ignore';
+        if (gateListeners.close) gateListeners.close();
+        await livePromptPromise;
+
+        // 4. Probe retries allow USB-powered MM2 to boot before timing out
+        const retryMidi = new MidiManager();
+        retryMidi.saveSettings = () => { };
+        let retrySendCount = 0;
+        let retryTimeoutCount = 0;
+        let retryProbeResult = null;
+        retryMidi.inPort = { id: 'mm2-in', name: 'MicroMonsta 2' };
+        retryMidi.outPort = { id: 'mm2-out', name: 'MicroMonsta 2', send: () => { retrySendCount++; } };
+        retryMidi.on('hardware-timeout', () => { retryTimeoutCount++; });
+        retryMidi.on('probe-end', ({ success }) => { retryProbeResult = success; });
+
+        retryMidi.probeHardware(15, { retries: 2 });
+        assertEqual(retrySendCount, 1, 'Initial probe dispatches first request');
+        await new Promise(r => setTimeout(r, 22));
+        assertEqual(retrySendCount, 2, 'Probe retries after first interval while MM2 boots');
+        assertEqual(retryTimeoutCount, 0, 'Probe does not emit hardware-timeout before retries are exhausted');
+
+        // Simulate MM2 finishing boot and replying to second probe
+        const bootProg = new MM2Program();
+        bootProg.name = 'BOOTED';
+        retryMidi.handleCompleteSysEx(bootProg.toSysEx(0, 3));
+        assertEqual(retryMidi.hardwareResponsive, true, 'MM2 marked responsive after delayed boot reply');
+        assertEqual(retryTimeoutCount, 0, 'No hardware-timeout emitted when retry succeeds');
+        assertEqual(retryProbeResult, true, 'probe-end emits success=true when retry succeeds');
+
+        // 5. Exhausting all retries marks hardware unresponsive and emits hardware-timeout
+        const failMidi = new MidiManager();
+        failMidi.saveSettings = () => { };
+        let failSendCount = 0;
+        let failTimeoutCount = 0;
+        let failProbeResult = null;
+        failMidi.inPort = { id: 'mm2-in', name: 'MicroMonsta 2' };
+        failMidi.outPort = { id: 'mm2-out', name: 'MicroMonsta 2', send: () => { failSendCount++; } };
+        failMidi.on('hardware-timeout', () => { failTimeoutCount++; });
+        failMidi.on('probe-end', ({ success }) => { failProbeResult = success; });
+
+        failMidi.probeHardware(15, { retries: 2 });
+        await new Promise(r => setTimeout(r, 80));
+        assertEqual(failSendCount, 3, 'Probe dispatches initial attempt plus 2 retries before failing');
+        assertEqual(failTimeoutCount, 1, 'hardware-timeout emitted once after all retries fail');
+        assertEqual(failMidi.hardwareResponsive, false, 'Hardware marked unresponsive after all retries fail');
+        assertEqual(failProbeResult, false, 'probe-end emits success=false when all retries fail');
+
+        document.registerMockElement('sync-action-dialog', null);
+        document.registerMockElement('sync-action-title', null);
+        document.registerMockElement('sync-action-desc', null);
+        document.registerMockElement('sync-action-fetch-detail', null);
+        document.registerMockElement('sync-action-push-detail', null);
+        document.registerMockElement('sync-action-ignore-btn', null);
+        document.registerMockElement('sync-action-fetch-btn', null);
+        document.registerMockElement('sync-action-push-btn', null);
+        document.registerMockElement('sync-action-status', null);
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

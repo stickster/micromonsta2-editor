@@ -1098,6 +1098,30 @@ main.app-main {
     line-height: 1.5;
 }
 
+.dialog-status {
+    font-size: 11px;
+    padding: 6px 10px;
+    border-radius: 5px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card-inner);
+    color: var(--text-secondary);
+}
+
+.dialog-status.waiting {
+    border-color: var(--accent-cyan);
+    color: var(--accent-cyan);
+}
+
+.dialog-status.ready {
+    border-color: var(--accent-green, #4caf50);
+    color: var(--accent-green, #4caf50);
+}
+
+.dialog-status.warning {
+    border-color: var(--accent-orange);
+    color: var(--accent-orange);
+}
+
 .dialog-options-list {
     display: flex;
     flex-direction: column;
