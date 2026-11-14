@@ -1617,6 +1617,98 @@ class App {
         });
     }
 
+    /**
+     * Configures a mod matrix source or destination select container as both a drag source
+     * and drop target for copying that field (source -> source, dest -> dest) between slots.
+     */
+    wireMtxFieldDragDrop(el, fieldType, slotIndex, timbre, onChange) {
+        if (!el) return;
+        const kindLabel = fieldType === 'src' ? 'Source' : 'Destination';
+        el.setAttribute('draggable', 'true');
+
+        if (typeof document !== 'undefined' && typeof el.insertBefore === 'function') {
+            const handle = document.createElement('span');
+            handle.className = 'mtx-field-drag-handle';
+            handle.textContent = '⋮⋮';
+            handle.title = `Slot ${slotIndex} ${kindLabel} • Drag to copy to another slot's ${kindLabel.toLowerCase()}`;
+            el.insertBefore(handle, el.firstChild || null);
+        }
+
+        el.addEventListener('dragstart', (e) => {
+            e.stopPropagation();
+            const payload = { kind: 'mtx-field', fieldType, slotIndex };
+            this._activeDragMtxField = payload;
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'copy';
+                e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+            }
+            el.classList.add('is-dragging');
+        });
+
+        el.addEventListener('dragend', () => {
+            this._activeDragMtxField = null;
+            el.classList.remove('is-dragging');
+            if (typeof document !== 'undefined' && document.querySelectorAll) {
+                document.querySelectorAll('.mtx-select-src.slot-drop-hover, .mtx-select-dst.slot-drop-hover').forEach(node => {
+                    node.classList.remove('slot-drop-hover');
+                });
+            }
+        });
+
+        el.addEventListener('dragover', (e) => {
+            const active = this._activeDragMtxField;
+            if (!active || active.kind !== 'mtx-field' || active.fieldType !== fieldType || active.slotIndex === slotIndex) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+            el.classList.add('slot-drop-hover');
+        });
+
+        el.addEventListener('dragleave', (e) => {
+            if (e.relatedTarget && typeof el.contains === 'function' && el.contains(e.relatedTarget)) {
+                return;
+            }
+            el.classList.remove('slot-drop-hover');
+        });
+
+        el.addEventListener('drop', (e) => {
+            const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+            let data = null;
+            try {
+                data = raw ? JSON.parse(raw) : this._activeDragMtxField;
+            } catch (err) {
+                data = this._activeDragMtxField;
+            }
+            if (!data || data.kind !== 'mtx-field' || data.fieldType !== fieldType || data.slotIndex === slotIndex) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            el.classList.remove('slot-drop-hover');
+
+            const prog = timbre();
+            if (!prog) return;
+            const srcKey = fieldType === 'src' ? `MTX${data.slotIndex}_SRC` : `MTX${data.slotIndex}_DST`;
+            const dstKey = fieldType === 'src' ? `MTX${slotIndex}_SRC` : `MTX${slotIndex}_DST`;
+            const val = prog.getValue(srcKey);
+            const prevVal = prog.getValue(dstKey);
+            if (onChange) {
+                onChange(dstKey, val, {
+                    isFinal: true,
+                    prevVal,
+                    label: `Copy Slot ${data.slotIndex} ${kindLabel} → Slot ${slotIndex}`
+                });
+            } else {
+                prog.setValue(dstKey, val);
+            }
+            if (el.refresh) el.refresh();
+            this._activeDragMtxField = null;
+            this.showNotification(`Copied Slot ${data.slotIndex} ${kindLabel} to Slot ${slotIndex}`, 'success');
+        });
+    }
+
     createOscillatorPanel(timbre, onChange) {
         if (typeof document === 'undefined') return { card: null };
 
@@ -2465,6 +2557,7 @@ class App {
 
             const srcSelect = createSelect(`MTX${m}_SRC`, timbre, onChange);
             srcSelect.classList.add('mtx-select-src');
+            this.wireMtxFieldDragDrop(srcSelect, 'src', m, timbre, onChange);
 
             const arrow = document.createElement('span');
             arrow.className = 'matrix-arrow';
@@ -2472,6 +2565,7 @@ class App {
 
             const dstSelect = createSelect(`MTX${m}_DST`, timbre, onChange);
             dstSelect.classList.add('mtx-select-dst');
+            this.wireMtxFieldDragDrop(dstSelect, 'dst', m, timbre, onChange);
 
             const amtSlider = createBipolarSlider(`MTX${m}_AMT`, timbre, onChange, { label: 'Amt' });
 

@@ -4206,6 +4206,89 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // Section 54: Mod Matrix Source & Destination Drag/Drop Tests
+    logger('\n--- [54] Mod Matrix Source & Destination Drag/Drop Tests ---');
+    const prevGetEl54 = document.getElementById;
+    try {
+        const modGrid = document.createElement('div');
+        modGrid.id = 'editor-grid';
+        document.getElementById = (id) => (id === 'editor-grid' ? modGrid : prevGetEl54(id));
+
+        const mtxApp = new App();
+        mtxApp.activeTimbre.setValue('MTX1_SRC', 18); // LFO1
+        mtxApp.activeTimbre.setValue('MTX1_DST', 13); // Cutoff
+        mtxApp.activeTimbre.setValue('MTX2_SRC', 3);  // Velocity
+        mtxApp.activeTimbre.setValue('MTX2_DST', 5);  // Shape 1
+
+        mtxApp.buildEditorUI();
+
+        const srcControls = modGrid.querySelectorAll('.mtx-select-src');
+        const dstControls = modGrid.querySelectorAll('.mtx-select-dst');
+        assertEqual(srcControls.length, 12, 'Mod Matrix renders 12 source controls');
+        assertEqual(dstControls.length, 12, 'Mod Matrix renders 12 destination controls');
+        assert(srcControls[0].getAttribute('draggable') === 'true', 'Mod Matrix source control is draggable');
+        assert(dstControls[0].getAttribute('draggable') === 'true', 'Mod Matrix destination control is draggable');
+
+        const makeMtxDragEvent = (type, extra = {}) => {
+            const store = extra._store || {};
+            return {
+                type,
+                relatedTarget: extra.relatedTarget || null,
+                preventDefault() { },
+                stopPropagation() { },
+                dataTransfer: {
+                    effectAllowed: '',
+                    dropEffect: '',
+                    setData(k, v) { store[k] = v; },
+                    getData(k) { return store[k] || ''; }
+                }
+            };
+        };
+
+        // 1. Source -> Source drag/drop copies MTX1_SRC -> MTX2_SRC and is undoable
+        const srcStore = {};
+        srcControls[0].dispatchEvent(makeMtxDragEvent('dragstart', { _store: srcStore }));
+        srcControls[1].dispatchEvent(makeMtxDragEvent('dragover', { _store: srcStore }));
+        assert(srcControls[1].classList.contains('slot-drop-hover'), 'Source dragover on another source adds slot-drop-hover');
+        // Cross-field dragover (source -> destination) should be ignored
+        dstControls[1].dispatchEvent(makeMtxDragEvent('dragover', { _store: srcStore }));
+        assert(!dstControls[1].classList.contains('slot-drop-hover'), 'Source dragover on destination does not add slot-drop-hover');
+        dstControls[1].dispatchEvent(makeMtxDragEvent('drop', { _store: srcStore }));
+        assertEqual(mtxApp.activeTimbre.getValue('MTX2_DST'), 5, 'Dropping source on destination does not modify destination');
+
+        srcControls[1].dispatchEvent(makeMtxDragEvent('drop', { _store: srcStore }));
+        assert(!srcControls[1].classList.contains('slot-drop-hover'), 'Drop on source clears slot-drop-hover');
+        assertEqual(mtxApp.activeTimbre.getValue('MTX2_SRC'), 18, 'Dropping source 1 onto source 2 copies MTX1_SRC to MTX2_SRC');
+        assertEqual(mtxApp.undoStack.length, 1, 'Source drag/drop records 1 undo entry');
+
+        mtxApp.undo();
+        assertEqual(mtxApp.activeTimbre.getValue('MTX2_SRC'), 3, 'Undo restores previous MTX2_SRC');
+        mtxApp.redo();
+        assertEqual(mtxApp.activeTimbre.getValue('MTX2_SRC'), 18, 'Redo reapplies copied MTX2_SRC');
+
+        // 2. Destination -> Destination drag/drop copies MTX1_DST -> MTX2_DST and is undoable
+        const dstStore = {};
+        dstControls[0].dispatchEvent(makeMtxDragEvent('dragstart', { _store: dstStore }));
+        dstControls[1].dispatchEvent(makeMtxDragEvent('dragover', { _store: dstStore }));
+        assert(dstControls[1].classList.contains('slot-drop-hover'), 'Destination dragover on another destination adds slot-drop-hover');
+        srcControls[1].dispatchEvent(makeMtxDragEvent('dragover', { _store: dstStore }));
+        assert(!srcControls[1].classList.contains('slot-drop-hover'), 'Destination dragover on source does not add slot-drop-hover');
+
+        dstControls[1].dispatchEvent(makeMtxDragEvent('drop', { _store: dstStore }));
+        assertEqual(mtxApp.activeTimbre.getValue('MTX2_DST'), 13, 'Dropping destination 1 onto destination 2 copies MTX1_DST to MTX2_DST');
+        assertEqual(mtxApp.undoStack.length, 2, 'Destination drag/drop records 1 undo entry');
+
+        mtxApp.undo();
+        assertEqual(mtxApp.activeTimbre.getValue('MTX2_DST'), 5, 'Undo restores previous MTX2_DST');
+        mtxApp.redo();
+        assertEqual(mtxApp.activeTimbre.getValue('MTX2_DST'), 13, 'Redo reapplies copied MTX2_DST');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    } finally {
+        document.getElementById = prevGetEl54;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
