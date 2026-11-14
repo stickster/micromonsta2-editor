@@ -6,6 +6,12 @@ on:
   issue_comment:
     types: [created]
 
+env:
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  GEMINI_CLI_TRUST_WORKSPACE: 'true'
+
 permissions:
   contents: read
   pull-requests: write
@@ -32,6 +38,11 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 24
+
+      - name: Authenticate GitHub CLI
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | env -u GH_TOKEN -u GITHUB_TOKEN gh auth login --with-token
 
       - name: Run Gemini PR Review
         uses: google-github-actions/run-gemini-cli@v0
@@ -62,8 +73,3 @@ jobs:
             First, inspect the PR details and diff using `gh pr view ${{ github.event.pull_request.number || github.event.issue.number }}` and `gh pr diff ${{ github.event.pull_request.number || github.event.issue.number }}`.
             Verify adherence to Vanilla JS architecture (no bundlers/frameworks), MicroMonsta 2 SysEx/NRPN specifications, and test suite requirements (`node tests/cli-runner.js`).
             You MUST post your review feedback directly on the pull request using `gh pr review ${{ github.event.pull_request.number || github.event.issue.number }} --comment --body "..."` (or `--approve` if ready). Do not only output the review to stdout.
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GEMINI_CLI_TRUST_WORKSPACE: 'true'

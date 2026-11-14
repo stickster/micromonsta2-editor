@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - **CI:** Instruct `gemini-triage` and `gemini-review` workflows to fetch full issue/PR details and post comments/reviews via `gh` CLI.
+- **CI:** Add `workflow_dispatch` handoff from `gemini-triage` to `gemini-assist` for actionable issues.
+- **CI:** Authenticate `gh` CLI via `gh auth login --with-token` before running Gemini CLI so `gh` remains authenticated despite shell env var redaction.
+- **CI:** Unset `GH_TOKEN`/`GITHUB_TOKEN` during `gh auth login --with-token` so `gh` stores credentials cleanly.
 
 ---
 
