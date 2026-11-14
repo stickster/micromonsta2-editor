@@ -1158,10 +1158,10 @@ function createADSRVisualizer(envNumber, program) {
 /**
  * Creates an interactive SVG Filter frequency response curve
  */
-function createFilterCurveVisualizer(program) {
+function createFilterCurveVisualizer(program, onChange) {
     const container = document.createElement('div');
     container.className = 'visualizer-box filter-visualizer';
-    container.title = 'Filter Magnitude Response (20 Hz–20 kHz, log; +24 to −48 dB)';
+    container.title = 'Filter Magnitude Response (20 Hz–20 kHz, log; +24 to −48 dB) — Drag dot to adjust Cutoff & Resonance';
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('viewBox', '0 0 200 48');
@@ -1315,6 +1315,109 @@ function createFilterCurveVisualizer(program) {
         pathPassband.setAttribute('d', curvePath.trim());
         pathStopband.setAttribute('d', floorPath.trim());
         pathBg.setAttribute('d', fillPath);
+    }
+
+    // Interactive drag on the filter peak/cutoff dot (controls Cutoff X and Resonance Y simultaneously)
+    if (onChange) {
+        const X_MIN = 6;
+        const X_MAX = 194;
+        const RESO_DRAG_SPAN = 24; // SVG Y units for full 0..127 resonance sweep
+
+        const toSvgCoords = (clientX, clientY) => {
+            const rect = svg.getBoundingClientRect ? svg.getBoundingClientRect() : null;
+            if (!rect || !rect.width || !rect.height) {
+                return { x: clientX, y: clientY };
+            }
+            return {
+                x: ((clientX - rect.left) / rect.width) * 200,
+                y: ((clientY - rect.top) / rect.height) * 48
+            };
+        };
+
+        const syncFilterKnob = (key) => {
+            if (typeof document === 'undefined') return;
+            document.querySelectorAll(`[data-param="${key}"]`).forEach(el => {
+                if (el.refresh) el.refresh();
+            });
+        };
+
+        let dragState = null;
+
+        const onPointerMove = (e) => {
+            if (!dragState) return;
+            const pt = toSvgCoords(e.clientX, e.clientY);
+            const normX = Math.max(0, Math.min(1, (pt.x - X_MIN) / (X_MAX - X_MIN)));
+            const nextFreq = Math.round(normX * 255);
+            const deltaY = dragState.startY - pt.y;
+            const nextReso = Math.max(0, Math.min(127, Math.round(dragState.startReso + (deltaY / RESO_DRAG_SPAN) * 127)));
+
+            if (nextFreq !== dragState.curFreq) {
+                dragState.curFreq = nextFreq;
+                onChange('FILTER_FREQ', nextFreq, { isInterim: true, prevVal: dragState.startFreq });
+                syncFilterKnob('FILTER_FREQ');
+            }
+            if (nextReso !== dragState.curReso) {
+                dragState.curReso = nextReso;
+                onChange('FILTER_RESO', nextReso, { isInterim: true, prevVal: dragState.startReso });
+                syncFilterKnob('FILTER_RESO');
+            }
+            updateVisual();
+        };
+
+        const onPointerUp = () => {
+            if (!dragState) return;
+            const { startFreq, startReso, curFreq, curReso } = dragState;
+            dragState = null;
+            cutoffPoint.classList.remove('dragging');
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('pointermove', onPointerMove);
+                window.removeEventListener('pointerup', onPointerUp);
+                window.removeEventListener('pointercancel', onPointerUp);
+            }
+
+            const freqChanged = curFreq !== startFreq;
+            const resoChanged = curReso !== startReso;
+            if (freqChanged || resoChanged) {
+                if (typeof onChange.beginGroup === 'function') {
+                    onChange.beginGroup('Filter Cutoff & Resonance');
+                }
+                if (freqChanged) {
+                    onChange('FILTER_FREQ', curFreq, { isFinal: true, prevVal: startFreq });
+                    syncFilterKnob('FILTER_FREQ');
+                }
+                if (resoChanged) {
+                    onChange('FILTER_RESO', curReso, { isFinal: true, prevVal: startReso });
+                    syncFilterKnob('FILTER_RESO');
+                }
+                if (typeof onChange.endGroup === 'function') {
+                    onChange.endGroup();
+                }
+            }
+        };
+
+        cutoffPoint.addEventListener('pointerdown', (e) => {
+            const prog = getProg();
+            if (!prog) return;
+            if (e.preventDefault) e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+
+            const pt = toSvgCoords(e.clientX, e.clientY);
+            const startFreq = prog.getValue('FILTER_FREQ');
+            const startReso = prog.getValue('FILTER_RESO');
+            dragState = {
+                startY: pt.y,
+                startFreq,
+                startReso,
+                curFreq: startFreq,
+                curReso: startReso
+            };
+            cutoffPoint.classList.add('dragging');
+            if (typeof window !== 'undefined') {
+                window.addEventListener('pointermove', onPointerMove);
+                window.addEventListener('pointerup', onPointerUp);
+                window.addEventListener('pointercancel', onPointerUp);
+            }
+        });
     }
 
     container.refresh = updateVisual;

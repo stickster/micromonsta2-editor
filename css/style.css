@@ -2633,6 +2633,13 @@ footer.audition-footer {
     stroke: var(--accent-cyan);
     stroke-width: 2;
     filter: drop-shadow(0 0 4px var(--accent-cyan-glow));
+    cursor: grab;
+    touch-action: none;
+    pointer-events: all;
+}
+
+.filter-cutoff-point.dragging {
+    cursor: grabbing;
 }
 
 .lfo-visualizer {

@@ -2208,7 +2208,7 @@ class App {
 
         // FILTER
         const flt = createSectionCard('Filter', 'flt', 1, timbre, onChange);
-        flt.body.appendChild(createFilterCurveVisualizer(timbre));
+        flt.body.appendChild(createFilterCurveVisualizer(timbre, onChange));
 
         const fltSelects = document.createElement('div');
         fltSelects.className = 'select-row';

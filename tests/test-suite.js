@@ -4146,6 +4146,66 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // Section 53: Filter Peak Dot Dragging Tests
+    logger('\n--- [53] Filter Peak Dot Dragging Tests ---');
+    try {
+        const fltApp = new App();
+        fltApp.activeTimbre.setValue('FILTER_FREQ', 128);
+        fltApp.activeTimbre.setValue('FILTER_RESO', 0);
+        const fltOnChange = (key, val, meta) => fltApp.onParameterChanged(key, val, meta);
+        fltOnChange.beginGroup = (label) => fltApp.beginUndoGroup(label);
+        fltOnChange.endGroup = () => fltApp.endUndoGroup();
+
+        const fltViz = createFilterCurveVisualizer(() => fltApp.activeTimbre, fltOnChange);
+        const svgEl = fltViz.children[0];
+        svgEl.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 48 });
+        const dot = svgEl.children.find(c => c.getAttribute('class') === 'filter-cutoff-point');
+        assert(dot !== null && dot !== undefined, 'Filter cutoff/peak dot exists');
+
+        const makePtrEvent = (type, clientX, clientY) => ({
+            type,
+            clientX,
+            clientY,
+            preventDefault() { },
+            stopPropagation() { }
+        });
+
+        // 1. pointerdown does not mutate values or create undo entry
+        dot.dispatchEvent(makePtrEvent('pointerdown', 100, 20));
+        assert(dot.classList.contains('dragging'), 'Dot gains .dragging class on pointerdown');
+        assertEqual(fltApp.activeTimbre.getValue('FILTER_FREQ'), 128, 'pointerdown does not change FILTER_FREQ');
+        assertEqual(fltApp.activeTimbre.getValue('FILTER_RESO'), 0, 'pointerdown does not change FILTER_RESO');
+        assertEqual(fltApp.undoStack.length, 0, 'pointerdown creates 0 undo entries');
+
+        // 2. pointermove right & up updates both FILTER_FREQ and FILTER_RESO simultaneously
+        window.dispatchEvent(makePtrEvent('pointermove', 194, 8));
+        const movedFreq = fltApp.activeTimbre.getValue('FILTER_FREQ');
+        const movedReso = fltApp.activeTimbre.getValue('FILTER_RESO');
+        assertEqual(movedFreq, 255, 'Dragging dot to right edge sets FILTER_FREQ to 255');
+        assert(movedReso > 50, `Dragging dot upward increases FILTER_RESO (got ${movedReso})`);
+        assertEqual(dot.getAttribute('cx'), '194.00', 'Dot cx updates to match dragged cutoff');
+        assertEqual(fltApp.undoStack.length, 0, 'Interim drag creates 0 undo entries');
+
+        // 3. pointerup commits a single atomic undo step for both Cutoff & Resonance
+        window.dispatchEvent(makePtrEvent('pointerup', 194, 8));
+        assert(!dot.classList.contains('dragging'), 'Dot loses .dragging class on pointerup');
+        assertEqual(fltApp.undoStack.length, 1, 'Releasing dot creates 1 atomic undo entry');
+        assertEqual(fltApp.undoStack[0].type, 'batch', 'Undo entry is a batch group');
+
+        // 4. Single Undo restores both FILTER_FREQ and FILTER_RESO
+        fltApp.undo();
+        assertEqual(fltApp.activeTimbre.getValue('FILTER_FREQ'), 128, 'Single Undo restores FILTER_FREQ');
+        assertEqual(fltApp.activeTimbre.getValue('FILTER_RESO'), 0, 'Single Undo restores FILTER_RESO');
+
+        // 5. Single Redo reapplies both FILTER_FREQ and FILTER_RESO
+        fltApp.redo();
+        assertEqual(fltApp.activeTimbre.getValue('FILTER_FREQ'), 255, 'Single Redo reapplies FILTER_FREQ');
+        assertEqual(fltApp.activeTimbre.getValue('FILTER_RESO'), movedReso, 'Single Redo reapplies FILTER_RESO');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
