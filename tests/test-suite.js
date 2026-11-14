@@ -4369,6 +4369,45 @@ async function runAllTests(logger = console.log) {
         document.getElementById = prevGetEl56;
     }
 
+    // Section 57: Multiplier Reset Button Tests
+    logger('\n--- [57] Multiplier Reset Button Tests ---');
+    const prevGetEl57 = document.getElementById;
+    try {
+        const modGrid = document.createElement('div');
+        modGrid.id = 'editor-grid';
+        document.getElementById = (id) => (id === 'editor-grid' ? modGrid : prevGetEl57(id));
+
+        const multApp = new App();
+        multApp.activeTimbre.setValue('MULT_A1', 18);
+        multApp.activeTimbre.setValue('MULT_B1', 12);
+        multApp.buildEditorUI();
+
+        const multPanels = modGrid.querySelectorAll('.math-sub-panel');
+        const mult1Panel = multPanels.find(p => p.getAttribute('data-mult') === 1 || p.getAttribute('data-mult') === '1');
+        assert(mult1Panel !== undefined, 'Multiplier 1 panel exists');
+
+        const resetBtn = mult1Panel.querySelector('.btn-slot-clear');
+        assert(resetBtn !== null && resetBtn !== undefined, 'Multiplier 1 has a reset button');
+
+        resetBtn.onclick();
+        assertEqual(multApp.activeTimbre.getValue('MULT_A1'), 0, 'Reset sets MULT_A1 to default 0');
+        assertEqual(multApp.activeTimbre.getValue('MULT_B1'), 0, 'Reset sets MULT_B1 to default 0');
+        assertEqual(multApp.undoStack.length, 1, 'Multiplier reset records 1 atomic undo entry');
+
+        multApp.undo();
+        assertEqual(multApp.activeTimbre.getValue('MULT_A1'), 18, 'Undo restores MULT_A1');
+        assertEqual(multApp.activeTimbre.getValue('MULT_B1'), 12, 'Undo restores MULT_B1');
+
+        multApp.redo();
+        assertEqual(multApp.activeTimbre.getValue('MULT_A1'), 0, 'Redo reapplies MULT_A1 reset');
+        assertEqual(multApp.activeTimbre.getValue('MULT_B1'), 0, 'Redo reapplies MULT_B1 reset');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    } finally {
+        document.getElementById = prevGetEl57;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

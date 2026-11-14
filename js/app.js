@@ -2451,11 +2451,32 @@ class App {
             multBox.className = 'math-sub-panel';
             multBox.setAttribute('data-mult', m);
 
+            const multHeader = document.createElement('div');
+            multHeader.className = 'mult-sub-header';
+
             const multBadge = document.createElement('div');
             multBadge.className = 'mult-badge';
             multBadge.textContent = `Multiplier ${m} (A × B)`;
             multBadge.title = `Multiplier ${m} • Drag to copy to another multiplier`;
-            multBox.appendChild(multBadge);
+
+            const multActions = document.createElement('div');
+            multActions.className = 'matrix-slot-actions';
+
+            const btnClear = document.createElement('button');
+            btnClear.type = 'button';
+            btnClear.className = 'btn-slot-icon btn-slot-clear';
+            btnClear.title = `Reset Multiplier ${m} to init defaults`;
+            btnClear.textContent = '✕';
+            btnClear.onclick = () => {
+                resetSectionToInit('mult', m, timbre(), onChange);
+                multBox.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                this.showNotification(`Reset Multiplier ${m} to defaults`, 'info');
+            };
+
+            multActions.appendChild(btnClear);
+            multHeader.appendChild(multBadge);
+            multHeader.appendChild(multActions);
+            multBox.appendChild(multHeader);
 
             this.wireSectionDragSource(multBadge, 'mult', m, { containerEl: multBox });
             this.wireSectionDropTarget(multBox, 'mult', m, timbre, onChange, {
