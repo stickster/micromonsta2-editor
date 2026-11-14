@@ -44,6 +44,11 @@ jobs:
           git config user.name "Google Gemini"
           git config user.email "gemini@google.com"
 
+      - name: Authenticate GitHub CLI
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | gh auth login --with-token
+
       - name: Run Gemini CLI Assistant
         uses: google-github-actions/run-gemini-cli@v0
         with:

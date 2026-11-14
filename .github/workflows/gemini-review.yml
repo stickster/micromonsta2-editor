@@ -39,6 +39,11 @@ jobs:
         with:
           node-version: 24
 
+      - name: Authenticate GitHub CLI
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$TOKEN" | gh auth login --with-token
+
       - name: Run Gemini PR Review
         uses: google-github-actions/run-gemini-cli@v0
         with:
