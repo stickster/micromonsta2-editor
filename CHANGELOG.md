@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Modulation:** Removed redundant copy/paste buttons from LFOs and mod matrix slots.
 - **Mod Matrix:** Restored Init-patch slot defaults when resetting the whole matrix.
 - **Editor:** Preserved Undo/Redo history after pushing a patch to hardware.
+- **Filter:** Prevented `NaN` SVG coordinates at self-oscillation (cutoff 170, resonance 127).
 
 ---
 

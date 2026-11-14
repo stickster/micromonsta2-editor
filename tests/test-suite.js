@@ -4596,6 +4596,33 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // Section 61: Filter Visualizer Self-Oscillation Singularity Tests
+    logger('\n--- [61] Filter Visualizer Self-Oscillation Singularity Tests ---');
+    try {
+        const singProg = new MM2Program();
+        singProg.setValue('FILTER_FREQ', 170);
+        singProg.setValue('FILTER_RESO', 127);
+
+        for (let algo = 0; algo <= 7; algo++) {
+            singProg.setValue('FILTER_ALGO', algo);
+            const viz = createFilterCurveVisualizer(() => singProg, () => { });
+            const svgEl = viz.children[0];
+            const paths = svgEl.children.filter(c => c.tagName === 'PATH');
+            const dot = svgEl.children.find(c => c.getAttribute('class') === 'filter-cutoff-point');
+
+            paths.forEach((p, idx) => {
+                const d = p.getAttribute('d') || '';
+                assert(!d.includes('NaN') && !d.includes('Infinity'), `Algo ${algo} path ${idx} contains no NaN/Infinity at cutoff=170 reso=127`);
+            });
+            const cx = dot.getAttribute('cx') || '';
+            const cy = dot.getAttribute('cy') || '';
+            assert(!cx.includes('NaN') && !cy.includes('NaN'), `Algo ${algo} cutoff dot has finite coordinates (${cx}, ${cy})`);
+        }
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

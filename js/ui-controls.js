@@ -1225,6 +1225,7 @@ function createFilterCurveVisualizer(program, onChange) {
         const cadd = (p, q) => [p[0] + q[0], p[1] + q[1]];
         const cdiv = (p, q) => {
             const d = q[0] * q[0] + q[1] * q[1];
+            if (d < 1e-12) return [1e6, 0];
             return [(p[0] * q[0] + p[1] * q[1]) / d, (p[1] * q[0] - p[0] * q[1]) / d];
         };
         const cabs = (p) => Math.hypot(p[0], p[1]);
