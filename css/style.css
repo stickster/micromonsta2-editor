@@ -1936,6 +1936,12 @@ footer.audition-footer {
     cursor: pointer;
 }
 
+.audition-keyboard-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .keyboard-wrapper {
     position: relative;
     width: 520px;

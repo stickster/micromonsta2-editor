@@ -1283,6 +1283,11 @@ async function runAllTests(logger = console.log) {
         };
 
         const kbd = createKeyboard(mockMidi, () => chorderProg);
+        const kbdArea = kbd.querySelector('.audition-keyboard-area');
+        assert(kbdArea !== null, 'Keyboard area wrapper exists');
+        assert(kbdArea.children[0].classList.contains('audition-hint'), 'Keys legend is placed immediately to the left of the keyboard');
+        assert(kbdArea.children[1].classList.contains('keyboard-wrapper'), 'Keyboard wrapper follows Keys legend inside keyboard area');
+        assertEqual(kbd.querySelector('.audition-controls').querySelector('.audition-hint'), null, 'Keys legend is not inside audition-controls');
         kbd.setOctave(3); // Octave 3 base is (3+1)*12 = 48. Offsets 0..24 span notes 48..72
 
         const key0 = kbd.querySelector('[data-offset="0"]');

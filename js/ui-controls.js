@@ -2118,7 +2118,6 @@ function createKeyboard(midiManager, getActiveProgram) {
                 <input type="range" class="wheel-slider" id="mod-wheel" min="0" max="127" value="0">
             </div>
         </div>
-        <div class="audition-hint" title="Playable via computer keys A-K, Z/X for octave">⌨️ Keys: A-K</div>
     `;
 
     const kbdWrapper = document.createElement('div');
@@ -2294,8 +2293,17 @@ function createKeyboard(midiManager, getActiveProgram) {
     kbdWrapper.appendChild(whiteContainer);
     kbdWrapper.appendChild(blackContainer);
 
+    const kbdArea = document.createElement('div');
+    kbdArea.className = 'audition-keyboard-area';
+    const hint = document.createElement('div');
+    hint.className = 'audition-hint';
+    hint.title = 'Playable via computer keys A-K, Z/X for octave';
+    hint.textContent = '⌨️ Keys: A-K';
+    kbdArea.appendChild(hint);
+    kbdArea.appendChild(kbdWrapper);
+
     container.appendChild(controls);
-    container.appendChild(kbdWrapper);
+    container.appendChild(kbdArea);
 
     // Octave controls
     const octDisplay = controls.querySelector('#oct-display');

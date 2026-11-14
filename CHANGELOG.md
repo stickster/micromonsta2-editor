@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Oscillators:** Cancelled opposite solo/mute state when toggling a single oscillator.
+- **UI:** Moved Keys legend next to the left side of the keyboard.
 
 ---
 
