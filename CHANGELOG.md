@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.4.3] - 2026-11-14
+
 ### Changed
 - **UI:** Dim and disable Oscillator Shape knobs when Algorithm is Sine, Sine Full, or Sine Half.
 
