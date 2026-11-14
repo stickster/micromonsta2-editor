@@ -3507,11 +3507,17 @@ class App {
         const btnAddBank = document.getElementById('btn-add-bank');
         if (btnAddBank) {
             btnAddBank.onclick = () => {
-                const name = prompt('Enter name for new bank:', `Bank ${this.librarian.banks.length + 1}`);
-                if (name) {
-                    this.librarian.addBank(name);
-                    this.librarian.activeBankIndex = this.librarian.banks.length - 1;
-                    this.renderLibrarianBank();
+                const defaultName = `Bank ${this.librarian.banks.length + 1}`;
+                this.librarian.addBank(defaultName);
+                const newIndex = this.librarian.banks.length - 1;
+                this.librarian.activeBankIndex = newIndex;
+                this.renderLibrarianBank();
+
+                const bankTabs = document.getElementById('bank-tabs');
+                const newTab = bankTabs && bankTabs.children ? bankTabs.children[newIndex] : null;
+                const tabTitle = newTab ? newTab.querySelector('.bank-tab-title') : null;
+                if (tabTitle) {
+                    this.startInlineBankRename(newIndex, tabTitle, newTab);
                 }
             };
         }
@@ -3611,58 +3617,105 @@ class App {
             };
         }
 
-        // Rename the bank itself
-        const btnRenameBank = document.getElementById('btn-rename-bank');
-        if (btnRenameBank) {
-            btnRenameBank.onclick = () => this.renameBank();
-        }
-
-        // Delete the bank itself
-        const btnDeleteBank = document.getElementById('btn-delete-bank');
-        if (btnDeleteBank) {
-            btnDeleteBank.onclick = () => this.deleteBank();
-        }
-
         // Dumps from MM2 are always appended to the currently selected bank (no separate target toggle)
     }
 
-    renameBank(index = this.librarian.activeBankIndex) {
+    startInlineBankRename(index, tabTitle, tab) {
+        if (!tabTitle || tabTitle.querySelector('input')) return;
         const bank = this.librarian.banks[index];
         if (!bank) return;
-        const currentName = bank.name;
-        const newName = prompt(`Enter new name for bank "${currentName}":`, currentName);
-        if (newName === null) return;
-        const trimmed = newName.trim();
-        if (!trimmed) {
-            this.showNotification('Bank name cannot be empty.', 'warning');
-            return;
-        }
-        if (trimmed === currentName) return;
 
-        const ok = this.librarian.renameBank(index, trimmed);
-        if (ok) {
-            this.renderLibrarianBank();
-            this.showNotification(`Renamed bank to "${trimmed}".`, 'success');
-        }
-    }
+        const originalName = bank.name;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'bank-tab-title-input';
+        input.value = originalName;
 
-    deleteBank(index = this.librarian.activeBankIndex) {
-        const bank = this.librarian.banks[index];
-        if (!bank) return;
-        if (this.librarian.banks.length <= 1) {
-            this.showNotification('Cannot delete the only bank. At least one bank is required.', 'warning');
-            return;
-        }
-        const patchNote = bank.length > 0 ? ` and all of its ${bank.length} patch(es)` : '';
-        const confirmed = confirm(`Delete bank "${bank.name}"${patchNote}?\n\nThis cannot be undone.`);
-        if (confirmed) {
-            const bankName = bank.name;
-            const ok = this.librarian.removeBank(index);
+        if (tab) tab.setAttribute('draggable', 'false');
+        tabTitle.textContent = '';
+        tabTitle.appendChild(input);
+        if (input.focus) input.focus();
+        if (input.select) input.select();
+
+        let finished = false;
+        const finish = (save) => {
+            if (finished) return;
+            finished = true;
+
+            if (tab) tab.setAttribute('draggable', 'true');
+            if (input.parentNode === tabTitle && tabTitle.removeChild) {
+                tabTitle.removeChild(input);
+            } else if (tabTitle.children) {
+                tabTitle.children = tabTitle.children.filter(c => c !== input);
+            }
+
+            if (!save) {
+                tabTitle.textContent = originalName;
+                return;
+            }
+
+            const trimmed = input.value.trim();
+            if (!trimmed) {
+                tabTitle.textContent = originalName;
+                this.showNotification('Bank name cannot be empty.', 'warning');
+                return;
+            }
+            if (trimmed === originalName) {
+                tabTitle.textContent = originalName;
+                return;
+            }
+
+            const ok = this.librarian.renameBank(index, trimmed);
             if (ok) {
                 this.renderLibrarianBank();
-                this.showNotification(`Deleted bank "${bankName}".`, 'success');
+                this.showNotification(`Renamed bank to "${trimmed}".`, 'success');
+            } else {
+                tabTitle.textContent = originalName;
             }
+        };
+
+        input.onclick = (e) => e.stopPropagation();
+        input.onkeydown = (e) => {
+            if (e.stopPropagation) e.stopPropagation();
+            if (e.key === 'Enter') {
+                if (e.preventDefault) e.preventDefault();
+                finish(true);
+            } else if (e.key === 'Escape') {
+                if (e.preventDefault) e.preventDefault();
+                finish(false);
+            }
+        };
+        input.onblur = () => finish(true);
+    }
+
+    async deleteBank(index = this.librarian.activeBankIndex) {
+        const bank = this.librarian.banks[index];
+        if (!bank) return false;
+        if (this.librarian.banks.length <= 1) {
+            this.showNotification('Cannot delete the only bank. At least one bank is required.', 'warning');
+            return false;
         }
+        const patchNote = bank.length > 0 ? ` and all of its ${bank.length} patch(es)` : '';
+        const confirmed = await this._promptDeleteBank(bank.name, patchNote);
+        if (!confirmed) return false;
+
+        const bankName = bank.name;
+        const ok = this.librarian.removeBank(index);
+        if (ok) {
+            this.renderLibrarianBank();
+            this.showNotification(`Deleted bank "${bankName}".`, 'success');
+        }
+        return ok;
+    }
+
+    async _promptDeleteBank(bankName, patchNote) {
+        const result = await this._openDialog('delete-bank-dialog', () => {
+            const desc = document.getElementById('delete-bank-desc');
+            if (desc) {
+                desc.textContent = `Delete bank "${bankName}"${patchNote}? This cannot be undone.`;
+            }
+        });
+        return result === 'confirm';
     }
 
     renderLibrarianBank() {
@@ -3670,18 +3723,8 @@ class App {
         const bankTabs = document.getElementById('bank-tabs');
         const progList = document.getElementById('librarian-prog-list');
         const dupBadge = document.getElementById('bank-duplicates-badge');
-        const btnRenameBank = document.getElementById('btn-rename-bank');
-        const btnDeleteBank = document.getElementById('btn-delete-bank');
 
         if (!bankTabs || !progList) return;
-
-        if (btnRenameBank) {
-            btnRenameBank.disabled = this.librarian.banks.length === 0;
-        }
-
-        if (btnDeleteBank) {
-            btnDeleteBank.disabled = this.librarian.banks.length <= 1;
-        }
 
         // Render Bank Tabs with Drag-and-Drop Reordering
         bankTabs.innerHTML = '';
@@ -3703,10 +3746,10 @@ class App {
 
             const tabTitle = tab.querySelector('.bank-tab-title');
             if (tabTitle) {
-                tabTitle.title = 'Double-click to rename';
-                tabTitle.ondblclick = (e) => {
+                tabTitle.title = 'Click to rename';
+                tabTitle.onclick = (e) => {
                     e.stopPropagation();
-                    this.renameBank(idx);
+                    this.startInlineBankRename(idx, tabTitle, tab);
                 };
             }
 

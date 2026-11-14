@@ -1851,6 +1851,30 @@ main.app-main {
     color: var(--text-muted);
 }
 
+.bank-tab-title {
+    cursor: text;
+    border-radius: 3px;
+    padding: 0 3px;
+}
+
+.bank-tab-title:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.bank-tab-title-input {
+    background: #0d0f14;
+    border: 1px solid var(--accent-cyan);
+    color: #fff;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    border-radius: 3px;
+    outline: none;
+    padding: 0 4px;
+    min-width: 60px;
+    width: 110px;
+}
+
 .bank-tab-close {
     background: transparent;
     border: none;

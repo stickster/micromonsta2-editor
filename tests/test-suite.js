@@ -2383,24 +2383,49 @@ async function runAllTests(logger = console.log) {
         delApp.showNotification = (msg, type) => {
             if (type === 'warning') notifiedWarning = true;
         };
-        delApp.deleteBank();
+        await delApp.deleteBank();
         assertEqual(notifiedWarning, true, 'deleteBank warns user when trying to delete the only bank');
         assertEqual(delApp.librarian.banks.length, 1, 'Single bank was not deleted');
 
-        // Two banks with confirm rejection
+        // Two banks with app-styled dialog rejection (never calls browser confirm)
         delApp.librarian.banks = [new MM2Bank('Bank A', 0), new MM2Bank('Bank B', 1)];
-        global.confirm = () => false;
-        delApp.deleteBank(1);
-        assertEqual(delApp.librarian.banks.length, 2, 'Bank not deleted when confirm rejected');
+        let confirmCalled = false;
+        global.confirm = () => { confirmCalled = true; return true; };
 
-        // Confirm accepted
-        global.confirm = () => true;
+        const deleteDialog = document.createElement('dialog');
+        deleteDialog.id = 'delete-bank-dialog';
+        deleteDialog.open = false;
+        deleteDialog.returnValue = '';
+        deleteDialog._listeners = {};
+        deleteDialog.addEventListener = (evt, fn) => { deleteDialog._listeners[evt] = fn; };
+        deleteDialog.removeEventListener = (evt, fn) => {
+            if (deleteDialog._listeners[evt] === fn) delete deleteDialog._listeners[evt];
+        };
+        const deleteDesc = document.createElement('p');
+        deleteDesc.id = 'delete-bank-desc';
+        document.registerMockElement('delete-bank-dialog', deleteDialog);
+        document.registerMockElement('delete-bank-desc', deleteDesc);
+
+        let nextDialogAction = 'cancel';
+        deleteDialog.showModal = () => {
+            deleteDialog.returnValue = nextDialogAction;
+            if (deleteDialog._listeners.close) deleteDialog._listeners.close();
+        };
+
+        await delApp.deleteBank(1);
+        assertEqual(confirmCalled, false, 'deleteBank does not invoke browser confirm()');
+        assert(deleteDesc.textContent.includes('Bank B'), 'Delete bank dialog description includes bank name');
+        assertEqual(delApp.librarian.banks.length, 2, 'Bank not deleted when dialog canceled');
+
+        // App-styled dialog accepted
+        nextDialogAction = 'confirm';
         let notifiedSuccess = false;
         delApp.showNotification = (msg, type) => {
             if (type === 'success') notifiedSuccess = true;
         };
-        delApp.deleteBank(1);
-        assertEqual(delApp.librarian.banks.length, 1, 'Bank deleted when confirm accepted');
+        await delApp.deleteBank(1);
+        assertEqual(confirmCalled, false, 'deleteBank does not invoke browser confirm() on confirm');
+        assertEqual(delApp.librarian.banks.length, 1, 'Bank deleted when app dialog confirmed');
         assertEqual(notifiedSuccess, true, 'Success notification shown on bank deletion');
         delete global.confirm;
     } catch (e) {
@@ -2650,50 +2675,13 @@ async function runAllTests(logger = console.log) {
         assertEqual(lib.banks[0].name, 'My Custom Bank', 'Bank name updated with trimmed string');
         assertEqual(saved, true, 'saveAllBanks triggered on bank rename');
 
-        // 3. App.renameBank() user flow
+        // 3. Inline bank tab renaming UI flow
         const app = new App();
-        app.librarian.banks = [new MM2Bank('Original Name', 0)];
+        app.librarian.banks = [new MM2Bank('Studio Favorites', 0)];
         app.librarian.activeBankIndex = 0;
 
-        // User cancels prompt
-        global.prompt = () => null;
         let notifType = null;
         app.showNotification = (msg, type) => { notifType = type; };
-        app.renameBank();
-        assertEqual(app.librarian.banks[0].name, 'Original Name', 'Bank not renamed when prompt is cancelled');
-
-        // User provides empty string
-        global.prompt = () => '   ';
-        app.renameBank();
-        assertEqual(notifType, 'warning', 'Warning notification shown when new name is empty');
-        assertEqual(app.librarian.banks[0].name, 'Original Name', 'Bank not renamed on empty prompt');
-
-        // User provides same name
-        notifType = null;
-        global.prompt = () => 'Original Name';
-        app.renameBank();
-        assertEqual(notifType, null, 'No notification or change when name is unchanged');
-
-        // User provides valid new name
-        let renderCalled = false;
-        app.renderLibrarianBank = () => { renderCalled = true; };
-        global.prompt = () => 'Studio Favorites';
-        app.renameBank();
-        assertEqual(app.librarian.banks[0].name, 'Studio Favorites', 'Bank renamed via App.renameBank()');
-        assertEqual(notifType, 'success', 'Success notification shown on rename');
-        assertEqual(renderCalled, true, 'renderLibrarianBank called after rename');
-
-        // Cleanup global.prompt
-        delete global.prompt;
-
-        // 4. Test UI double click and toolbar button
-        const btnRename = document.createElement('button');
-        btnRename.id = 'btn-rename-bank';
-        document.registerMockElement('btn-rename-bank', btnRename);
-
-        const btnDelete = document.createElement('button');
-        btnDelete.id = 'btn-delete-bank';
-        document.registerMockElement('btn-delete-bank', btnDelete);
 
         const bankTabs = document.createElement('div');
         bankTabs.id = 'bank-tabs';
@@ -2703,23 +2691,94 @@ async function runAllTests(logger = console.log) {
         progList.id = 'librarian-prog-list';
         document.registerMockElement('librarian-prog-list', progList);
 
-        // Restore real renderLibrarianBank
-        delete app.renderLibrarianBank;
         app.renderLibrarianBank();
 
-        assertEqual(btnRename.disabled, false, 'Rename button enabled when banks exist');
-
-        // Check rendered tab has double-click handler
+        // Check rendered tab has single-click inline edit handler
+        const renderedTab = bankTabs.querySelector('.bank-tab');
         const renderedTitle = bankTabs.querySelector('.bank-tab-title');
         assert(renderedTitle !== null, 'Rendered bank tab title exists');
-        assertEqual(renderedTitle.title, 'Double-click to rename', 'Bank tab title has rename tooltip');
-        assert(typeof renderedTitle.ondblclick === 'function', 'Bank tab title has ondblclick handler');
+        assertEqual(renderedTitle.title, 'Click to rename', 'Bank tab title has single-click rename tooltip');
+        assert(typeof renderedTitle.onclick === 'function', 'Bank tab title has onclick handler');
 
-        // Triggering ondblclick triggers renameBank
-        let renamedIdx = null;
-        app.renameBank = (idx) => { renamedIdx = idx; };
-        renderedTitle.ondblclick({ stopPropagation: () => { } });
-        assertEqual(renamedIdx, 0, 'Double clicking tab title invokes renameBank for that bank index');
+        // Single-clicking tab title enters inline edit mode
+        renderedTitle.onclick({ stopPropagation: () => { } });
+        const inlineInput = renderedTitle.querySelector('input');
+        assert(inlineInput !== null, 'Single-clicking tab title replaces title with inline input');
+        assertEqual(inlineInput.className, 'bank-tab-title-input', 'Inline input has expected class');
+        assertEqual(inlineInput.value, 'Studio Favorites', 'Inline input pre-filled with current bank name');
+        assertEqual(renderedTab.getAttribute('draggable'), 'false', 'Parent tab dragging disabled during inline edit');
+
+        // Clicking again while editing does not create a second input
+        renderedTitle.onclick({ stopPropagation: () => { } });
+        assertEqual(renderedTitle.children.length, 1, 'Clicking again while editing does not duplicate input');
+
+        // Pressing Escape cancels rename and exits entry mode
+        notifType = null;
+        inlineInput.value = 'Canceled Name';
+        inlineInput.onkeydown({ key: 'Escape', preventDefault: () => { }, stopPropagation: () => { } });
+        inlineInput.onblur(); // Subsequent blur after Escape must be a no-op
+        assertEqual(app.librarian.banks[0].name, 'Studio Favorites', 'Escape cancels rename without modifying bank name');
+        assertEqual(notifType, null, 'Escape cancellation does not emit notification');
+        assertEqual(renderedTitle.querySelector('input'), null, 'Escape deactivates entry mode');
+        assertEqual(renderedTitle.textContent, 'Studio Favorites', 'Escape restores original bank title text');
+        assertEqual(renderedTab.getAttribute('draggable'), 'true', 'Parent tab dragging restored after Escape');
+
+        // Single-clicking and pressing Enter accepts trimmed rename and exits entry mode
+        renderedTitle.onclick({ stopPropagation: () => { } });
+        const enterInput = renderedTitle.querySelector('input');
+        enterInput.value = '  Live Set  ';
+        enterInput.onkeydown({ key: 'Enter', preventDefault: () => { }, stopPropagation: () => { } });
+        assertEqual(app.librarian.banks[0].name, 'Live Set', 'Enter commits trimmed bank name');
+        assertEqual(notifType, 'success', 'Success notification shown on Enter rename');
+        const updatedTitle = bankTabs.querySelector('.bank-tab-title');
+        assertEqual(updatedTitle.querySelector('input'), null, 'Enter deactivates entry mode');
+        assertEqual(updatedTitle.textContent, 'Live Set', 'Rendered tab title updated after Enter');
+
+        // Empty/whitespace name on blur warns and restores original name
+        notifType = null;
+        updatedTitle.onclick({ stopPropagation: () => { } });
+        const emptyInput = updatedTitle.querySelector('input');
+        emptyInput.value = '   ';
+        emptyInput.onblur();
+        assertEqual(notifType, 'warning', 'Warning notification shown for empty inline bank name');
+        assertEqual(app.librarian.banks[0].name, 'Live Set', 'Bank name unchanged when inline input is empty');
+        assertEqual(updatedTitle.querySelector('input'), null, 'Blur deactivates entry mode on empty input');
+
+        // Valid name on blur commits rename
+        notifType = null;
+        updatedTitle.onclick({ stopPropagation: () => { } });
+        const blurInput = updatedTitle.querySelector('input');
+        blurInput.value = 'Ambient Pads';
+        blurInput.onblur();
+        assertEqual(app.librarian.banks[0].name, 'Ambient Pads', 'Blur commits valid inline bank name');
+        assertEqual(notifType, 'success', 'Success notification shown on blur rename');
+        assertEqual(bankTabs.querySelector('.bank-tab-title').querySelector('input'), null, 'Blur deactivates entry mode');
+
+        // Create Bank button creates bank tab and enters inline edit mode without browser prompt
+        const btnAddBank = document.createElement('button');
+        btnAddBank.id = 'btn-add-bank';
+        document.registerMockElement('btn-add-bank', btnAddBank);
+        app.buildLibrarianUI();
+
+        let promptCalled = false;
+        global.prompt = () => { promptCalled = true; return 'Should Not Prompt'; };
+        btnAddBank.onclick();
+        delete global.prompt;
+
+        assertEqual(promptCalled, false, 'Create Bank does not invoke browser prompt()');
+        assertEqual(app.librarian.banks.length, 2, 'Create Bank adds a new bank');
+        assertEqual(app.librarian.activeBankIndex, 1, 'Create Bank selects the newly created bank');
+        const createdTab = bankTabs.children[1];
+        const createdTitle = createdTab ? createdTab.querySelector('.bank-tab-title') : null;
+        const createdInput = createdTitle ? createdTitle.querySelector('input') : null;
+        assert(createdInput !== null, 'Create Bank puts new bank tab title into inline edit mode');
+        assertEqual(createdInput.className, 'bank-tab-title-input', 'Create Bank inline input has expected class');
+        assertEqual(createdInput.value, 'Bank 2', 'Create Bank inline input defaults to Bank 2');
+
+        createdInput.value = 'Bass Bank';
+        createdInput.onkeydown({ key: 'Enter', preventDefault: () => { }, stopPropagation: () => { } });
+        assertEqual(app.librarian.banks[1].name, 'Bass Bank', 'Enter commits custom name for newly created bank');
+        assertEqual(bankTabs.children[1].querySelector('.bank-tab-title').querySelector('input'), null, 'Enter exits inline edit mode on newly created bank');
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;
