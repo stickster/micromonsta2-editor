@@ -2709,17 +2709,66 @@ async function runAllTests(logger = console.log) {
 
         assertEqual(btnRename.disabled, false, 'Rename button enabled when banks exist');
 
-        // Check rendered tab has double-click handler
+        // Check rendered tab has single-click inline edit handler
+        const renderedTab = bankTabs.querySelector('.bank-tab');
         const renderedTitle = bankTabs.querySelector('.bank-tab-title');
         assert(renderedTitle !== null, 'Rendered bank tab title exists');
-        assertEqual(renderedTitle.title, 'Double-click to rename', 'Bank tab title has rename tooltip');
-        assert(typeof renderedTitle.ondblclick === 'function', 'Bank tab title has ondblclick handler');
+        assertEqual(renderedTitle.title, 'Click to rename', 'Bank tab title has single-click rename tooltip');
+        assert(typeof renderedTitle.onclick === 'function', 'Bank tab title has onclick handler');
 
-        // Triggering ondblclick triggers renameBank
-        let renamedIdx = null;
-        app.renameBank = (idx) => { renamedIdx = idx; };
-        renderedTitle.ondblclick({ stopPropagation: () => { } });
-        assertEqual(renamedIdx, 0, 'Double clicking tab title invokes renameBank for that bank index');
+        // Single-clicking tab title enters inline edit mode
+        renderedTitle.onclick({ stopPropagation: () => { } });
+        const inlineInput = renderedTitle.querySelector('input');
+        assert(inlineInput !== null, 'Single-clicking tab title replaces title with inline input');
+        assertEqual(inlineInput.className, 'bank-tab-title-input', 'Inline input has expected class');
+        assertEqual(inlineInput.value, 'Studio Favorites', 'Inline input pre-filled with current bank name');
+        assertEqual(renderedTab.getAttribute('draggable'), 'false', 'Parent tab dragging disabled during inline edit');
+
+        // Clicking again while editing does not create a second input
+        renderedTitle.onclick({ stopPropagation: () => { } });
+        assertEqual(renderedTitle.children.length, 1, 'Clicking again while editing does not duplicate input');
+
+        // Pressing Escape cancels rename and exits entry mode
+        notifType = null;
+        inlineInput.value = 'Canceled Name';
+        inlineInput.onkeydown({ key: 'Escape', preventDefault: () => { }, stopPropagation: () => { } });
+        inlineInput.onblur(); // Subsequent blur after Escape must be a no-op
+        assertEqual(app.librarian.banks[0].name, 'Studio Favorites', 'Escape cancels rename without modifying bank name');
+        assertEqual(notifType, null, 'Escape cancellation does not emit notification');
+        assertEqual(renderedTitle.querySelector('input'), null, 'Escape deactivates entry mode');
+        assertEqual(renderedTitle.textContent, 'Studio Favorites', 'Escape restores original bank title text');
+        assertEqual(renderedTab.getAttribute('draggable'), 'true', 'Parent tab dragging restored after Escape');
+
+        // Single-clicking and pressing Enter accepts trimmed rename and exits entry mode
+        renderedTitle.onclick({ stopPropagation: () => { } });
+        const enterInput = renderedTitle.querySelector('input');
+        enterInput.value = '  Live Set  ';
+        enterInput.onkeydown({ key: 'Enter', preventDefault: () => { }, stopPropagation: () => { } });
+        assertEqual(app.librarian.banks[0].name, 'Live Set', 'Enter commits trimmed bank name');
+        assertEqual(notifType, 'success', 'Success notification shown on Enter rename');
+        const updatedTitle = bankTabs.querySelector('.bank-tab-title');
+        assertEqual(updatedTitle.querySelector('input'), null, 'Enter deactivates entry mode');
+        assertEqual(updatedTitle.textContent, 'Live Set', 'Rendered tab title updated after Enter');
+
+        // Empty/whitespace name on blur warns and restores original name
+        notifType = null;
+        updatedTitle.onclick({ stopPropagation: () => { } });
+        const emptyInput = updatedTitle.querySelector('input');
+        emptyInput.value = '   ';
+        emptyInput.onblur();
+        assertEqual(notifType, 'warning', 'Warning notification shown for empty inline bank name');
+        assertEqual(app.librarian.banks[0].name, 'Live Set', 'Bank name unchanged when inline input is empty');
+        assertEqual(updatedTitle.querySelector('input'), null, 'Blur deactivates entry mode on empty input');
+
+        // Valid name on blur commits rename
+        notifType = null;
+        updatedTitle.onclick({ stopPropagation: () => { } });
+        const blurInput = updatedTitle.querySelector('input');
+        blurInput.value = 'Ambient Pads';
+        blurInput.onblur();
+        assertEqual(app.librarian.banks[0].name, 'Ambient Pads', 'Blur commits valid inline bank name');
+        assertEqual(notifType, 'success', 'Success notification shown on blur rename');
+        assertEqual(bankTabs.querySelector('.bank-tab-title').querySelector('input'), null, 'Blur deactivates entry mode');
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;
