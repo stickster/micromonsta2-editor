@@ -1935,36 +1935,6 @@ class App {
         }
         head.appendChild(tabGroup);
 
-        // Solo / Mute Toolbar
-        const soloMuteGroup = document.createElement('div');
-        soloMuteGroup.className = 'solo-mute-group';
-
-        const muteBtn = document.createElement('button');
-        muteBtn.type = 'button';
-        muteBtn.className = 'btn-sm-badge btn-mute';
-        muteBtn.textContent = 'M';
-        muteBtn.title = 'Mute selected oscillator';
-        muteBtn.onclick = (e) => {
-            e.stopPropagation();
-            this.toggleSoloMute('osc' + this.selectedOsc, 'mute');
-            updateOscSelection();
-        };
-
-        const soloBtn = document.createElement('button');
-        soloBtn.type = 'button';
-        soloBtn.className = 'btn-sm-badge btn-solo';
-        soloBtn.textContent = 'S';
-        soloBtn.title = 'Solo selected oscillator';
-        soloBtn.onclick = (e) => {
-            e.stopPropagation();
-            this.toggleSoloMute('osc' + this.selectedOsc, 'solo');
-            updateOscSelection();
-        };
-
-        soloMuteGroup.appendChild(muteBtn);
-        soloMuteGroup.appendChild(soloBtn);
-        head.appendChild(soloMuteGroup);
-
         // Section Menu Button (Copy, Paste, Reset, Randomize)
         const menuWrap = document.createElement('div');
         menuWrap.className = 'card-menu-wrap';
@@ -2062,13 +2032,50 @@ class App {
         });
 
         const panes = [];
+        const muteBtns = {};
+        const soloBtns = {};
         for (let i = 1; i <= 3; i++) {
             const pane = document.createElement('div');
             pane.className = `osc-pane osc-pane-${i}`;
             pane.style.display = (this.selectedOsc === i) ? 'flex' : 'none';
 
-            // Algorithm select
-            pane.appendChild(createSelect(`OSC${i}_ALGO`, timbre, onChange));
+            // Algorithm select + Mute/Solo buttons
+            const algoRow = document.createElement('div');
+            algoRow.className = 'osc-algo-row';
+            algoRow.appendChild(createSelect(`OSC${i}_ALGO`, timbre, onChange));
+
+            const soloMuteGroup = document.createElement('div');
+            soloMuteGroup.className = 'solo-mute-group';
+
+            const muteBtn = document.createElement('button');
+            muteBtn.type = 'button';
+            muteBtn.className = 'btn-sm-badge btn-mute';
+            muteBtn.textContent = 'M';
+            muteBtn.title = `Mute Osc ${i}`;
+            muteBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.toggleSoloMute('osc' + this.selectedOsc, 'mute');
+                updateOscSelection();
+            };
+
+            const soloBtn = document.createElement('button');
+            soloBtn.type = 'button';
+            soloBtn.className = 'btn-sm-badge btn-solo';
+            soloBtn.textContent = 'S';
+            soloBtn.title = `Solo Osc ${i}`;
+            soloBtn.onclick = (e) => {
+                e.stopPropagation();
+                this.toggleSoloMute('osc' + this.selectedOsc, 'solo');
+                updateOscSelection();
+            };
+
+            soloMuteGroup.appendChild(muteBtn);
+            soloMuteGroup.appendChild(soloBtn);
+            algoRow.appendChild(soloMuteGroup);
+            pane.appendChild(algoRow);
+
+            muteBtns[i] = muteBtn;
+            soloBtns[i] = soloBtn;
 
             // Knobs row: Shape, Tune, Fine Tune, Mix
             const knobs = document.createElement('div');
@@ -2149,8 +2156,10 @@ class App {
                 }
             });
 
-            muteBtn.classList.toggle('active', !!this.muteState['osc' + idx]);
-            soloBtn.classList.toggle('active', !!this.soloState['osc' + idx]);
+            for (let n = 1; n <= 3; n++) {
+                if (muteBtns[n]) muteBtns[n].classList.toggle('active', !!this.muteState['osc' + n]);
+                if (soloBtns[n]) soloBtns[n].classList.toggle('active', !!this.soloState['osc' + n]);
+            }
         };
 
         card.refresh = () => {
@@ -2363,9 +2372,8 @@ class App {
             knobs.appendChild(createKnob(`ENV${i}_REL`, timbre, onChange));
             if (i === 1) knobs.appendChild(createKnob('ENV1_VCA_VEL_SENS', timbre, onChange));
             if (i === 2) knobs.appendChild(createKnob('ENV2_FLT_VEL_SENS', timbre, onChange));
+            knobs.appendChild(createToggleButton(`ENV${i}_RESET`, timbre, onChange, { showStateBadge: false }));
             pane.appendChild(knobs);
-
-            pane.appendChild(createSelect(`ENV${i}_RESET`, timbre, onChange));
 
             this.wireSectionDropTarget(pane, 'env', i, timbre, onChange, {
                 hoverClass: 'slot-drop-hover',
@@ -2500,13 +2508,9 @@ class App {
         grid.appendChild(row1);
 
         // ========================================================
-        // --- ROW 2: MODULATION ROW (LFOS, MATH, KNOBS & MOD MATRIX) ---
+        // --- ROW 2: LFOS, VOICE PERFORMANCE & MATH OPERATORS ---
         // ========================================================
         const row2 = makeRow('rack-row-2');
-
-        // Left Column: LFOs (1–3) + Math Operators
-        const modLeftCol = document.createElement('div');
-        modLeftCol.className = 'mod-left-column';
 
         // LFOs Group Card (with group-level Copy/Paste/Reset/Randomize in ⋯ menu)
         const lfoGroupCard = createSectionCard('Low Frequency Oscillators', 'lfo_group', 1, timbre, onChange);
@@ -2587,9 +2591,31 @@ class App {
             lfoGrid.appendChild(subLfo);
         }
         lfoGroupCard.body.appendChild(lfoGrid);
-        modLeftCol.appendChild(lfoGroupCard.card);
+        row2.appendChild(lfoGroupCard.card);
 
-        // Math Operators Card (Compact 2-column layout: Lag on left, Multipliers stacked on right)
+        // VOICE PERFORMANCE
+        const vceCard = makeSection('Voice Performance');
+        const vceSelects = document.createElement('div');
+        vceSelects.className = 'select-row';
+        vceSelects.appendChild(createSelect('VCE_MODE', timbre, onChange));
+        vceSelects.appendChild(createSelect('VCE_UNISON', timbre, onChange));
+        vceCard.body.appendChild(vceSelects);
+
+        const vceKnobs1 = document.createElement('div');
+        vceKnobs1.className = 'knob-row';
+        vceKnobs1.appendChild(createKnob('VCE_DETUNE', timbre, onChange));
+        vceKnobs1.appendChild(createKnob('VCE_DETUNE_OSC', timbre, onChange));
+        vceKnobs1.appendChild(createKnob('VCE_GLIDE', timbre, onChange));
+        vceCard.body.appendChild(vceKnobs1);
+
+        const vceKnobs2 = document.createElement('div');
+        vceKnobs2.className = 'knob-row';
+        vceKnobs2.appendChild(createKnob('VCE_PBRANGE_DOWN', timbre, onChange));
+        vceKnobs2.appendChild(createKnob('VCE_PBRANGE_UP', timbre, onChange));
+        vceCard.body.appendChild(vceKnobs2);
+        row2.appendChild(vceCard.card);
+
+        // Math Operators Card (Compact 1-column layout: Lag on top, Multipliers stacked below)
         const mathSec = makeSection('Math Operators');
         const mathGrid = document.createElement('div');
         mathGrid.className = 'math-operators-grid';
@@ -2619,7 +2645,7 @@ class App {
 
             const multBadge = document.createElement('div');
             multBadge.className = 'mult-badge';
-            multBadge.textContent = `Multiplier ${m} (A × B)`;
+            multBadge.textContent = `Mult${m} (AxB)`;
             multBadge.title = `Multiplier ${m} • Drag to copy to another multiplier`;
 
             const multActions = document.createElement('div');
@@ -2660,11 +2686,16 @@ class App {
 
         mathGrid.appendChild(multStack);
         mathSec.body.appendChild(mathGrid);
-        modLeftCol.appendChild(mathSec.card);
+        row2.appendChild(mathSec.card);
 
-        row2.appendChild(modLeftCol);
+        grid.appendChild(row2);
 
-        // Right Column: Knobs + Modulation Matrix
+        // ========================================================
+        // --- ROW 3: KNOBS, MOD MATRIX & EFFECTS ---
+        // ========================================================
+        const row3 = makeRow('rack-row-3');
+
+        // Left Column: Knobs + Modulation Matrix
         const modRightCol = document.createElement('div');
         modRightCol.className = 'mod-right-column';
 
@@ -2763,32 +2794,7 @@ class App {
         }
         mtxSec.body.appendChild(mtxList);
         modRightCol.appendChild(mtxSec.card);
-        row2.appendChild(modRightCol);
-
-        grid.appendChild(row2);
-
-        // ========================================================
-        // --- ROW 3: VOICE PERFORMANCE & EFFECTS ---
-        // ========================================================
-        const row3 = makeRow('rack-row-3');
-
-        // VOICE PERFORMANCE
-        const vceCard = makeSection('Voice Performance');
-        const vceSelects = document.createElement('div');
-        vceSelects.className = 'select-row';
-        vceSelects.appendChild(createSelect('VCE_MODE', timbre, onChange));
-        vceSelects.appendChild(createSelect('VCE_UNISON', timbre, onChange));
-        vceCard.body.appendChild(vceSelects);
-
-        const vceKnobs1 = document.createElement('div');
-        vceKnobs1.className = 'knob-row';
-        vceKnobs1.appendChild(createKnob('VCE_DETUNE', timbre, onChange));
-        vceKnobs1.appendChild(createKnob('VCE_DETUNE_OSC', timbre, onChange));
-        vceKnobs1.appendChild(createKnob('VCE_GLIDE', timbre, onChange));
-        vceKnobs1.appendChild(createKnob('VCE_PBRANGE_DOWN', timbre, onChange));
-        vceKnobs1.appendChild(createKnob('VCE_PBRANGE_UP', timbre, onChange));
-        vceCard.body.appendChild(vceKnobs1);
-        row3.appendChild(vceCard.card);
+        row3.appendChild(modRightCol);
 
         // EFFECTS (Horizontal 2-row layout: Top = Delay & Reverb; Bottom = Chorus/EQ/Morph & Pan)
         const fxSec = createSectionCard('Effects & Space', 'fx', 1, timbre, onChange);
@@ -2856,43 +2862,12 @@ class App {
         fxLayout.appendChild(fxRowBottom);
 
         fxSec.body.appendChild(fxLayout);
-        row3.appendChild(fxSec.card);
 
-        grid.appendChild(row3);
+        const fxChordCol = document.createElement('div');
+        fxChordCol.className = 'fx-chord-column';
+        fxChordCol.appendChild(fxSec.card);
 
-        // ========================================================
-        // --- ROW 4: ARPEGGIATOR & CHORDER ENGINES ---
-        // ========================================================
-        const row4 = makeRow('rack-row-4');
-
-        // Arpeggiator & 16-Step Pattern Sequencer
-        const arpSec = makeSection('Arpeggiator & 16-Step Pattern Sequencer');
-        const arpControlsRow = document.createElement('div');
-        arpControlsRow.className = 'arp-controls-row';
-        const arpToggleStack = document.createElement('div');
-        arpToggleStack.className = 'arp-compact-stack';
-        arpToggleStack.appendChild(createSelect('ARP_OFF_ON', timbre, onChange));
-        arpToggleStack.appendChild(createSelect('ARP_LATCH', timbre, onChange));
-        arpControlsRow.appendChild(arpToggleStack);
-        arpControlsRow.appendChild(createSelect('ARP_TYPE', timbre, onChange));
-        arpControlsRow.appendChild(createSelect('ARP_SPEED', timbre, onChange));
-        arpControlsRow.appendChild(createKnob('ARP_OCTAVE', timbre, onChange));
-        arpControlsRow.appendChild(createKnob('ARP_GATE', timbre, onChange));
-        arpControlsRow.appendChild(createKnob('ARP_PTN_LENGTH', timbre, onChange));
-        const arpModStack = document.createElement('div');
-        arpModStack.className = 'arp-compact-stack';
-        arpModStack.setAttribute('data-fw-v3-only', 'true');
-        arpModStack.appendChild(createSelect('ARP_STEPSEQ_DEST', timbre, onChange));
-        arpModStack.appendChild(createSelect('ARP_STEPSEQ_POLARITY', timbre, onChange));
-        arpControlsRow.appendChild(arpModStack);
-        arpSec.body.appendChild(arpControlsRow);
-
-        const arpSeq = createArpSequencer(timbre, onChange);
-        arpSeq.id = 'arp-seq-wrapper';
-        arpSec.body.appendChild(arpSeq);
-        row4.appendChild(arpSec.card);
-
-        // FW v3 Scaler & Chorder Engine
+        // FW v3 Scaler & Chorder Engine (stacked under Effects & Space)
         const chordSec = makeSection('FW v3 Chorder & Scaler Engine');
         chordSec.card.setAttribute('data-fw-v3-only', 'true');
 
@@ -2922,9 +2897,9 @@ class App {
         chordSec.body.appendChild(chordTopRow);
 
         // Scale Degree Section (2 columns)
-        const chordDegreesBox = document.createElement('div');
-        chordDegreesBox.className = 'chord-degrees-grid';
-        chordDegreesBox.innerHTML = '<div class="chord-degrees-title">Scale Degree Chords</div>';
+        //const chordDegreesBox = document.createElement('div');
+        //chordDegreesBox.className = 'chord-degrees-grid';
+        //chordDegreesBox.innerHTML = '<div class="chord-degrees-title">Scale Degree Chords</div>';
 
         const chordCols = document.createElement('div');
         chordCols.className = 'chord-degrees-columns';
@@ -2949,9 +2924,49 @@ class App {
         col2.appendChild(noteEl);
         chordCols.appendChild(col2);
 
-        chordDegreesBox.appendChild(chordCols);
-        chordSec.body.appendChild(chordDegreesBox);
-        row4.appendChild(chordSec.card);
+        //chordDegreesBox.appendChild(chordCols);
+        chordSec.body.appendChild(chordCols);
+        //chordSec.body.appendChild(chordDegreesBox);
+        fxChordCol.appendChild(chordSec.card);
+        row3.appendChild(fxChordCol);
+
+        grid.appendChild(row3);
+
+        // ========================================================
+        // --- ROW 4: ARPEGGIATOR ENGINE ---
+        // ========================================================
+        const row4 = makeRow('rack-row-4');
+
+        // Arpeggiator & 16-Step Pattern Sequencer
+        const arpSec = makeSection('Arpeggiator / Sequencer');
+        const arpLayout = document.createElement('div');
+        arpLayout.className = 'arp-main-layout';
+
+        const arpControlsRow = document.createElement('div');
+        arpControlsRow.className = 'arp-controls-row';
+        const arpToggleStack = document.createElement('div');
+        arpToggleStack.className = 'arp-compact-stack';
+        arpToggleStack.appendChild(createSelect('ARP_OFF_ON', timbre, onChange));
+        arpToggleStack.appendChild(createSelect('ARP_LATCH', timbre, onChange));
+        arpControlsRow.appendChild(arpToggleStack);
+        arpControlsRow.appendChild(createSelect('ARP_TYPE', timbre, onChange));
+        arpControlsRow.appendChild(createSelect('ARP_SPEED', timbre, onChange));
+        arpControlsRow.appendChild(createKnob('ARP_OCTAVE', timbre, onChange));
+        arpControlsRow.appendChild(createKnob('ARP_GATE', timbre, onChange));
+        arpControlsRow.appendChild(createKnob('ARP_PTN_LENGTH', timbre, onChange));
+        const arpModStack = document.createElement('div');
+        arpModStack.className = 'arp-compact-stack';
+        arpModStack.setAttribute('data-fw-v3-only', 'true');
+        arpModStack.appendChild(createSelect('ARP_STEPSEQ_DEST', timbre, onChange));
+        arpModStack.appendChild(createSelect('ARP_STEPSEQ_POLARITY', timbre, onChange));
+        arpControlsRow.appendChild(arpModStack);
+        arpLayout.appendChild(arpControlsRow);
+
+        const arpSeq = createArpSequencer(timbre, onChange);
+        arpSeq.id = 'arp-seq-wrapper';
+        arpLayout.appendChild(arpSeq);
+        arpSec.body.appendChild(arpLayout);
+        row4.appendChild(arpSec.card);
 
         grid.appendChild(row4);
 

@@ -733,9 +733,11 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
 /**
  * Creates a toggle button bound to a binary On/Off parameter
  */
-function createToggleButton(paramKey, program, onChangeCallback) {
+function createToggleButton(paramKey, program, onChangeCallback, opts = {}) {
     const def = PARAM_MAP.get(paramKey);
     if (!def) return document.createElement('div');
+
+    const showStateBadge = opts.showStateBadge !== false;
 
     const container = document.createElement('div');
     container.className = 'toggle-container';
@@ -750,11 +752,14 @@ function createToggleButton(paramKey, program, onChangeCallback) {
     labelSpan.className = 'toggle-label';
     labelSpan.textContent = def.label || paramKey;
 
-    const stateSpan = document.createElement('span');
-    stateSpan.className = 'toggle-state-badge';
-
     button.appendChild(labelSpan);
-    button.appendChild(stateSpan);
+
+    let stateSpan = null;
+    if (showStateBadge) {
+        stateSpan = document.createElement('span');
+        stateSpan.className = 'toggle-state-badge';
+        button.appendChild(stateSpan);
+    }
 
     const getProg = () => resolveProgram(program);
 
@@ -766,10 +771,10 @@ function createToggleButton(paramKey, program, onChangeCallback) {
             button.setAttribute('aria-pressed', isOn ? 'true' : 'false');
             if (isOn) {
                 button.classList.add('active');
-                stateSpan.textContent = 'ON';
+                if (stateSpan) stateSpan.textContent = 'ON';
             } else {
                 button.classList.remove('active');
-                stateSpan.textContent = 'OFF';
+                if (stateSpan) stateSpan.textContent = 'OFF';
             }
         }
     }
@@ -1065,7 +1070,7 @@ function createADSRVisualizer(envNumber, program) {
     container.setAttribute('data-env', envNumber);
 
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 160 48');
+    svg.setAttribute('viewBox', '0 0 160 96');
     svg.setAttribute('class', 'visualizer-svg');
 
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
@@ -1101,7 +1106,7 @@ function createADSRVisualizer(envNumber, program) {
 
         const padX = 6;
         const totalW = 160 - padX * 2;
-        const h = 48;
+        const h = 96;
         const padY = 6;
         const bottomY = h - padY;
         const topY = padY;
