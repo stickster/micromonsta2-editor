@@ -563,6 +563,21 @@ main.app-main {
     background: rgba(0, 210, 255, 0.08);
 }
 
+.lfo-mode-speed-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.lfo-mode-speed-row .select-container {
+    flex: 1;
+    min-width: 0;
+}
+
+.lfo-mode-speed-row .knob-container {
+    flex: 0 0 auto;
+}
+
 .lfo-sub-header {
     display: flex;
     align-items: center;

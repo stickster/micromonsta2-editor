@@ -2350,16 +2350,13 @@ class App {
 
             subLfo.appendChild(createLFOWaveformPreview(l, timbre));
 
-            const lfoSels = document.createElement('div');
-            lfoSels.className = 'select-row';
-            lfoSels.appendChild(createSelect(`LFO${l}_WAVE`, timbre, onChange));
-            lfoSels.appendChild(createSelect(`LFO${l}_MODE`, timbre, onChange));
-            subLfo.appendChild(lfoSels);
+            subLfo.appendChild(createSelect(`LFO${l}_WAVE`, timbre, onChange));
 
-            const lfoKnobs = document.createElement('div');
-            lfoKnobs.className = 'knob-row';
-            lfoKnobs.appendChild(createKnob(`LFO${l}_SPEED`, timbre, onChange));
-            subLfo.appendChild(lfoKnobs);
+            const lfoModeSpeed = document.createElement('div');
+            lfoModeSpeed.className = 'lfo-mode-speed-row';
+            lfoModeSpeed.appendChild(createSelect(`LFO${l}_MODE`, timbre, onChange));
+            lfoModeSpeed.appendChild(createKnob(`LFO${l}_SPEED`, timbre, onChange));
+            subLfo.appendChild(lfoModeSpeed);
 
             lfoGrid.appendChild(subLfo);
         }
