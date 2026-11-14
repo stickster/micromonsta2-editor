@@ -2769,6 +2769,32 @@ async function runAllTests(logger = console.log) {
         assertEqual(app.librarian.banks[0].name, 'Ambient Pads', 'Blur commits valid inline bank name');
         assertEqual(notifType, 'success', 'Success notification shown on blur rename');
         assertEqual(bankTabs.querySelector('.bank-tab-title').querySelector('input'), null, 'Blur deactivates entry mode');
+
+        // Create Bank button creates bank tab and enters inline edit mode without browser prompt
+        const btnAddBank = document.createElement('button');
+        btnAddBank.id = 'btn-add-bank';
+        document.registerMockElement('btn-add-bank', btnAddBank);
+        app.buildLibrarianUI();
+
+        let promptCalled = false;
+        global.prompt = () => { promptCalled = true; return 'Should Not Prompt'; };
+        btnAddBank.onclick();
+        delete global.prompt;
+
+        assertEqual(promptCalled, false, 'Create Bank does not invoke browser prompt()');
+        assertEqual(app.librarian.banks.length, 2, 'Create Bank adds a new bank');
+        assertEqual(app.librarian.activeBankIndex, 1, 'Create Bank selects the newly created bank');
+        const createdTab = bankTabs.children[1];
+        const createdTitle = createdTab ? createdTab.querySelector('.bank-tab-title') : null;
+        const createdInput = createdTitle ? createdTitle.querySelector('input') : null;
+        assert(createdInput !== null, 'Create Bank puts new bank tab title into inline edit mode');
+        assertEqual(createdInput.className, 'bank-tab-title-input', 'Create Bank inline input has expected class');
+        assertEqual(createdInput.value, 'Bank 2', 'Create Bank inline input defaults to Bank 2');
+
+        createdInput.value = 'Bass Bank';
+        createdInput.onkeydown({ key: 'Enter', preventDefault: () => { }, stopPropagation: () => { } });
+        assertEqual(app.librarian.banks[1].name, 'Bass Bank', 'Enter commits custom name for newly created bank');
+        assertEqual(bankTabs.children[1].querySelector('.bank-tab-title').querySelector('input'), null, 'Enter exits inline edit mode on newly created bank');
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;

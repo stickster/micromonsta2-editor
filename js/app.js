@@ -3507,11 +3507,17 @@ class App {
         const btnAddBank = document.getElementById('btn-add-bank');
         if (btnAddBank) {
             btnAddBank.onclick = () => {
-                const name = prompt('Enter name for new bank:', `Bank ${this.librarian.banks.length + 1}`);
-                if (name) {
-                    this.librarian.addBank(name);
-                    this.librarian.activeBankIndex = this.librarian.banks.length - 1;
-                    this.renderLibrarianBank();
+                const defaultName = `Bank ${this.librarian.banks.length + 1}`;
+                this.librarian.addBank(defaultName);
+                const newIndex = this.librarian.banks.length - 1;
+                this.librarian.activeBankIndex = newIndex;
+                this.renderLibrarianBank();
+
+                const bankTabs = document.getElementById('bank-tabs');
+                const newTab = bankTabs && bankTabs.children ? bankTabs.children[newIndex] : null;
+                const tabTitle = newTab ? newTab.querySelector('.bank-tab-title') : null;
+                if (tabTitle) {
+                    this.startInlineBankRename(newIndex, tabTitle, newTab);
                 }
             };
         }
