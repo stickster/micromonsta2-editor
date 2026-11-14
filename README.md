@@ -10,7 +10,7 @@ A browser-based hardware editor, patch librarian, and duplicate manager for the 
 
 This page runs on your system only. No data is shared or sent to me or GitHub. Feel free to bookmark and use it anytime, without using GitHub. Instructions below only matter if you want to tinker with the code yourself.
 
-(The live editor here runs off the `release` branch only. Some features may not be released yet. To use them, you must get the code as shown below and `git switch main` before loading in your browser.)
+(The live editor here runs off the `release` branch only, and releases are [tagged](https://github.com/stickster/micromonsta2-editor/tags). Some features may not be released yet. To use them, you must get the code as shown below and `git switch main` before loading in your browser.)
 
 ## Screenshots
 
