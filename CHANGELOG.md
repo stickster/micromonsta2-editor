@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Math:** Added reset buttons to Multiplier 1 and 2 panels.
 - **Modulation:** Enabled dragging LFOs, Envs, and Multipliers onto destination controls.
 
+### Changed
+- **Specs:** Formatted all lookup tables, SysEx byte arrays, and parameter definitions for readability.
+
 ### Fixed
 - **Editor:** Made Init button an atomic undoable step preserving history.
 - **Modulation:** Removed redundant copy/paste buttons from LFOs and mod matrix slots.
@@ -33,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Filter:** Moved Cutoff and Resonance knobs beside a taller response curve.
 - **UI:** Redesigned rotary knobs with centered readouts and ring dots.
 
+### Changed
+- **Specs:** Formatted all lookup tables, SysEx byte arrays, and parameter definitions for readability.
+
 ### Fixed
 - **Oscillators:** Cancelled opposite solo/mute state when toggling a single oscillator.
 - **UI:** Moved Keys legend next to the left side of the keyboard.
@@ -52,6 +58,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MIDI:** Prompted to fetch, push, or ignore on every hardware connection.
 - **UI:** Unified connection sync dialogs into a shared `#sync-action-dialog`.
 - **Editor:** Simplified hardware load popup to omit Part A/B and patch name.
+
+### Changed
+- **Specs:** Formatted all lookup tables, SysEx byte arrays, and parameter definitions for readability.
 
 ### Fixed
 - **MIDI:** Probed hardware when selecting a new MIDI Input port.
@@ -80,6 +89,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Firmware v2.x Warnings:** Incompatibility detection for v3-only features (Chorder & Scaler, Matrix 11–12, etc.) and a clickable `FW v2.x` badge linking to the official updater.
 - **Editor:** `M1`–`M4` multi-memory slots for quick patch recall and comparison.
 - **Editor:** Drag-and-drop patch copying between `Part A`, `Part B`, memory slots, and the editor workspace.
+
+### Changed
+- **Specs:** Formatted all lookup tables, SysEx byte arrays, and parameter definitions for readability.
 
 ### Fixed
 - **UI:** Improved contrast and discernibility of Undo/Redo buttons.
@@ -129,6 +141,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Librarian:** Inline patch category editing directly in the librarian table.
 - **Librarian:** Bank deletion support via toolbar and bank tabs.
 
+### Changed
+- **Specs:** Formatted all lookup tables, SysEx byte arrays, and parameter definitions for readability.
+
 ### Fixed
 - **Sync:** Synchronized Live Sync control state across app windows.
 - **Sync:** Inherited hardware connection status, suppressed hardware poll dump notifications, and synced state from leader on open without running a redundant hardware fetch.
@@ -146,6 +161,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cross-Tab Sync:** Real-time `BroadcastChannel` synchronization and single-leader hardware polling across multiple browser tabs.
 - **UI:** Moved Undo and Redo controls to the top `app-header`.
 
+### Changed
+- **Specs:** Formatted all lookup tables, SysEx byte arrays, and parameter definitions for readability.
+
 ### Fixed
 - **UI:** Streamlined Part A/B selection controls into `.program-name-group` and removed redundant header badges.
 - **MIDI:** Included hardware state in Live Sync mode when initializing a program, and clarified the Init dialog prompt.
@@ -160,6 +178,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Performance
 - Memoized SysEx sound fingerprints and reused `TextEncoder`/`TextDecoder` instances.
 - Cached parameter DOM controls and deduplicated visualizer refreshes.
+
+### Changed
+- **Specs:** Formatted all lookup tables, SysEx byte arrays, and parameter definitions for readability.
 
 ### Fixed
 - **MIDI:** Guarded SysEx buffer against interrupted streams and prevented false-positive connected status when hardware is absent.
