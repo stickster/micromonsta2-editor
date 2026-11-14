@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **CI:** Instruct `gemini-triage` and `gemini-review` workflows to fetch full issue/PR details and post comments/reviews via `gh` CLI.
+
 ---
 
 ## [0.4.3] - 2026-11-14

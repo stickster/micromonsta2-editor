@@ -61,11 +61,13 @@ jobs:
             }
           prompt: |
             Triage issue #${{ github.event.inputs.issue_number || github.event.issue.number }}: "${{ github.event.issue.title }}".
+            First, inspect the full issue details and comments using `gh issue view ${{ github.event.inputs.issue_number || github.event.issue.number }}`.
             Evaluate the issue against AGENTS.md, .agents/rules/, and GEMINI.md:
-            1. Check if the issue involves hardware limitations that cannot be handled over MIDI (such as combi parameters or global system settings). If so, politely explain this limitation to the user.
-            2. Classify the issue (bug, enhancement, question) and apply relevant labels using the GitHub CLI (`gh issue edit`).
+            1. Check if the issue involves hardware limitations that cannot be handled over MIDI (such as combi parameters or global system settings). If so, politely explain this limitation in a comment on the issue.
+            2. Classify the issue (`bug`, `enhancement`, `question`) and apply relevant labels using `gh issue edit ${{ github.event.inputs.issue_number || github.event.issue.number }} --add-label "..."`.
             3. If the bug report is missing essential reproduction steps or firmware details, post a helpful comment requesting the missing information.
             4. If the issue is clear and actionable, summarize the implementation plan.
+            5. You MUST post your triage response (hardware limitation note, request for missing info, or implementation plan summary) directly on the issue using `gh issue comment ${{ github.event.inputs.issue_number || github.event.issue.number }} --body "..."`. Do not only output the response to stdout.
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
