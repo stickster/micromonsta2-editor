@@ -2675,50 +2675,13 @@ async function runAllTests(logger = console.log) {
         assertEqual(lib.banks[0].name, 'My Custom Bank', 'Bank name updated with trimmed string');
         assertEqual(saved, true, 'saveAllBanks triggered on bank rename');
 
-        // 3. App.renameBank() user flow
+        // 3. Inline bank tab renaming UI flow
         const app = new App();
-        app.librarian.banks = [new MM2Bank('Original Name', 0)];
+        app.librarian.banks = [new MM2Bank('Studio Favorites', 0)];
         app.librarian.activeBankIndex = 0;
 
-        // User cancels prompt
-        global.prompt = () => null;
         let notifType = null;
         app.showNotification = (msg, type) => { notifType = type; };
-        app.renameBank();
-        assertEqual(app.librarian.banks[0].name, 'Original Name', 'Bank not renamed when prompt is cancelled');
-
-        // User provides empty string
-        global.prompt = () => '   ';
-        app.renameBank();
-        assertEqual(notifType, 'warning', 'Warning notification shown when new name is empty');
-        assertEqual(app.librarian.banks[0].name, 'Original Name', 'Bank not renamed on empty prompt');
-
-        // User provides same name
-        notifType = null;
-        global.prompt = () => 'Original Name';
-        app.renameBank();
-        assertEqual(notifType, null, 'No notification or change when name is unchanged');
-
-        // User provides valid new name
-        let renderCalled = false;
-        app.renderLibrarianBank = () => { renderCalled = true; };
-        global.prompt = () => 'Studio Favorites';
-        app.renameBank();
-        assertEqual(app.librarian.banks[0].name, 'Studio Favorites', 'Bank renamed via App.renameBank()');
-        assertEqual(notifType, 'success', 'Success notification shown on rename');
-        assertEqual(renderCalled, true, 'renderLibrarianBank called after rename');
-
-        // Cleanup global.prompt
-        delete global.prompt;
-
-        // 4. Test UI double click and toolbar button
-        const btnRename = document.createElement('button');
-        btnRename.id = 'btn-rename-bank';
-        document.registerMockElement('btn-rename-bank', btnRename);
-
-        const btnDelete = document.createElement('button');
-        btnDelete.id = 'btn-delete-bank';
-        document.registerMockElement('btn-delete-bank', btnDelete);
 
         const bankTabs = document.createElement('div');
         bankTabs.id = 'bank-tabs';
@@ -2728,11 +2691,7 @@ async function runAllTests(logger = console.log) {
         progList.id = 'librarian-prog-list';
         document.registerMockElement('librarian-prog-list', progList);
 
-        // Restore real renderLibrarianBank
-        delete app.renderLibrarianBank;
         app.renderLibrarianBank();
-
-        assertEqual(btnRename.disabled, false, 'Rename button enabled when banks exist');
 
         // Check rendered tab has single-click inline edit handler
         const renderedTab = bankTabs.querySelector('.bank-tab');

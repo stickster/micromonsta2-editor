@@ -3617,39 +3617,7 @@ class App {
             };
         }
 
-        // Rename the bank itself
-        const btnRenameBank = document.getElementById('btn-rename-bank');
-        if (btnRenameBank) {
-            btnRenameBank.onclick = () => this.renameBank();
-        }
-
-        // Delete the bank itself
-        const btnDeleteBank = document.getElementById('btn-delete-bank');
-        if (btnDeleteBank) {
-            btnDeleteBank.onclick = () => this.deleteBank();
-        }
-
         // Dumps from MM2 are always appended to the currently selected bank (no separate target toggle)
-    }
-
-    renameBank(index = this.librarian.activeBankIndex) {
-        const bank = this.librarian.banks[index];
-        if (!bank) return;
-        const currentName = bank.name;
-        const newName = prompt(`Enter new name for bank "${currentName}":`, currentName);
-        if (newName === null) return;
-        const trimmed = newName.trim();
-        if (!trimmed) {
-            this.showNotification('Bank name cannot be empty.', 'warning');
-            return;
-        }
-        if (trimmed === currentName) return;
-
-        const ok = this.librarian.renameBank(index, trimmed);
-        if (ok) {
-            this.renderLibrarianBank();
-            this.showNotification(`Renamed bank to "${trimmed}".`, 'success');
-        }
     }
 
     startInlineBankRename(index, tabTitle, tab) {
@@ -3755,18 +3723,8 @@ class App {
         const bankTabs = document.getElementById('bank-tabs');
         const progList = document.getElementById('librarian-prog-list');
         const dupBadge = document.getElementById('bank-duplicates-badge');
-        const btnRenameBank = document.getElementById('btn-rename-bank');
-        const btnDeleteBank = document.getElementById('btn-delete-bank');
 
         if (!bankTabs || !progList) return;
-
-        if (btnRenameBank) {
-            btnRenameBank.disabled = this.librarian.banks.length === 0;
-        }
-
-        if (btnDeleteBank) {
-            btnDeleteBank.disabled = this.librarian.banks.length <= 1;
-        }
 
         // Render Bank Tabs with Drag-and-Drop Reordering
         bankTabs.innerHTML = '';
