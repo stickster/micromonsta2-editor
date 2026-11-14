@@ -1317,11 +1317,23 @@ class App {
                     ? 'Push disabled: MicroMonsta 2 hardware connection is offline or unverified'
                     : 'Send patch to MicroMonsta 2 hardware');
         }
+
+        if (isLive && this.isComparing) {
+            this.toggleCompare(false);
+        }
+        const btnCompare = document.getElementById('btn-prog-compare');
+        if (btnCompare) {
+            btnCompare.disabled = isLive;
+            btnCompare.title = isLive
+                ? 'Compare disabled while Live Sync is active'
+                : 'Compare with original loaded patch (A/B testing)';
+        }
     }
 
     toggleCompare(forceState) {
         const nextState = forceState !== undefined ? forceState : !this.isComparing;
         if (nextState === this.isComparing) return;
+        if (nextState && this.midi && this.midi.liveSync) return;
 
         const btnCompare = typeof document !== 'undefined' ? document.getElementById('btn-prog-compare') : null;
 

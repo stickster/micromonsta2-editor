@@ -613,6 +613,31 @@ async function runAllTests(logger = console.log) {
         app.toggleCompare(false); // Return to Edited
         assertEqual(app.isComparing, false, 'Compare mode exited');
         assertEqual(app.activeTimbre.getValue('FILTER_FREQ'), 60, 'Exiting compare mode restored edited sound');
+
+        // Live Sync disables Compare
+        const mockBtnCompare = { disabled: false, title: '', textContent: 'Compare: Off', classList: { add() {}, remove() {} } };
+        document.registerMockElement('btn-prog-compare', mockBtnCompare);
+        app.midi.inPort = { id: 'in-1', name: 'MicroMonsta 2' };
+        app.midi.outPort = { id: 'out-1', name: 'MicroMonsta 2', send: () => { } };
+        app.midi.hardwareResponsive = true;
+
+        // Entering Live Sync while comparing exits Compare and disables button
+        app.toggleCompare(true);
+        assertEqual(app.isComparing, true, 'Compare mode entered before Live Sync');
+        app.midi.liveSync = true;
+        app.updateLiveSyncUI();
+        assertEqual(app.isComparing, false, 'Enabling Live Sync exits Compare mode');
+        assertEqual(mockBtnCompare.disabled, true, 'Compare button is disabled in Live Sync mode');
+
+        // toggleCompare(true) is a no-op while Live Sync is active
+        app.toggleCompare(true);
+        assertEqual(app.isComparing, false, 'toggleCompare(true) is ignored while Live Sync is active');
+
+        // Disabling Live Sync re-enables Compare button
+        app.midi.liveSync = false;
+        app.updateLiveSyncUI();
+        assertEqual(mockBtnCompare.disabled, false, 'Compare button is re-enabled when Live Sync is disabled');
+        document.registerMockElement('btn-prog-compare', null);
     } catch (e) {
         logger(`  Error: ${e.message}`);
     }
