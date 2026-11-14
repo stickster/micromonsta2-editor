@@ -3964,6 +3964,83 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // Section 52: Fetch Patch Rewrite Atomic Undo/Redo Tests
+    logger('\n--- [52] Fetch Patch Rewrite Atomic Undo/Redo Tests ---');
+    try {
+        const fetchUndoApp = new App();
+        fetchUndoApp.midi.saveSettings = () => { };
+        let sendProgramCalls = 0;
+        fetchUndoApp.midi.sendProgram = () => { sendProgramCalls++; };
+        fetchUndoApp.midi.sendParameter = () => { };
+        fetchUndoApp.midi.inPort = { id: 'in-1', name: 'MicroMonsta 2' };
+        fetchUndoApp.midi.outPort = { id: 'out-1', name: 'MicroMonsta 2', send: () => { } };
+        fetchUndoApp.midi.hardwareResponsive = true;
+        fetchUndoApp.midi.liveSync = true;
+
+        // 1. Make a local edit before Fetch
+        const defaultFilterFreq = fetchUndoApp.timbreA.getValue('FILTER_FREQ');
+        fetchUndoApp.onParameterChanged('OSC1_SHAPE', 42, { isFinal: true, prevVal: 0 });
+        fetchUndoApp.timbreA.name = 'MY_PATCH';
+        assertEqual(fetchUndoApp.undoStack.length, 1, 'Prior parameter edit recorded on undoStack');
+
+        // 2. Simulate Fetch (program-received) for Part A
+        const fetchedA = new MM2Program();
+        fetchedA.name = 'HW_PATCH';
+        fetchedA.setValue('OSC1_SHAPE', 99);
+        fetchedA.setValue('FILTER_FREQ', 180);
+        fetchUndoApp.midi.emit('program-received', { program: fetchedA, slot: 0, isProbe: false });
+
+        assertEqual(fetchUndoApp.timbreA.name, 'HW_PATCH', 'Fetch loads hardware patch name into Part A');
+        assertEqual(fetchUndoApp.timbreA.getValue('OSC1_SHAPE'), 99, 'Fetch loads hardware OSC1_SHAPE');
+        assertEqual(fetchUndoApp.timbreA.getValue('FILTER_FREQ'), 180, 'Fetch loads hardware FILTER_FREQ');
+        assertEqual(sendProgramCalls, 0, 'Fetch does not echo received patch back to hardware even with liveSync on');
+        assertEqual(fetchUndoApp.syncStatus, 'synced', 'Fetch updates syncStatus to synced when connected');
+        assertEqual(fetchUndoApp.undoStack.length, 2, 'Fetch pushes atomic part-snapshot without clearing prior undo history');
+        assertEqual(fetchUndoApp.undoStack[1].type, 'part-snapshot', 'Fetch undo entry is a part-snapshot');
+        assertEqual(fetchUndoApp.undoStack[1].slot, 0, 'Fetch undo entry targets slot 0');
+
+        // 3. Single Undo restores entire pre-Fetch Part A state
+        fetchUndoApp.undo();
+        assertEqual(fetchUndoApp.timbreA.name, 'MY_PATCH', 'Single Undo restores pre-Fetch patch name');
+        assertEqual(fetchUndoApp.timbreA.getValue('OSC1_SHAPE'), 42, 'Single Undo restores pre-Fetch OSC1_SHAPE');
+        assertEqual(fetchUndoApp.timbreA.getValue('FILTER_FREQ'), defaultFilterFreq, 'Single Undo restores pre-Fetch FILTER_FREQ');
+        assertEqual(fetchUndoApp.undoStack.length, 1, 'Undo preserves prior edit on undoStack');
+
+        // 4. Second Undo restores the earlier parameter edit
+        fetchUndoApp.undo();
+        assertEqual(fetchUndoApp.timbreA.getValue('OSC1_SHAPE'), 0, 'Second Undo restores edit made prior to Fetch');
+
+        // 5. Redo reapplies prior edit and then Fetch patch
+        fetchUndoApp.redo();
+        assertEqual(fetchUndoApp.timbreA.getValue('OSC1_SHAPE'), 42, 'First Redo reapplies prior parameter edit');
+        fetchUndoApp.redo();
+        assertEqual(fetchUndoApp.timbreA.name, 'HW_PATCH', 'Second Redo reapplies fetched hardware patch name');
+        assertEqual(fetchUndoApp.timbreA.getValue('OSC1_SHAPE'), 99, 'Second Redo reapplies fetched OSC1_SHAPE');
+        assertEqual(fetchUndoApp.timbreA.getValue('FILTER_FREQ'), 180, 'Second Redo reapplies fetched FILTER_FREQ');
+
+        // 6. Fetch on Part B while viewing Part A is also an atomic undoable step
+        fetchUndoApp.setTimbralMode('bitimbral');
+        fetchUndoApp.selectPart(0);
+        fetchUndoApp.timbreB.name = 'ORIG_B';
+        fetchUndoApp.timbreB.setValue('OSC1_SHAPE', 11);
+
+        const fetchedB = new MM2Program();
+        fetchedB.name = 'HW_PAT_B';
+        fetchedB.setValue('OSC1_SHAPE', 77);
+        fetchUndoApp.midi.emit('program-received', { program: fetchedB, slot: 1, isProbe: false });
+
+        assertEqual(fetchUndoApp.timbreB.name, 'HW_PAT_B', 'Fetch loads Part B hardware patch');
+        assertEqual(fetchUndoApp.timbreB.getValue('OSC1_SHAPE'), 77, 'Fetch loads Part B OSC1_SHAPE');
+
+        fetchUndoApp.undo();
+        assertEqual(fetchUndoApp.activeSlot, 1, 'Undo of Part B Fetch switches activeSlot to Part B');
+        assertEqual(fetchUndoApp.timbreB.name, 'ORIG_B', 'Undo restores previous Part B patch name');
+        assertEqual(fetchUndoApp.timbreB.getValue('OSC1_SHAPE'), 11, 'Undo restores previous Part B OSC1_SHAPE');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

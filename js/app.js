@@ -221,31 +221,23 @@ class App {
                 // Mode probe only: leave the editor's Part B untouched
                 return;
             }
+            const partLabel = slot === 1 ? 'B' : 'A';
+            this.replacePartWithRawData(slot, program.rawData, `Fetch Part ${partLabel} (${program.name})`, {
+                sendToHardware: false,
+                syncStatus: this.isConnectionGood ? 'synced' : 'offline',
+                source: 'hardware'
+            });
             if (slot === 1) {
-                this.timbreB.rawData = program.rawData;
                 this.originalSnapshotB = this.timbreB.clone();
             } else {
-                this.timbreA.rawData = program.rawData;
                 this.originalSnapshotA = this.timbreA.clone();
             }
-            this.undoStack = [];
-            this.redoStack = [];
-            this.updateUndoRedoUI();
             // When loading Editor or working in Editor, do not add patch to Librarian!
             // Only capture while the Librarian view is open; dumps go to the currently selected bank
             if (this.currentView === 'librarian') {
                 this.librarian.handleIncomingProgram(program);
             }
-            if (this.tabSync) {
-                this.tabSync.broadcast('PATCH_LOADED', {
-                    slot,
-                    rawData: Array.from(program.rawData),
-                    source: 'hardware'
-                });
-            }
-            this.refreshEditorControls();
             this.updateActivePartIndicator();
-            this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
             this.showNotification('Loaded MM2 hardware patch', 'success');
             if (this._enableLiveSyncOnFetch) {
                 this._enableLiveSyncOnFetch = false;
@@ -905,7 +897,12 @@ class App {
     /**
      * Replaces an entire Part's state as a single atomic undoable step.
      */
-    replacePartWithRawData(targetSlot, rawData, label = 'Replace Part') {
+    replacePartWithRawData(targetSlot, rawData, label = 'Replace Part', options = {}) {
+        const {
+            sendToHardware = true,
+            syncStatus = 'modified',
+            source = 'memory'
+        } = options;
         if (this.isComparing) {
             this.toggleCompare(false);
         }
@@ -926,17 +923,17 @@ class App {
         this.redoStack = [];
 
         targetTimbre.rawData = nextRawData;
-        if (this.midi && this.midi.liveSync && this.midi.outPort) {
+        if (sendToHardware && this.midi && this.midi.liveSync && this.midi.outPort) {
             this.midi.sendProgram(targetTimbre, targetSlot);
         }
         this.refreshEditorControls();
         this.updateUndoRedoUI();
-        this.updateSyncStatus('modified');
+        this.updateSyncStatus(syncStatus);
         if (this.tabSync) {
             this.tabSync.broadcast('PATCH_LOADED', {
                 slot: targetSlot,
                 rawData: Array.from(targetTimbre.rawData),
-                source: 'memory'
+                source
             });
         }
     }
