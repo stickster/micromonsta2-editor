@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **UI:** Allow the Chorder & Scaler Engine panel to grow vertically to fill space.
+
 ### Fixed
 - **Keyboard:** Ignore `Cmd`/`Ctrl`/`Alt` modifier key combinations in QWERTY piano `keydown` handler so browser shortcuts like `Cmd+L` work normally.
 
@@ -92,10 +95,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MIDI:** Gated Fetch/Push in `#sync-action-dialog` until hardware responds and retried reconnect probes so USB-powered MM2 units can finish booting.
 
 ### Documentation & Maintenance
-- Restored standard `## [Unreleased]
-
-### Fixed
-- **Keyboard:** Ignore `Cmd`/`Ctrl`/`Alt` modifier key combinations in QWERTY piano `keydown` handler so browser shortcuts like `Cmd+L` work normally.` workflow in `CHANGELOG.md` and `.agents/rules/git-hygiene.md`.
+- Restored standard `## [Unreleased]` workflow in `CHANGELOG.md` and `.agents/rules/git-hygiene.md`.
 - Required short, single-line `CHANGELOG.md` bullets in `.agents/rules/git-hygiene.md`.
 
 ---

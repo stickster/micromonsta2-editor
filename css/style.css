@@ -541,6 +541,10 @@ main.app-main {
     gap: 14px;
 }
 
+.fx-chord-column>.synth-card:last-child {
+    flex: 1;
+}
+
 /* Multi-unit containers in Row 2 */
 .lfo-multi-grid {
     display: grid;
@@ -1265,8 +1269,7 @@ main.app-main {
     text-transform: uppercase;
     letter-spacing: 1px;
     color: var(--accent-cyan);
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 6px;
+    padding-bottom: 1px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1647,7 +1650,7 @@ main.app-main {
     border-radius: 6px;
 }
 
-.arp-controls-row > .select-container {
+.arp-controls-row>.select-container {
     flex: 1 1 85px;
     min-width: 0;
 }
