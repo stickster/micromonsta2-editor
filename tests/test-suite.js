@@ -4567,6 +4567,35 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // Section 60: Push Preserves Undo/Redo Buffer Tests
+    logger('\n--- [60] Push Preserves Undo/Redo Buffer Tests ---');
+    try {
+        const pushUndoApp = new App();
+        pushUndoApp.midi.outPort = { name: 'Mock MM2 Out', send() { } };
+        pushUndoApp.midi.inPort = { name: 'Mock MM2 In' };
+        pushUndoApp.midi.markHardwareResponsive(true);
+
+        pushUndoApp.onParameterChanged('OSC1_SHAPE', 42, { isFinal: true });
+        pushUndoApp.onParameterChanged('FILTER_FREQ', 180, { isFinal: true });
+        pushUndoApp.undo();
+        assertEqual(pushUndoApp.undoStack.length, 1, 'undoStack has 1 entry before Push');
+        assertEqual(pushUndoApp.redoStack.length, 1, 'redoStack has 1 entry before Push');
+
+        const ok = pushUndoApp._sendActiveProgramToHardware();
+        assertEqual(ok, true, 'Push to hardware succeeds');
+        assertEqual(pushUndoApp.undoStack.length, 1, 'Push preserves undoStack');
+        assertEqual(pushUndoApp.redoStack.length, 1, 'Push preserves redoStack');
+
+        pushUndoApp.redo();
+        assertEqual(pushUndoApp.activeTimbre.getValue('FILTER_FREQ'), 180, 'Redo works after Push');
+        pushUndoApp.undo();
+        pushUndoApp.undo();
+        assertEqual(pushUndoApp.activeTimbre.getValue('OSC1_SHAPE'), 0, 'Undo works after Push');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

@@ -3266,9 +3266,6 @@ class App {
             } else {
                 this.originalSnapshotB = this.activeTimbre.clone();
             }
-            this.undoStack = [];
-            this.redoStack = [];
-            this.updateUndoRedoUI();
             this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
             return true;
         } catch (err) {
