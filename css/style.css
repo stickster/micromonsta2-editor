@@ -1339,13 +1339,17 @@ main.app-main {
     font-size: 12px;
 }
 
+.knob-container.knob-large .knob-value {
+    font-size: 13px;
+}
+
 .knob-container.knob-small {
     width: 44px;
 }
 
 .knob-container.knob-small .knob-dial {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
 }
 
 .knob-container.knob-small .knob-label {
@@ -1354,7 +1358,7 @@ main.app-main {
 }
 
 .knob-container.knob-small .knob-value {
-    font-size: 9px;
+    font-size: 9.5px;
 }
 
 .knob-canvas {
@@ -1372,6 +1376,10 @@ main.app-main {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.knob-container:focus-visible .knob-dial {
+    box-shadow: 0 0 0 2px rgba(0, 210, 255, 0.55);
 }
 
 /* Program Bar Tempo Container */
@@ -1394,40 +1402,12 @@ main.app-main {
     margin-top: 1px;
 }
 
-.knob-svg {
-    width: 100%;
-    height: 100%;
-}
-
-.knob-track {
-    fill: #16181c;
-    stroke: #252830;
-    stroke-width: 4;
-}
-
-.knob-arc {
-    fill: none;
-    stroke: var(--accent-cyan);
-    stroke-width: 4;
-    stroke-linecap: round;
-}
-
-.knob-pointer {
-    stroke: #fff;
-    stroke-width: 2.5;
-    stroke-linecap: round;
-}
-
-.knob-dial.active .knob-arc {
-    stroke: #5ee9ff;
-    filter: drop-shadow(0 0 4px var(--accent-cyan));
-}
-
 .knob-label {
     font-size: 11px;
     color: var(--text-secondary);
     font-weight: 600;
-    margin-top: 4px;
+    margin-top: 2px;
+    line-height: 1.15;
     text-align: center;
     white-space: nowrap;
     overflow: hidden;
@@ -1436,12 +1416,19 @@ main.app-main {
 }
 
 .knob-value {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--text-muted);
-    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-primary);
     text-align: center;
     white-space: nowrap;
+    pointer-events: auto;
 }
 
 /* Select Dropdown Component */
@@ -2871,20 +2858,18 @@ footer.audition-footer {
 
 /* Knob Value Inline Click-to-Type Editing */
 .knob-value.editable {
-    cursor: text;
-    border-radius: 3px;
-    padding: 1px 4px;
-    transition: background 0.12s ease;
+    cursor: ns-resize;
+    border-radius: 50%;
+    transition: color 0.12s ease;
 }
 
 .knob-value.editable:hover {
-    background: var(--border-highlight);
     color: #fff;
 }
 
 .knob-value-input {
-    width: 48px;
-    background: #000;
+    width: 38px;
+    background: #0d0f14;
     border: 1px solid var(--accent-cyan);
     color: #fff;
     font-family: var(--font-mono);

@@ -371,7 +371,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     const dialWrap = document.createElement('div');
     dialWrap.className = 'knob-dial';
 
-    const size = isLarge ? 58 : (isSmall ? 36 : 44);
+    const size = isLarge ? 58 : (isSmall ? 38 : 44);
     const canvas = document.createElement('canvas');
     canvas.className = 'knob-canvas';
     canvas.width = size * 2; // 2x Retina resolution
@@ -387,10 +387,10 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     const valueEl = document.createElement('div');
     valueEl.className = 'knob-value editable';
     valueEl.title = 'Click to enter exact value';
+    dialWrap.appendChild(valueEl);
 
     container.appendChild(dialWrap);
     container.appendChild(labelEl);
-    container.appendChild(valueEl);
 
     const ctx = canvas.getContext ? canvas.getContext('2d') : null;
     const getProg = () => resolveProgram(program);
@@ -406,90 +406,74 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         const h = canvas.height;
         const cx = w / 2;
         const cy = h / 2;
-        const r = (w / 2) - 6;
+        const trackWidth = isLarge ? 6 : (isSmall ? 4.5 : 5);
+        const r = (w / 2) - 8;
+        const isActive = dialWrap.classList.contains('active');
 
         ctx.clearRect(0, 0, w, h);
 
-        // 1. Outer Track Arc (from 135 deg to 405 deg, 270 deg span)
+        // 1. Flat Matte Inner Disc (high-contrast backdrop for centered readout)
+        const discR = Math.max(4, r - trackWidth - 2);
+        ctx.beginPath();
+        ctx.arc(cx, cy, discR, 0, Math.PI * 2);
+        ctx.fillStyle = '#191c23';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // 2. Outer Track Arc (from 135 deg to 405 deg, 270 deg span)
         const startRad = (135 * Math.PI) / 180;
         const endRad = (405 * Math.PI) / 180;
-        const trackWidth = isLarge ? 7 : (isSmall ? 4 : 5);
+        const curRad = startRad + clampedNorm * ((270 * Math.PI) / 180);
 
         ctx.lineWidth = trackWidth;
         ctx.lineCap = 'round';
-        ctx.strokeStyle = '#222630';
+        ctx.strokeStyle = '#252a35';
         ctx.beginPath();
         ctx.arc(cx, cy, r, startRad, endRad, false);
         ctx.stroke();
 
-        // 2. Active Gauge Arc (Audiothingies orange #f76d22 or cyan for bipolar / mod)
+        // 3. Active Gauge Arc (Audiothingies orange #f76d22 or cyan for bipolar / mod)
         const gaugeColor = opts.color || (isBipolar ? '#00d2ff' : '#f76d22');
         ctx.strokeStyle = gaugeColor;
 
         if (isBipolar) {
             const centerRad = (270 * Math.PI) / 180; // 12 o'clock
-            const curRad = startRad + clampedNorm * (270 * Math.PI / 180);
+            ctx.beginPath();
+            ctx.arc(cx + Math.cos(centerRad) * r, cy + Math.sin(centerRad) * r, 2.2, 0, Math.PI * 2);
+            ctx.fillStyle = '#525b6e';
+            ctx.fill();
+
             if (Math.abs(curRad - centerRad) > 0.02) {
                 ctx.beginPath();
-                if (curRad >= centerRad) {
-                    ctx.arc(cx, cy, r, centerRad, curRad, false);
-                } else {
-                    ctx.arc(cx, cy, r, curRad, centerRad, false);
-                }
+                ctx.arc(cx, cy, r, Math.min(centerRad, curRad), Math.max(centerRad, curRad), false);
                 ctx.stroke();
             }
-        } else {
-            const curRad = startRad + clampedNorm * (270 * Math.PI / 180);
-            if (clampedNorm > 0.01) {
-                ctx.beginPath();
-                ctx.arc(cx, cy, r, startRad, curRad, false);
-                ctx.stroke();
-            }
+        } else if (clampedNorm > 0.01) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, startRad, curRad, false);
+            ctx.stroke();
         }
 
-        // 3. Shaded Knob Cap (Metallic brushed gradient)
-        const capR = r - (isLarge ? 9 : (isSmall ? 5 : 7));
+        // 4. Highlight Dot on Colored Ring at Current Value
+        const dotX = cx + Math.cos(curRad) * r;
+        const dotY = cy + Math.sin(curRad) * r;
+        const dotR = isActive
+            ? (isLarge ? 5.5 : (isSmall ? 4.2 : 4.8))
+            : (isLarge ? 4.5 : (isSmall ? 3.5 : 4.0));
+
+        if (ctx.save) ctx.save();
+        ctx.shadowColor = gaugeColor;
+        ctx.shadowBlur = isActive ? 12 : 6;
         ctx.beginPath();
-        ctx.arc(cx, cy, capR, 0, Math.PI * 2);
-        if (ctx.createConicGradient) {
-            const grad = ctx.createConicGradient(0, cx, cy);
-            grad.addColorStop(0, '#16181f');
-            grad.addColorStop(0.25, '#2e3444');
-            grad.addColorStop(0.5, '#1b1d24');
-            grad.addColorStop(0.75, '#2e3444');
-            grad.addColorStop(1, '#16181f');
-            ctx.fillStyle = grad;
-        } else {
-            ctx.fillStyle = '#1e222d';
-        }
+        ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
         ctx.fill();
-
-        // 4. Subtle Outer Border of Cap
-        ctx.beginPath();
-        ctx.arc(cx, cy, capR, 0, Math.PI * 2);
-        ctx.strokeStyle = '#3d4455';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = gaugeColor;
         ctx.stroke();
-
-        // 5. Beveled Inner Center
-        ctx.beginPath();
-        ctx.arc(cx, cy, capR * 0.72, 0, Math.PI * 2);
-        ctx.fillStyle = '#121418';
-        ctx.fill();
-
-        // 6. Pointer Needle Line
-        const pointerAngle = -135 + clampedNorm * 270;
-        const pointerRad = ((pointerAngle - 90) * Math.PI) / 180;
-        const pStart = capR * 0.2;
-        const pEnd = capR * 0.88;
-
-        ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(pointerRad) * pStart, cy + Math.sin(pointerRad) * pStart);
-        ctx.lineTo(cx + Math.cos(pointerRad) * pEnd, cy + Math.sin(pointerRad) * pEnd);
-        ctx.lineWidth = isLarge ? 4 : (isSmall ? 2.5 : 3);
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = '#ffffff';
-        ctx.stroke();
+        if (ctx.restore) ctx.restore();
 
         // Update value text (if not currently focused input)
         if (!valueEl.querySelector('input')) {
@@ -506,22 +490,30 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     let startY = 0;
     let startVal = 0;
     let isDragging = false;
+    let hasDragged = false;
+    let suppressNextClick = false;
 
     function onPointerDown(e) {
         if (e.button === 2) return; // Ignore right-click on pointerdown (handled by contextmenu)
+        if (e.target && e.target.tagName === 'INPUT') return;
         e.preventDefault();
         startX = e.clientX;
         startY = e.clientY;
         const prog = getProg();
         startVal = prog ? prog.getValue(paramKey) : 0;
         isDragging = true;
+        hasDragged = false;
         dialWrap.classList.add('active');
+        drawKnob();
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
     }
 
     function onPointerMove(e) {
         if (!isDragging) return;
+        if (!hasDragged && Math.hypot(e.clientX - startX, e.clientY - startY) > 3) {
+            hasDragged = true;
+        }
         const delta = (startY - e.clientY) + (e.clientX - startX);
         const sensitivity = (e.shiftKey || e.ctrlKey) ? 0.001 : 0.005;
         const deltaVal = delta * sensitivity * range;
@@ -539,7 +531,12 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     function onPointerUp() {
         if (!isDragging) return;
         isDragging = false;
+        if (hasDragged) {
+            suppressNextClick = true;
+            setTimeout(() => { suppressNextClick = false; }, 0);
+        }
         dialWrap.classList.remove('active');
+        drawKnob();
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onPointerUp);
 
@@ -551,6 +548,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     }
 
     canvas.addEventListener('pointerdown', onPointerDown);
+    valueEl.addEventListener('pointerdown', onPointerDown);
 
     // Mouse wheel support with debounced commit
     let wheelTimer = null;
@@ -673,6 +671,10 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     // Click-to-Type Value Editing
     valueEl.addEventListener('click', (e) => {
         e.stopPropagation();
+        if (suppressNextClick) {
+            suppressNextClick = false;
+            return;
+        }
         if (valueEl.querySelector('input')) return;
 
         const prog = getProg();
