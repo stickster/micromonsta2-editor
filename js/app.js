@@ -3646,6 +3646,74 @@ class App {
         }
     }
 
+    startInlineBankRename(index, tabTitle, tab) {
+        if (!tabTitle || tabTitle.querySelector('input')) return;
+        const bank = this.librarian.banks[index];
+        if (!bank) return;
+
+        const originalName = bank.name;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'bank-tab-title-input';
+        input.value = originalName;
+
+        if (tab) tab.setAttribute('draggable', 'false');
+        tabTitle.textContent = '';
+        tabTitle.appendChild(input);
+        if (input.focus) input.focus();
+        if (input.select) input.select();
+
+        let finished = false;
+        const finish = (save) => {
+            if (finished) return;
+            finished = true;
+
+            if (tab) tab.setAttribute('draggable', 'true');
+            if (input.parentNode === tabTitle && tabTitle.removeChild) {
+                tabTitle.removeChild(input);
+            } else if (tabTitle.children) {
+                tabTitle.children = tabTitle.children.filter(c => c !== input);
+            }
+
+            if (!save) {
+                tabTitle.textContent = originalName;
+                return;
+            }
+
+            const trimmed = input.value.trim();
+            if (!trimmed) {
+                tabTitle.textContent = originalName;
+                this.showNotification('Bank name cannot be empty.', 'warning');
+                return;
+            }
+            if (trimmed === originalName) {
+                tabTitle.textContent = originalName;
+                return;
+            }
+
+            const ok = this.librarian.renameBank(index, trimmed);
+            if (ok) {
+                this.renderLibrarianBank();
+                this.showNotification(`Renamed bank to "${trimmed}".`, 'success');
+            } else {
+                tabTitle.textContent = originalName;
+            }
+        };
+
+        input.onclick = (e) => e.stopPropagation();
+        input.onkeydown = (e) => {
+            if (e.stopPropagation) e.stopPropagation();
+            if (e.key === 'Enter') {
+                if (e.preventDefault) e.preventDefault();
+                finish(true);
+            } else if (e.key === 'Escape') {
+                if (e.preventDefault) e.preventDefault();
+                finish(false);
+            }
+        };
+        input.onblur = () => finish(true);
+    }
+
     deleteBank(index = this.librarian.activeBankIndex) {
         const bank = this.librarian.banks[index];
         if (!bank) return;
@@ -3703,10 +3771,10 @@ class App {
 
             const tabTitle = tab.querySelector('.bank-tab-title');
             if (tabTitle) {
-                tabTitle.title = 'Double-click to rename';
-                tabTitle.ondblclick = (e) => {
+                tabTitle.title = 'Click to rename';
+                tabTitle.onclick = (e) => {
                     e.stopPropagation();
-                    this.renameBank(idx);
+                    this.startInlineBankRename(idx, tabTitle, tab);
                 };
             }
 
