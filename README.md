@@ -1,6 +1,6 @@
 # MicroMonsta 2 Editor & Patch Librarian
 
-A browser-based hardware editor, patch librarian, and duplicate manager for the [Audiothingies MicroMonsta 2](https://audiothingies.com/) synthesizer. It uses the Web MIDI API and SysEx, with no build step and no dependencies.
+A browser-based hardware editor, patch librarian, and duplicate manager for the [Audiothingies MicroMonsta 2](https://audiothingies.com/) synthesizer. It uses JavaScript, the Web MIDI API, and SysEx, with no build step and no dependencies.
 
 > This is an unofficial community project. It is not affiliated with or endorsed by Audiothingies.
 
