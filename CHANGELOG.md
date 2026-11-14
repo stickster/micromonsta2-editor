@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Editor:** Shortened Live Sync disabled notification text.
 - **LFO:** Placed LFO speed knob next to the mode selector.
 
+### Documentation & Maintenance
+- Documented `CHANGELOG.md` commit requirement in `AGENTS.md`.
+
 ---
 
 ## [0.2.1] - 2026-11-13
