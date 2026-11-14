@@ -2394,7 +2394,8 @@ async function runAllTests(logger = console.log) {
         followerApp.midi.onMidiMessage({ data: hwDump, timeStamp: Date.now() });
 
         assertEqual(followerNotifications.length, 1, 'Follower window shows Loaded notification when actively fetching');
-        assert(followerNotifications[0].msg.includes('Loaded MM2 hardware Patch A'), 'Notification message mentions loaded patch');
+        assert(followerNotifications[0].msg.includes('Loaded MM2 hardware patch'), 'Notification message mentions loaded patch');
+        assert(!followerNotifications[0].msg.includes('Patch A') && !followerNotifications[0].msg.includes('POLL_PAT'), 'Notification message omits Part A/B and patch name');
         assertEqual(followerApp.syncStatus, 'synced', 'Follower syncStatus updated to synced');
         assertEqual(followerApp.timbreA.name, 'POLL_PAT', 'Follower timbreA updated with fetched program');
 

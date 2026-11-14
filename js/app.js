@@ -246,7 +246,7 @@ class App {
             this.refreshEditorControls();
             this.updateActivePartIndicator();
             this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
-            this.showNotification(`Loaded MM2 hardware Patch ${slot === 1 ? 'B' : 'A'} ("${program.name}")`, 'success');
+            this.showNotification('Loaded MM2 hardware patch', 'success');
             if (this._enableLiveSyncOnFetch) {
                 this._enableLiveSyncOnFetch = false;
                 this._setLiveSyncState(true);

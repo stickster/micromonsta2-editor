@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Editor:** Replaced browser push confirmation with an in-app dialog and toast notifications.
 - **MIDI:** Prompted to fetch, push, or ignore on every hardware connection.
 - **UI:** Unified connection sync dialogs into a shared `#sync-action-dialog`.
+- **Editor:** Simplified hardware load popup to omit Part A/B and patch name.
 
 ### Fixed
 - **MIDI:** Probed hardware when selecting a new MIDI Input port.
