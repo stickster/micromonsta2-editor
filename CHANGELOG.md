@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Mod Matrix:** Made source and destination controls draggable between slots with Undo/Redo.
 
+### Fixed
+- **Editor:** Made Init button an atomic undoable step preserving history.
+
 ---
 
 ## [0.3.0] - 2026-11-13

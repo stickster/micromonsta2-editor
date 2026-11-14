@@ -2971,28 +2971,16 @@ class App {
                 const partLabel = `Part ${this.activeSlot === 0 ? 'A' : 'B'}`;
                 const liveSyncNote = this.midi.liveSync ? ' and immediately synchronize with connected MicroMonsta 2 hardware' : '';
                 if (confirm(`Reset ${partLabel} (${this.activeTimbre.name}) to default INIT values${liveSyncNote}?`)) {
-                    this.activeTimbre.rawData = new MM2Program().rawData;
-                    if (this.activeSlot === 0) {
-                        this.originalSnapshotA = this.activeTimbre.clone();
-                    } else {
-                        this.originalSnapshotB = this.activeTimbre.clone();
-                    }
-                    this.undoStack = [];
-                    this.redoStack = [];
-                    this.updateUndoRedoUI();
-                    this.updateSyncStatus(this.midi.liveSync && this.isConnectionGood ? 'synced' : 'modified');
-                    this.refreshEditorControls();
-                    if (this.tabSync) {
-                        this.tabSync.broadcast('PATCH_LOADED', {
-                            slot: this.activeSlot,
-                            rawData: Array.from(this.activeTimbre.rawData),
-                            source: 'init'
-                        });
-                    }
+                    const canSync = this.midi.liveSync && this.isConnectionGood;
+                    this.replacePartWithRawData(this.activeSlot, new MM2Program().rawData, `Init ${partLabel}`, {
+                        sendToHardware: false,
+                        syncStatus: canSync ? 'synced' : 'modified',
+                        source: 'init'
+                    });
 
-                    if (this.midi.liveSync && this.isConnectionGood) {
+                    if (canSync) {
                         try {
-                            this.midi.sendProgram(this.activeTimbre, this.activeSlot, true);
+                            this.midi.sendProgram(this.activeTimbre, this.activeSlot);
                             this.showNotification(`Initialized ${partLabel} and synced with hardware.`, 'success');
                         } catch (err) {
                             this.showNotification(`Initialized ${partLabel}, but hardware sync failed: ${err.message}`, 'warning');

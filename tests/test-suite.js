@@ -4289,6 +4289,51 @@ async function runAllTests(logger = console.log) {
         document.getElementById = prevGetEl54;
     }
 
+    // Section 55: Init Button Atomic Undo/Redo Tests
+    logger('\n--- [55] Init Button Atomic Undo/Redo Tests ---');
+    const prevGetEl55 = document.getElementById;
+    const prevConfirm55 = global.confirm;
+    try {
+        const btnInit = document.createElement('button');
+        btnInit.id = 'btn-prog-init';
+        document.getElementById = (id) => (id === 'btn-prog-init' ? btnInit : prevGetEl55(id));
+        global.confirm = () => true;
+
+        const initApp = new App();
+        initApp.timbreA.name = 'CUSTOM';
+        initApp.onParameterChanged('OSC1_SHAPE', 88, { isFinal: true });
+        assertEqual(initApp.undoStack.length, 1, 'Prior edit recorded on undoStack before Init');
+
+        initApp.setupProgramBar();
+        btnInit.onclick();
+
+        assertEqual(initApp.timbreA.name, 'INIT', 'Init resets patch name to INIT');
+        assertEqual(initApp.timbreA.getValue('OSC1_SHAPE'), 0, 'Init resets OSC1_SHAPE to default 0');
+        assertEqual(initApp.undoStack.length, 2, 'Init pushes part-snapshot without clearing prior undo history');
+        assertEqual(initApp.undoStack[1].type, 'part-snapshot', 'Init undo entry is a part-snapshot');
+
+        initApp.undo();
+        assertEqual(initApp.timbreA.name, 'CUSTOM', 'Single Undo restores pre-Init patch name');
+        assertEqual(initApp.timbreA.getValue('OSC1_SHAPE'), 88, 'Single Undo restores pre-Init OSC1_SHAPE');
+        assertEqual(initApp.undoStack.length, 1, 'Prior edit remains on undoStack after undoing Init');
+
+        initApp.undo();
+        assertEqual(initApp.timbreA.getValue('OSC1_SHAPE'), 0, 'Second Undo restores pre-edit OSC1_SHAPE');
+
+        initApp.redo();
+        assertEqual(initApp.timbreA.getValue('OSC1_SHAPE'), 88, 'First Redo reapplies prior edit');
+
+        initApp.redo();
+        assertEqual(initApp.timbreA.name, 'INIT', 'Second Redo reapplies Init patch name');
+        assertEqual(initApp.timbreA.getValue('OSC1_SHAPE'), 0, 'Second Redo reapplies Init OSC1_SHAPE');
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    } finally {
+        document.getElementById = prevGetEl55;
+        global.confirm = prevConfirm55;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);
