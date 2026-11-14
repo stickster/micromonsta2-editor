@@ -1348,10 +1348,57 @@ async function runAllTests(logger = console.log) {
         assertEqual(testApp.muteState.noise, true, 'Clicking noise mute sets muteState.noise to true');
         assert(noiseMuteBtn.classList.contains('active'), 'Noise mute button has .active class when muted');
 
-        // Toggle Noise Solo
+        // Toggle Noise Solo (cancels Noise Mute)
         noiseSoloBtn.click();
         assertEqual(testApp.soloState.noise, true, 'Clicking noise solo sets soloState.noise to true');
+        assertEqual(testApp.muteState.noise, false, 'Clicking noise solo cancels muteState.noise');
         assert(noiseSoloBtn.classList.contains('active'), 'Noise solo button has .active class when soloed');
+        assert(!noiseMuteBtn.classList.contains('active'), 'Noise mute button loses .active class when soloed');
+
+        // Toggle Noise Mute again (cancels Noise Solo)
+        noiseMuteBtn.click();
+        assertEqual(testApp.muteState.noise, true, 'Clicking noise mute sets muteState.noise to true');
+        assertEqual(testApp.soloState.noise, false, 'Clicking noise mute cancels soloState.noise');
+        assert(noiseMuteBtn.classList.contains('active'), 'Noise mute button regains .active class');
+        assert(!noiseSoloBtn.classList.contains('active'), 'Noise solo button loses .active class when muted');
+
+        // Oscillator Solo/Mute Mutual Cancellation (single oscillator)
+        const oscApp = new App();
+        oscApp.activeTimbre.setValue('MIX_OSC1', 100);
+        oscApp.activeTimbre.setValue('MIX_OSC2', 80);
+        const oscOnlyPanel = oscApp.createOscillatorPanel(oscApp.activeTimbre, () => { });
+        const oscSoloMuteGroup = oscOnlyPanel.querySelector('.solo-mute-group');
+        const oscMuteBtn = oscSoloMuteGroup ? oscSoloMuteGroup.querySelector('.btn-mute') : null;
+        const oscSoloBtn = oscSoloMuteGroup ? oscSoloMuteGroup.querySelector('.btn-solo') : null;
+        assert(oscMuteBtn !== null && oscSoloBtn !== null, 'Oscillator mute and solo buttons exist');
+
+        oscApp.selectedOsc = 1;
+        oscMuteBtn.click();
+        assertEqual(oscApp.muteState.osc1, true, 'Osc 1 mute sets muteState.osc1 to true');
+        assertEqual(oscApp.soloState.osc1, false, 'Osc 1 soloState remains false');
+        assertEqual(oscApp.activeTimbre.getValue('MIX_OSC1'), 0, 'Osc 1 level muted to 0');
+
+        oscSoloBtn.click();
+        assertEqual(oscApp.soloState.osc1, true, 'Clicking Osc 1 solo sets soloState.osc1 to true');
+        assertEqual(oscApp.muteState.osc1, false, 'Clicking Osc 1 solo cancels muteState.osc1');
+        assert(oscSoloBtn.classList.contains('active'), 'Osc 1 solo button is active');
+        assert(!oscMuteBtn.classList.contains('active'), 'Osc 1 mute button is deactivated');
+        assertEqual(oscApp.activeTimbre.getValue('MIX_OSC1'), 100, 'Osc 1 level restored when soloed');
+        assertEqual(oscApp.activeTimbre.getValue('MIX_OSC2'), 0, 'Osc 2 level muted when Osc 1 soloed');
+
+        oscMuteBtn.click();
+        assertEqual(oscApp.muteState.osc1, true, 'Clicking Osc 1 mute sets muteState.osc1 to true');
+        assertEqual(oscApp.soloState.osc1, false, 'Clicking Osc 1 mute cancels soloState.osc1');
+        assert(oscMuteBtn.classList.contains('active'), 'Osc 1 mute button is active');
+        assert(!oscSoloBtn.classList.contains('active'), 'Osc 1 solo button is deactivated');
+        assertEqual(oscApp.activeTimbre.getValue('MIX_OSC1'), 0, 'Osc 1 level muted to 0');
+        assertEqual(oscApp.activeTimbre.getValue('MIX_OSC2'), 80, 'Osc 2 level restored when Osc 1 solo cancelled by mute');
+
+        // Selecting solo on Osc 2 does not cancel mute on Osc 1
+        oscApp.selectedOsc = 2;
+        oscSoloBtn.click();
+        assertEqual(oscApp.soloState.osc2, true, 'Osc 2 soloState is true');
+        assertEqual(oscApp.muteState.osc1, true, 'Osc 1 muteState is preserved when soloing Osc 2');
 
         // --- [20] Undo/Redo & Levels of Undo Setting Tests ---
         logger('\n--- [20] Undo/Redo & Levels of Undo Setting Tests ---');

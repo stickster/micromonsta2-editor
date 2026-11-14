@@ -1449,6 +1449,19 @@ class App {
         this.midi.fetchProgram(1);
     }
 
+    /**
+     * Toggles solo or mute on a single oscillator/noise source; enabling one cancels the other.
+     */
+    toggleSoloMute(key, mode) {
+        const primary = mode === 'solo' ? this.soloState : this.muteState;
+        const secondary = mode === 'solo' ? this.muteState : this.soloState;
+        primary[key] = !primary[key];
+        if (primary[key]) {
+            secondary[key] = false;
+        }
+        this.applySoloMute();
+    }
+
     applySoloMute() {
         const timbre = this.activeTimbre;
         if (!this.savedMixerLevels) {
@@ -1666,9 +1679,7 @@ class App {
         muteBtn.title = 'Mute selected oscillator';
         muteBtn.onclick = (e) => {
             e.stopPropagation();
-            const key = 'osc' + this.selectedOsc;
-            this.muteState[key] = !this.muteState[key];
-            this.applySoloMute();
+            this.toggleSoloMute('osc' + this.selectedOsc, 'mute');
             updateOscSelection();
         };
 
@@ -1679,9 +1690,7 @@ class App {
         soloBtn.title = 'Solo selected oscillator';
         soloBtn.onclick = (e) => {
             e.stopPropagation();
-            const key = 'osc' + this.selectedOsc;
-            this.soloState[key] = !this.soloState[key];
-            this.applySoloMute();
+            this.toggleSoloMute('osc' + this.selectedOsc, 'solo');
             updateOscSelection();
         };
 
@@ -1823,9 +1832,9 @@ class App {
         noiseMuteBtn.title = 'Mute Noise Generator';
         noiseMuteBtn.onclick = (e) => {
             e.stopPropagation();
-            this.muteState.noise = !this.muteState.noise;
-            this.applySoloMute();
+            this.toggleSoloMute('noise', 'mute');
             noiseMuteBtn.classList.toggle('active', this.muteState.noise);
+            noiseSoloBtn.classList.toggle('active', this.soloState.noise);
         };
 
         const noiseSoloBtn = document.createElement('button');
@@ -1835,8 +1844,8 @@ class App {
         noiseSoloBtn.title = 'Solo Noise Generator';
         noiseSoloBtn.onclick = (e) => {
             e.stopPropagation();
-            this.soloState.noise = !this.soloState.noise;
-            this.applySoloMute();
+            this.toggleSoloMute('noise', 'solo');
+            noiseMuteBtn.classList.toggle('active', this.muteState.noise);
             noiseSoloBtn.classList.toggle('active', this.soloState.noise);
         };
 

@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Editor:** Made patch rewrite on Fetch an atomic undoable step.
 
+### Fixed
+- **Oscillators:** Cancelled opposite solo/mute state when toggling a single oscillator.
+
 ---
 
 ## [0.2.1] - 2026-11-13
