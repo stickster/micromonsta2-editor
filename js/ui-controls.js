@@ -1928,149 +1928,253 @@ function createArpSequencer(program, onChangeCallback) {
 
     const titleSpan = document.createElement('span');
     titleSpan.className = 'sequencer-title';
-    titleSpan.textContent = '16-Step Pattern Sequencer';
+    titleSpan.textContent = 'SEQUENCER';
     header.appendChild(titleSpan);
 
     const toolsDiv = document.createElement('div');
     toolsDiv.className = 'sequencer-tools';
 
     let activeStepDrag = null;
+    const dropTargetBtns = [];
 
-    const copyToAllBtn = document.createElement('button');
-    copyToAllBtn.type = 'button';
-    copyToAllBtn.className = 'btn btn-sm seq-copy-all-btn';
-    copyToAllBtn.id = 'seq-copy-all-btn';
-    copyToAllBtn.title = 'Drop a step here to copy it to all 16 steps';
-    copyToAllBtn.textContent = 'Copy to all';
+    const copyLabel = document.createElement('span');
+    copyLabel.className = 'seq-copy-label';
+    copyLabel.id = 'seq-copy-label';
+    copyLabel.textContent = 'Copy';
+    toolsDiv.appendChild(copyLabel);
 
-    copyToAllBtn.addEventListener('dragover', (e) => {
-        if (activeStepDrag === null) return;
-        e.preventDefault();
-        e.stopPropagation();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-        copyToAllBtn.classList.add('slot-drop-hover');
-    });
-    copyToAllBtn.addEventListener('dragleave', (e) => {
-        e.stopPropagation();
-        copyToAllBtn.classList.remove('slot-drop-hover');
-    });
-    copyToAllBtn.addEventListener('drop', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        copyToAllBtn.classList.remove('slot-drop-hover', 'is-visible');
-        try {
-            const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-            const data = raw ? JSON.parse(raw) : (activeStepDrag !== null ? { kind: 'arp_step', stepIndex: activeStepDrag } : null);
-            const srcIdx = data && data.kind === 'arp_step' ? data.stepIndex : null;
-            const prog = getProg();
-            if (prog && srcIdx >= 1 && srcIdx <= 16) {
-                if (onChangeCallback && onChangeCallback.beginGroup) {
-                    onChangeCallback.beginGroup(`Copy Arp Step ${srcIdx} to All`);
-                }
-                for (let dst = 1; dst <= 16; dst++) {
-                    if (dst !== srcIdx) {
-                        copySection('arp_step', srcIdx, 'arp_step', dst, prog, onChangeCallback);
+    const setDropTargetsVisible = (visible) => {
+        copyLabel.classList.toggle('is-visible', visible);
+        dropTargetBtns.forEach((btn) => {
+            btn.classList.toggle('is-visible', visible);
+            if (!visible) btn.classList.remove('slot-drop-hover');
+        });
+    };
+
+    const createCopyDropTarget = ({ id, label, title, mode }) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm seq-copy-all-btn';
+        btn.id = id;
+        btn.title = title;
+        btn.textContent = label;
+
+        btn.addEventListener('dragover', (e) => {
+            if (activeStepDrag === null) return;
+            e.preventDefault();
+            e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+            btn.classList.add('slot-drop-hover');
+        });
+        btn.addEventListener('dragleave', (e) => {
+            e.stopPropagation();
+            btn.classList.remove('slot-drop-hover');
+        });
+        btn.addEventListener('drop', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDropTargetsVisible(false);
+            try {
+                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+                const data = raw ? JSON.parse(raw) : (activeStepDrag !== null ? { kind: 'arp_step', stepIndex: activeStepDrag } : null);
+                const srcIdx = data && data.kind === 'arp_step' ? data.stepIndex : null;
+                const prog = getProg();
+                if (prog && srcIdx >= 1 && srcIdx <= 16) {
+                    const srcPad = srcIdx.toString().padStart(2, '0');
+                    const srcNote = prog.getValue(`ARP_PTN_STEP${srcPad}`);
+                    const srcMod = prog.getValue(`ARP_PTN_STEP_MOD${srcPad}`);
+                    if (onChangeCallback && onChangeCallback.beginGroup) {
+                        onChangeCallback.beginGroup(`${label} from Step ${srcIdx}`);
+                    }
+                    for (let dst = 1; dst <= 16; dst++) {
+                        if (dst !== srcIdx) {
+                            if (mode === 'both') {
+                                copySection('arp_step', srcIdx, 'arp_step', dst, prog, onChangeCallback);
+                            } else {
+                                const dstPad = dst.toString().padStart(2, '0');
+                                const key = mode === 'note' ? `ARP_PTN_STEP${dstPad}` : `ARP_PTN_STEP_MOD${dstPad}`;
+                                const val = mode === 'note' ? srcNote : srcMod;
+                                const prevVal = prog.getValue(key);
+                                prog.setValue(key, val);
+                                if (onChangeCallback) onChangeCallback(key, val, { isFinal: true, prevVal });
+                            }
+                        }
+                    }
+                    if (onChangeCallback && onChangeCallback.endGroup) {
+                        onChangeCallback.endGroup();
+                    }
+                    container.refresh();
+                    if (window.app && window.app.showNotification) {
+                        window.app.showNotification(`${label}: Step ${srcIdx} applied to all steps`, 'success');
                     }
                 }
-                if (onChangeCallback && onChangeCallback.endGroup) {
-                    onChangeCallback.endGroup();
-                }
-                container.refresh();
-                if (window.app && window.app.showNotification) {
-                    window.app.showNotification(`Copied Step ${srcIdx} to all steps`, 'success');
-                }
-            }
-        } catch (err) { }
-        activeStepDrag = null;
-    });
-    toolsDiv.appendChild(copyToAllBtn);
+            } catch (err) { }
+            activeStepDrag = null;
+        });
 
-    const clearBtn = document.createElement('button');
-    clearBtn.className = 'btn btn-sm btn-subtle';
-    clearBtn.id = 'seq-clear-btn';
-    clearBtn.title = 'Clear all steps to Off';
-    clearBtn.textContent = 'Clear';
-    clearBtn.addEventListener('click', () => {
+        dropTargetBtns.push(btn);
+        toolsDiv.appendChild(btn);
+        return btn;
+    };
+
+    createCopyDropTarget({
+        id: 'seq-copy-all-btn',
+        label: 'All',
+        title: 'Drop a step here to copy Note and Mod to all 16 steps',
+        mode: 'both'
+    });
+    createCopyDropTarget({
+        id: 'seq-copy-note-btn',
+        label: 'Note',
+        title: 'Drop a step here to copy Note to all 16 steps',
+        mode: 'note'
+    });
+    createCopyDropTarget({
+        id: 'seq-copy-mod-btn',
+        label: 'Mod',
+        title: 'Drop a step here to copy Mod to all 16 steps',
+        mode: 'mod'
+    });
+
+    const applyStepBatch = (groupLabel, applyFn) => {
         const prog = getProg();
         if (prog) {
             if (onChangeCallback && onChangeCallback.beginGroup) {
-                onChangeCallback.beginGroup('Clear Arp Pattern');
+                onChangeCallback.beginGroup(groupLabel);
             }
+            const setStepParam = (key, val) => {
+                const prev = prog.getValue(key);
+                prog.setValue(key, val);
+                if (onChangeCallback) onChangeCallback(key, val, { isFinal: true, prevVal: prev });
+            };
             for (let i = 1; i <= 16; i++) {
                 const numStr = i.toString().padStart(2, '0');
-                const key = `ARP_PTN_STEP${numStr}`;
-                const prev = prog.getValue(key);
-                prog.setValue(key, 1); // Off
-                if (onChangeCallback) onChangeCallback(key, 1, { isFinal: true, prevVal: prev });
+                applyFn(numStr, setStepParam);
             }
             if (onChangeCallback && onChangeCallback.endGroup) {
                 onChangeCallback.endGroup();
             }
         }
         container.refresh();
-    });
-    toolsDiv.appendChild(clearBtn);
+    };
 
-    const fillBtn = document.createElement('button');
-    fillBtn.className = 'btn btn-sm btn-subtle';
-    fillBtn.id = 'seq-fill-btn';
-    fillBtn.title = 'Fill all steps with Auto';
-    fillBtn.textContent = 'Fill';
-    fillBtn.addEventListener('click', () => {
-        const prog = getProg();
-        if (prog) {
-            if (onChangeCallback && onChangeCallback.beginGroup) {
-                onChangeCallback.beginGroup('Fill Arp Pattern');
-            }
-            for (let i = 1; i <= 16; i++) {
-                const numStr = i.toString().padStart(2, '0');
-                const key = `ARP_PTN_STEP${numStr}`;
-                const prev = prog.getValue(key);
-                prog.setValue(key, 0); // Auto
-                if (onChangeCallback) onChangeCallback(key, 0, { isFinal: true, prevVal: prev });
-            }
-            if (onChangeCallback && onChangeCallback.endGroup) {
-                onChangeCallback.endGroup();
-            }
-        }
-        container.refresh();
+    // Note section
+    const noteGroup = document.createElement('div');
+    noteGroup.className = 'seq-tool-group';
+    noteGroup.id = 'seq-note-tools';
+
+    const noteGroupLabel = document.createElement('span');
+    noteGroupLabel.className = 'seq-group-label';
+    noteGroupLabel.textContent = 'Note';
+    noteGroup.appendChild(noteGroupLabel);
+
+    let noChords = false;
+    const noChordsBtn = document.createElement('button');
+    noChordsBtn.type = 'button';
+    noChordsBtn.className = 'btn-param-toggle seq-no-chords-btn';
+    noChordsBtn.id = 'seq-no-chords-btn';
+    noChordsBtn.title = 'Omit Chord steps when randomizing pattern (Click to toggle)';
+    noChordsBtn.setAttribute('aria-pressed', 'false');
+
+    const noChordsLabel = document.createElement('span');
+    noChordsLabel.className = 'toggle-label';
+    noChordsLabel.textContent = 'No chords';
+    noChordsBtn.appendChild(noChordsLabel);
+
+    noChordsBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        noChords = !noChords;
+        noChordsBtn.setAttribute('aria-pressed', noChords ? 'true' : 'false');
+        noChordsBtn.classList.toggle('active', noChords);
     });
-    toolsDiv.appendChild(fillBtn);
+    noteGroup.appendChild(noChordsBtn);
+
+    const noChordsArrow = document.createElement('span');
+    noChordsArrow.className = 'seq-tool-arrow';
+    noChordsArrow.setAttribute('aria-hidden', 'true');
+    noChordsArrow.textContent = '←';
+    noteGroup.appendChild(noChordsArrow);
 
     const randBtn = document.createElement('button');
-    randBtn.className = 'btn btn-sm btn-subtle';
+    randBtn.type = 'button';
+    randBtn.className = 'btn-slot-icon';
     randBtn.id = 'seq-random-btn';
-    randBtn.title = 'Generate musical random pattern';
-    randBtn.textContent = 'Random';
+    randBtn.title = 'Randomize Note steps';
+    randBtn.innerHTML = ICON_RANDOM_SVG;
     randBtn.addEventListener('click', () => {
-        const pool = [0, 0, 1, 2, 4, 5, 6, 11]; // Musical probability weights
-        const prog = getProg();
-        if (prog) {
-            if (onChangeCallback && onChangeCallback.beginGroup) {
-                onChangeCallback.beginGroup('Randomize Arp Pattern');
-            }
-            for (let i = 1; i <= 16; i++) {
-                const numStr = i.toString().padStart(2, '0');
-                const stepKey = `ARP_PTN_STEP${numStr}`;
-                const modKey = `ARP_PTN_STEP_MOD${numStr}`;
-                const stepMode = pool[Math.floor(Math.random() * pool.length)];
-                const modLvl = Math.floor(Math.random() * 4);
-                const prevStep = prog.getValue(stepKey);
-                const prevMod = prog.getValue(modKey);
-                prog.setValue(stepKey, stepMode);
-                prog.setValue(modKey, modLvl);
-                if (onChangeCallback) {
-                    onChangeCallback(stepKey, stepMode, { isFinal: true, prevVal: prevStep });
-                    onChangeCallback(modKey, modLvl, { isFinal: true, prevVal: prevMod });
-                }
-            }
-            if (onChangeCallback && onChangeCallback.endGroup) {
-                onChangeCallback.endGroup();
-            }
-        }
-        container.refresh();
+        const basePool = [0, 0, 1, 2, 4, 5, 6, 11]; // Musical probability weights (11 = Chord)
+        const pool = noChords ? basePool.filter(v => v !== 11) : basePool;
+        applyStepBatch('Randomize Arp Note Pattern', (numStr, setStepParam) => {
+            setStepParam(`ARP_PTN_STEP${numStr}`, pool[Math.floor(Math.random() * pool.length)]);
+        });
     });
-    toolsDiv.appendChild(randBtn);
+    noteGroup.appendChild(randBtn);
+
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'btn-slot-icon btn-slot-clear';
+    clearBtn.id = 'seq-clear-btn';
+    clearBtn.title = 'Clear all Note steps to Off';
+    clearBtn.textContent = '✕';
+    clearBtn.addEventListener('click', () => {
+        applyStepBatch('Clear Arp Note Pattern', (numStr, setStepParam) => {
+            setStepParam(`ARP_PTN_STEP${numStr}`, 1); // Off
+        });
+    });
+    noteGroup.appendChild(clearBtn);
+
+    const autoBtn = document.createElement('button');
+    autoBtn.type = 'button';
+    autoBtn.className = 'btn-slot-icon seq-btn-auto';
+    autoBtn.id = 'seq-note-auto-btn';
+    autoBtn.title = 'Fill all Note steps with Auto';
+    autoBtn.textContent = 'A';
+    autoBtn.addEventListener('click', () => {
+        applyStepBatch('Fill Arp Note Pattern with Auto', (numStr, setStepParam) => {
+            setStepParam(`ARP_PTN_STEP${numStr}`, 0); // Auto
+        });
+    });
+    noteGroup.appendChild(autoBtn);
+
+    toolsDiv.appendChild(noteGroup);
+
+    // Mod section
+    const modGroup = document.createElement('div');
+    modGroup.className = 'seq-tool-group';
+    modGroup.id = 'seq-mod-tools';
+
+    const modGroupLabel = document.createElement('span');
+    modGroupLabel.className = 'seq-group-label';
+    modGroupLabel.textContent = 'Mod';
+    modGroup.appendChild(modGroupLabel);
+
+    const modRandBtn = document.createElement('button');
+    modRandBtn.type = 'button';
+    modRandBtn.className = 'btn-slot-icon';
+    modRandBtn.id = 'seq-mod-random-btn';
+    modRandBtn.title = 'Randomize Mod levels';
+    modRandBtn.innerHTML = ICON_RANDOM_SVG;
+    modRandBtn.addEventListener('click', () => {
+        applyStepBatch('Randomize Arp Mod Pattern', (numStr, setStepParam) => {
+            setStepParam(`ARP_PTN_STEP_MOD${numStr}`, Math.floor(Math.random() * 4));
+        });
+    });
+    modGroup.appendChild(modRandBtn);
+
+    const modClearBtn = document.createElement('button');
+    modClearBtn.type = 'button';
+    modClearBtn.className = 'btn-slot-icon btn-slot-clear';
+    modClearBtn.id = 'seq-mod-clear-btn';
+    modClearBtn.title = 'Reset all Mod levels to Mid';
+    modClearBtn.textContent = '✕';
+    modClearBtn.addEventListener('click', () => {
+        applyStepBatch('Clear Arp Mod Pattern to Mid', (numStr, setStepParam) => {
+            setStepParam(`ARP_PTN_STEP_MOD${numStr}`, 1); // Mid
+        });
+    });
+    modGroup.appendChild(modClearBtn);
+
+    toolsDiv.appendChild(modGroup);
 
     header.appendChild(toolsDiv);
     container.appendChild(header);
@@ -2104,12 +2208,12 @@ function createArpSequencer(program, onChangeCallback) {
                 e.dataTransfer.setData('text/plain', JSON.stringify(payload));
             }
             col.classList.add('is-dragging');
-            copyToAllBtn.classList.add('is-visible');
+            setDropTargetsVisible(true);
         });
         col.addEventListener('dragend', () => {
             activeStepDrag = null;
             col.classList.remove('is-dragging');
-            copyToAllBtn.classList.remove('is-visible', 'slot-drop-hover');
+            setDropTargetsVisible(false);
             stepsGrid.querySelectorAll('.step-col.slot-drop-hover').forEach(el => {
                 el.classList.remove('slot-drop-hover');
             });
@@ -2132,7 +2236,7 @@ function createArpSequencer(program, onChangeCallback) {
             e.preventDefault();
             e.stopPropagation();
             col.classList.remove('slot-drop-hover');
-            copyToAllBtn.classList.remove('is-visible', 'slot-drop-hover');
+            setDropTargetsVisible(false);
             try {
                 const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
                 const data = raw ? JSON.parse(raw) : (activeStepDrag !== null ? { kind: 'arp_step', stepIndex: activeStepDrag } : null);
