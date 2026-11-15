@@ -3070,6 +3070,22 @@ class App {
                 }
                 if (chkLiveSync.checked) {
                     chkLiveSync.checked = false; // Stay unchecked until choice confirmed
+                    if (this._checkingLiveSync) return;
+                    this._checkingLiveSync = true;
+                    try {
+                        if (this.midi && typeof this.midi.requestProgramDump === 'function' && this.midi.inPort && this.midi.outPort) {
+                            const hwDump = await this.midi.requestProgramDump(this.activeSlot, { timeoutMs: 2000 });
+                            if (!this.isConnectionGood) return;
+                            if (hwDump && programsMatch(hwDump.program, this.activeTimbre)) {
+                                this._setLiveSyncState(true);
+                                this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
+                                this.showNotification('Live Sync ENABLED (Hardware and editor already match)', 'success');
+                                return;
+                            }
+                        }
+                    } finally {
+                        this._checkingLiveSync = false;
+                    }
                     const choice = await this.promptSyncAction({
                         title: '⚠️ Enable Live Hardware Sync?',
                         description: 'Enabling Live Sync transmits parameter edits immediately to your MicroMonsta 2 over MIDI NRPN/CC. To avoid accidental patch overwrites or sound mismatches, choose an initial synchronization action:',
@@ -3417,35 +3433,63 @@ class App {
         if (this._isPromptingSync) return;
         this._isPromptingSync = true;
 
-        const portSuffix = portName ? ` (${portName})` : '';
-        const choice = await this.promptSyncAction({
-            title: isReconnect ? '🔄 MicroMonsta 2 Reconnected' : '🔌 MicroMonsta 2 Connected',
-            description: isReconnect
-                ? `Communication with your MicroMonsta 2 synthesizer${portSuffix} has been restored. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`
-                : `Connected to your MicroMonsta 2 synthesizer${portSuffix}. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`,
-            fetchDetail: 'Reads active edit buffer settings from the synth hardware into Part A and Part B.',
-            pushDetail: 'Transmits current patch parameters in the editor to the synth hardware.',
-            requireVerified: true
-        });
-
-        if (choice === 'fetch') {
-            this.fetchActiveProgram(0, { probe: 'load' });
-        } else if (choice === 'push') {
-            this.showNotification('Pushing patch settings from editor to MM2...', 'info');
-            this.pushAllPartsToHardware();
-            if (this.midi && this.midi.inPort && this.midi.outPort) {
-                setTimeout(() => this._probeIfNeeded(2500), 200);
+        try {
+            if (isReconnect && this.midi && this.midi.hardwareResponsive === true && typeof this.midi.requestProgramDump === 'function' && this.midi.inPort && this.midi.outPort) {
+                const partA = await this.midi.requestProgramDump(0, { timeoutMs: 2000 });
+                if (partA && programsMatch(partA.program, this.timbreA)) {
+                    const partB = await this.midi.requestProgramDump(1, { timeoutMs: this.modeProbeTimeoutMs });
+                    let partBMatches = false;
+                    if (partB) {
+                        if (this.synthTimbralMode === 'monotimbral') {
+                            this.setTimbralMode('bitimbral');
+                        }
+                        partBMatches = programsMatch(partB.program, this.timbreB);
+                    } else {
+                        partBMatches = this.synthTimbralMode === 'monotimbral';
+                    }
+                    if (partBMatches) {
+                        this.originalSnapshotA = this.timbreA.clone();
+                        if (partB) {
+                            this.originalSnapshotB = this.timbreB.clone();
+                        }
+                        this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
+                        this.updateConnectionStatus();
+                        this.showNotification('MicroMonsta 2 reconnected (already in sync)', 'success');
+                        return;
+                    }
+                }
             }
-        } else if (choice === 'ignore') {
-            this._probeIfNeeded(2500);
-        } else if (choice === null) {
-            this._probeIfNeeded(2500);
-            this.showNotification(isReconnect ? 'MicroMonsta 2 reconnected!' : 'MicroMonsta 2 connected!', 'success');
-        }
 
-        setTimeout(() => {
-            this._isPromptingSync = false;
-        }, 300);
+            const portSuffix = portName ? ` (${portName})` : '';
+            const choice = await this.promptSyncAction({
+                title: isReconnect ? '🔄 MicroMonsta 2 Reconnected' : '🔌 MicroMonsta 2 Connected',
+                description: isReconnect
+                    ? `Communication with your MicroMonsta 2 synthesizer${portSuffix} has been restored. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`
+                    : `Connected to your MicroMonsta 2 synthesizer${portSuffix}. Choose whether to fetch parameters from the hardware, push this editor's parameters to the synth, or ignore:`,
+                fetchDetail: 'Reads active edit buffer settings from the synth hardware into Part A and Part B.',
+                pushDetail: 'Transmits current patch parameters in the editor to the synth hardware.',
+                requireVerified: true
+            });
+
+            if (choice === 'fetch') {
+                this.fetchActiveProgram(0, { probe: 'load' });
+            } else if (choice === 'push') {
+                this.showNotification('Pushing patch settings from editor to MM2...', 'info');
+                this.pushAllPartsToHardware();
+                if (this.midi && this.midi.inPort && this.midi.outPort) {
+                    setTimeout(() => this._probeIfNeeded(2500), 200);
+                }
+            } else if (choice === 'ignore') {
+                this._probeIfNeeded(2500);
+            } else if (choice === null) {
+                this._probeIfNeeded(2500);
+                this.showNotification(isReconnect ? 'MicroMonsta 2 reconnected!' : 'MicroMonsta 2 connected!', 'success');
+            }
+        } finally {
+            setTimeout(() => {
+                this._isPromptingSync = false;
+            }, 300);
+        }
     }
 
     pushAllPartsToHardware() {
