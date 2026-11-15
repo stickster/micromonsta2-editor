@@ -6,11 +6,21 @@ A browser-based hardware editor, patch librarian, and duplicate manager for the 
 
 ## RUN IT LIVE!
 
+### Running from the website
+
 [https://stickster.github.io/micromonsta2-editor]
 
 This page runs on your system only. No data is shared or sent to me or GitHub. Feel free to bookmark and use it anytime, without using GitHub. Instructions below only matter if you want to tinker with the code yourself.
 
-(The live editor here runs off the `release` branch only, and releases are [tagged](https://github.com/stickster/micromonsta2-editor/tags). Some features may not be released yet. To use them, you must get the code as shown below and `git switch main` before loading in your browser.)
+Some features may not be released yet. To use them, you must clone the git repo as shown below in the [Getting Started](#getting-started) section.
+
+### Running from hard disk
+
+You can also download this app and run it locally if you prefer. This can be useful if you want to edit your Micromonsta 2 while offline. In this case, download the latest `micromonsta2-editor-v*.zip` from [GitHub Releases](https://github.com/stickster/micromonsta2-editor/releases) and extract it.
+
+### Allowing MIDI/SysEx Access
+
+If you want to connect the app to your hardware, whether from the website or from your hard disk, you will need to allow MIDI/SysEx access in your browser. On Chromium-based browsers, this is usually done by granting permission when the browser asks. On other browsers, you may need to enable it in the browser settings.
 
 ## Screenshots
 
@@ -52,7 +62,7 @@ Due to the MicroMonsta 2 firmware implementation, certain settings cannot be rea
 
 No install is needed.
 
-1. Download the latest `micromonsta2-editor-v*.zip` from [GitHub Releases](https://github.com/stickster/micromonsta2-editor/releases) and extract it, **or** clone the repo:
+1. Clone the repo:
    ```sh
    git clone <repo-url>
    cd micromonsta2-editor
@@ -63,6 +73,8 @@ No install is needed.
 
 > [!WARNING]
 > **Caveat emptor.** The authors are not responsible for the integrity of your hardware or patches. _Live Sync_ mode sends data to your synth immediately, and it is possible to overwrite your favorite sounds when you push patches from the Editor or Librarian, so you must back up the patches you care about first.
+
+The live editor on GitHub Pages (see [Run It Live!](#run-it-live!)) runs off the `release` branch only, and releases are [tagged](https://github.com/stickster/micromonsta2-editor/tags). 
 
 ## Project Structure
 
