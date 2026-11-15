@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.4.5); defaults to current ref'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: ${{ inputs.tag || github.ref_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Verify version matches tag
+        run: |
+          APP_VERSION="$(node -e "console.log(require('./js/version.js').APP_VERSION)")"
+          if [ "v${APP_VERSION}" != "${TAG}" ]; then
+            echo "Error: tag '${TAG}' does not match js/version.js APP_VERSION '${APP_VERSION}'" >&2
+            exit 1
+          fi
+          echo "APP_VERSION=${APP_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Run test suite
+        run: node tests/cli-runner.js
+
+      - name: Build runtime zip archive
+        run: |
+          STAGE_DIR="micromonsta2-editor-${TAG}"
+          mkdir -p "dist/${STAGE_DIR}"
+          cp index.html LICENSE "dist/${STAGE_DIR}/"
+          cp -R css js "dist/${STAGE_DIR}/"
+          (cd dist && zip -r "../${STAGE_DIR}.zip" "${STAGE_DIR}")
+          ls -lh "${STAGE_DIR}.zip"
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          node -e '
+            const fs = require("fs");
+            const lines = fs.readFileSync("CHANGELOG.md", "utf8").split(/\r?\n/);
+            const header = "## [" + process.env.APP_VERSION + "]";
+            const start = lines.findIndex((l) => l.startsWith(header));
+            if (start !== -1) {
+              const out = [];
+              for (let i = start + 1; i < lines.length; i++) {
+                if (/^## \[/.test(lines[i]) || /^---\s*$/.test(lines[i])) break;
+                out.push(lines[i]);
+              }
+              const text = out.join("\n").trim();
+              if (text) fs.writeFileSync("release-notes.md", text + "\n");
+            }
+          '
+
+      - name: Create or update GitHub Release
+        run: |
+          ASSET="micromonsta2-editor-${TAG}.zip"
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "${ASSET}" --clobber
+          elif [ -s release-notes.md ]; then
+            gh release create "${TAG}" "${ASSET}" --title "${TAG}" --notes-file release-notes.md
+          else
+            gh release create "${TAG}" "${ASSET}" --title "${TAG}" --generate-notes
+          fi

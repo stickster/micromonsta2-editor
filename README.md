@@ -52,7 +52,7 @@ Due to the MicroMonsta 2 firmware implementation, certain settings cannot be rea
 
 No install is needed.
 
-1. Clone the repo:
+1. Download the latest `micromonsta2-editor-v*.zip` from [GitHub Releases](https://github.com/stickster/micromonsta2-editor/releases) and extract it, **or** clone the repo:
    ```sh
    git clone <repo-url>
    cd micromonsta2-editor
