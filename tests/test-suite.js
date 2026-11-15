@@ -3247,13 +3247,23 @@ async function runAllTests(logger = console.log) {
         assert(stepCols.every(c => c.attributes.get('draggable') === 'true'), 'All step-col elements have draggable="true"');
 
         const toolsDiv = seqEl.querySelector('.sequencer-tools');
+        const copyLabel = seqEl.querySelector('#seq-copy-label');
         const copyAllBtn = seqEl.querySelector('#seq-copy-all-btn');
-        const clearBtn = seqEl.querySelector('#seq-clear-btn');
+        const copyNoteBtn = seqEl.querySelector('#seq-copy-note-btn');
+        const copyModBtn = seqEl.querySelector('#seq-copy-mod-btn');
+        const noteTools = seqEl.querySelector('#seq-note-tools');
+        assert(copyLabel !== null && copyLabel.textContent === 'Copy', 'Sequencer renders #seq-copy-label with text "Copy"');
+        assert(!copyLabel.classList.contains('is-visible'), 'Copy label is hidden when not dragging');
         assert(copyAllBtn !== null, 'Sequencer renders #seq-copy-all-btn');
-        assertEqual(copyAllBtn.textContent, 'Copy to all', 'Copy to all button has exact label "Copy to all"');
-        assertEqual(toolsDiv.children[0], copyAllBtn, 'Copy to all button appears to the left of seq-clear-btn');
-        assertEqual(toolsDiv.children[1], clearBtn, 'seq-clear-btn immediately follows Copy to all button');
-        assert(!copyAllBtn.classList.contains('is-visible'), 'Copy to all button is hidden when not dragging');
+        assert(copyNoteBtn !== null, 'Sequencer renders #seq-copy-note-btn');
+        assert(copyModBtn !== null, 'Sequencer renders #seq-copy-mod-btn');
+        assertEqual(copyAllBtn.textContent, 'All', 'All drop target button has exact label "All"');
+        assertEqual(copyNoteBtn.textContent, 'Note', 'Note drop target button has exact label "Note"');
+        assertEqual(copyModBtn.textContent, 'Mod', 'Mod drop target button has exact label "Mod"');
+        assertEqual(toolsDiv.children[0], copyLabel, 'Copy label appears at the left of copy drop targets');
+        assertEqual(toolsDiv.children[1], copyAllBtn, 'All drop target follows Copy label');
+        assert(toolsDiv.children.indexOf(noteTools) > toolsDiv.children.indexOf(copyAllBtn), 'Note tools appear to the right of copy drop targets');
+        assert(!copyAllBtn.classList.contains('is-visible'), 'All drop target button is hidden when not dragging');
 
         // 1-to-1 mode: Step 1 -> Step 3
         seqProg.setValue('ARP_PTN_STEP01', 6); // 3rd
@@ -3262,7 +3272,8 @@ async function runAllTests(logger = console.log) {
         seqProg.setValue('ARP_PTN_STEP_MOD03', 0); // Low
         const stepStore = {};
         stepCols[0].dispatchEvent(makeDragEvent('dragstart', { _store: stepStore }));
-        assert(copyAllBtn.classList.contains('is-visible'), 'Copy to all button becomes visible on step-col dragstart');
+        assert(copyLabel.classList.contains('is-visible'), 'Copy label becomes visible on step-col dragstart');
+        assert(copyAllBtn.classList.contains('is-visible'), 'Copy All button becomes visible on step-col dragstart');
         stepCols[0].dispatchEvent(makeDragEvent('dragover', { _store: stepStore }));
         assert(!stepCols[0].classList.contains('slot-drop-hover'), 'Self dragover on step-col 1 does not add slot-drop-hover');
         stepCols[2].dispatchEvent(makeDragEvent('dragover', { _store: stepStore }));
@@ -3296,6 +3307,26 @@ async function runAllTests(logger = console.log) {
             }
         }
         assert(allStepsMatched, '1-to-all drop copies step 2 mode and mod to all 16 steps');
+
+        // Copy Note only & Copy Mod only drop targets
+        seqProg.setValue('ARP_PTN_STEP01', 4);     // 1st
+        seqProg.setValue('ARP_PTN_STEP_MOD01', 0); // Low
+        seqProg.setValue('ARP_PTN_STEP05', 1);     // Off
+        seqProg.setValue('ARP_PTN_STEP_MOD05', 2); // High
+        const noteOnlyStore = {};
+        stepCols[0].dispatchEvent(makeDragEvent('dragstart', { _store: noteOnlyStore }));
+        assert(copyNoteBtn.classList.contains('is-visible') && copyModBtn.classList.contains('is-visible'), 'Copy Note and Copy Mod become visible on dragstart');
+        copyNoteBtn.dispatchEvent(makeDragEvent('drop', { _store: noteOnlyStore }));
+        assert(!copyNoteBtn.classList.contains('is-visible'), 'Copy Note hides after drop');
+        assertEqual(seqProg.getValue('ARP_PTN_STEP05'), 4, 'Copy Note copies step 1 Note to step 5');
+        assertEqual(seqProg.getValue('ARP_PTN_STEP_MOD05'), 2, 'Copy Note preserves step 5 Mod level');
+
+        const modOnlyStore = {};
+        stepCols[0].dispatchEvent(makeDragEvent('dragstart', { _store: modOnlyStore }));
+        copyModBtn.dispatchEvent(makeDragEvent('drop', { _store: modOnlyStore }));
+        assert(!copyModBtn.classList.contains('is-visible'), 'Copy Mod hides after drop');
+        assertEqual(seqProg.getValue('ARP_PTN_STEP_MOD05'), 0, 'Copy Mod copies step 1 Mod level to step 5');
+        assertEqual(seqProg.getValue('ARP_PTN_STEP05'), 4, 'Copy Mod preserves step 5 Note mode');
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;
@@ -5126,6 +5157,100 @@ async function runAllTests(logger = console.log) {
 
         document.registerMockElement('sync-action-dialog', null);
         document.registerMockElement('chk-prog-live-sync', null);
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    // =========================================================================
+    // Section 63: Sequencer Control Cleanups (Note/Mod Sections, A, Copy Targets)
+    // =========================================================================
+    logger('\n--- [63] Sequencer Control Cleanups (Note/Mod Sections, A, Copy Targets) ---');
+    try {
+        const seqCleanProg = new MM2Program();
+        const seqCleanEl = createArpSequencer(() => seqCleanProg, () => { });
+        const titleEl = seqCleanEl.querySelector('.sequencer-title');
+        const noteTools = seqCleanEl.querySelector('#seq-note-tools');
+        const modTools = seqCleanEl.querySelector('#seq-mod-tools');
+        const clearBtn = seqCleanEl.querySelector('#seq-clear-btn');
+        const randBtn = seqCleanEl.querySelector('#seq-random-btn');
+        const autoBtn = seqCleanEl.querySelector('#seq-note-auto-btn');
+        const modRandBtn = seqCleanEl.querySelector('#seq-mod-random-btn');
+        const modClearBtn = seqCleanEl.querySelector('#seq-mod-clear-btn');
+
+        assertEqual(titleEl.textContent, 'SEQUENCER', 'Sequencer title is SEQUENCER');
+        assert(noteTools !== null && modTools !== null, 'Sequencer renders separate Note and Mod tool sections');
+        assertEqual(noteTools.querySelector('.seq-group-label').textContent, 'Note', 'Note section has Note label');
+        assertEqual(modTools.querySelector('.seq-group-label').textContent, 'Mod', 'Mod section has Mod label');
+        assert(clearBtn.className.includes('btn-slot-icon') && clearBtn.className.includes('btn-slot-clear'), 'seq-clear-btn uses slot icon clear classes');
+        assert(!clearBtn.className.includes('btn-subtle'), 'seq-clear-btn does not use btn-subtle color override');
+        assertEqual(clearBtn.textContent, '✕', 'seq-clear-btn renders ✕ icon');
+        assert(randBtn.className.includes('btn-slot-icon'), 'seq-random-btn uses slot icon class');
+        assert(!randBtn.className.includes('btn-subtle'), 'seq-random-btn does not use btn-subtle color override');
+        assert(randBtn.innerHTML.includes('<svg'), 'seq-random-btn renders SVG randomize icon');
+        assert(autoBtn !== null && autoBtn.textContent === 'A', 'Note section renders A (Auto) button');
+        assert(modRandBtn !== null && modRandBtn.innerHTML.includes('<svg'), 'Mod section renders Random SVG button');
+        assert(modClearBtn !== null && modClearBtn.textContent === '✕', 'Mod section renders Clear ✕ button');
+
+        // Note A button sets Note steps to Auto (0) without altering Mod levels
+        for (let i = 1; i <= 16; i++) {
+            const n = String(i).padStart(2, '0');
+            seqCleanProg.setValue(`ARP_PTN_STEP${n}`, 11);
+            seqCleanProg.setValue(`ARP_PTN_STEP_MOD${n}`, 3);
+        }
+        autoBtn.click();
+        assertEqual(seqCleanProg.getValue('ARP_PTN_STEP01'), 0, 'Note A button sets step 1 Note to Auto (0)');
+        assertEqual(seqCleanProg.getValue('ARP_PTN_STEP16'), 0, 'Note A button sets step 16 Note to Auto (0)');
+        assertEqual(seqCleanProg.getValue('ARP_PTN_STEP_MOD01'), 3, 'Note A button preserves Mod level');
+
+        // Note Clear button sets Note steps to Off (1) without altering Mod levels
+        seqCleanProg.setValue('ARP_PTN_STEP_MOD01', 2);
+        clearBtn.click();
+        assertEqual(seqCleanProg.getValue('ARP_PTN_STEP01'), 1, 'Note Clear sets step 1 Note to Off (1)');
+        assertEqual(seqCleanProg.getValue('ARP_PTN_STEP_MOD01'), 2, 'Note Clear preserves Mod level');
+
+        // Mod Clear button sets Mod levels to Mid (1) without altering Note steps
+        seqCleanProg.setValue('ARP_PTN_STEP01', 6);
+        modClearBtn.click();
+        assertEqual(seqCleanProg.getValue('ARP_PTN_STEP_MOD01'), 1, 'Mod Clear resets step 1 Mod level to Mid (1)');
+        assertEqual(seqCleanProg.getValue('ARP_PTN_STEP_MOD16'), 1, 'Mod Clear resets step 16 Mod level to Mid (1)');
+        assertEqual(seqCleanProg.getValue('ARP_PTN_STEP01'), 6, 'Mod Clear preserves Note mode');
+
+        // Mod Random button randomizes Mod levels without altering Note steps
+        modRandBtn.click();
+        assertEqual(seqCleanProg.getValue('ARP_PTN_STEP01'), 6, 'Mod Random preserves Note mode');
+
+        // No chords toggle + arrow inside Note section
+        const noChordsBtn = seqCleanEl.querySelector('#seq-no-chords-btn');
+        const noChordsArrow = seqCleanEl.querySelector('.seq-tool-arrow');
+        assert(noteTools.children.indexOf(noChordsBtn) < noteTools.children.indexOf(clearBtn), 'No chords toggle appears to the left of Note Clear button');
+        assert(noteTools.children.indexOf(randBtn) < noteTools.children.indexOf(clearBtn), 'Note Random button appears to the left of Note Clear button');
+        assert(noChordsArrow !== null && noChordsArrow.textContent === '←', 'Left-facing arrow indicator (←) is rendered');
+        assert(noteTools.children.indexOf(noChordsBtn) < noteTools.children.indexOf(noChordsArrow) &&
+            noteTools.children.indexOf(noChordsArrow) < noteTools.children.indexOf(randBtn), 'Left-facing arrow appears between No chords toggle and Note Random button');
+        assert(noChordsBtn !== null, 'seq-no-chords-btn toggle exists');
+        assert(noChordsBtn.className.includes('btn-param-toggle'), 'seq-no-chords-btn uses btn-param-toggle styling');
+        assertEqual(noChordsBtn.querySelector('.toggle-label').textContent, 'No chords', 'No chords toggle label is brief');
+        assertEqual(noChordsBtn.querySelector('.toggle-state-badge'), null, 'No chords toggle omits OFF/ON state badge');
+        assertEqual(noChordsBtn.getAttribute('aria-pressed'), 'false', 'No chords toggle aria-pressed starts false');
+
+        noChordsBtn.click();
+        assert(noChordsBtn.className.includes('active'), 'No chords toggle adds active class when ON');
+        assertEqual(noChordsBtn.getAttribute('aria-pressed'), 'true', 'No chords toggle aria-pressed updates to true');
+
+        let sawChord = false;
+        for (let run = 0; run < 20; run++) {
+            randBtn.click();
+            for (let i = 1; i <= 16; i++) {
+                const n = String(i).padStart(2, '0');
+                if (seqCleanProg.getValue(`ARP_PTN_STEP${n}`) === 11) {
+                    sawChord = true;
+                    break;
+                }
+            }
+            if (sawChord) break;
+        }
+        assertEqual(sawChord, false, 'Randomize omits Chord (11) when No chords toggle is ON');
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;
