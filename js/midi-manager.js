@@ -30,6 +30,7 @@ class MidiManager {
         this.detectedFwId = null; // Raw OFFSET_FW byte from hardware SysEx dump
         this._probeTimeout = null;
         this._isProbing = false;
+        this._probeCallback = null;
         this._periodicCheckInterval = null;
         this._lastMidiActivity = Date.now();
 
@@ -281,6 +282,11 @@ class MidiManager {
             this._probeTimeout = null;
         }
         this._isProbing = false;
+        if (this._probeCallback) {
+            const cb = this._probeCallback;
+            this._probeCallback = null;
+            cb(null);
+        }
     }
 
     resetHardwareResponsiveness() {
@@ -312,42 +318,96 @@ class MidiManager {
     }
 
     /**
-     * Probes downstream MM2 reachability by requesting Part A.
-     * If no reply arrives within timeoutMs (and optional retries are exhausted), marks hardware as unresponsive.
-     * Flagged as a probe so background health checks do not overwrite active editor patch data.
+     * Shared read-only SysEx dump request with timeout, optional retries, and probe suppression
+     * so background checks and state comparisons do not overwrite active editor patch data.
      */
-    probeHardware(timeoutMs = 2000, { retries = 0 } = {}) {
-        if (!this.inPort || !this.outPort) return false;
-        if (this._probeTimeout) clearTimeout(this._probeTimeout);
+    _startProbeRequest(slot = 0, {
+        timeoutMs = 2000,
+        retries = 0,
+        emitProbeEvents = false,
+        markUnresponsiveOnTimeout = false,
+        onComplete = null
+    } = {}) {
+        if (!this.inPort || !this.outPort) {
+            if (onComplete) onComplete(null);
+            return false;
+        }
+        this.cancelProbe();
 
         this._isProbing = true;
-        this.emit('probe-start', { timeoutMs });
+        this._probeCallback = onComplete;
+        if (emitProbeEvents) {
+            this.emit('probe-start', { timeoutMs });
+        }
 
         let remainingRetries = Math.max(0, retries);
         const scheduleAttemptTimeout = () => {
             this._probeTimeout = setTimeout(() => {
                 this._probeTimeout = null;
                 if (!this.inPort || !this.outPort) {
-                    this._isProbing = false;
+                    this.cancelProbe();
                     return;
                 }
                 if (remainingRetries > 0) {
                     remainingRetries--;
-                    this.fetchProgram(0);
+                    this.fetchProgram(slot);
                     scheduleAttemptTimeout();
                     return;
                 }
-                // Mark unresponsive, but preserve _isProbing so any late-arriving SysEx response
-                // to this probe is still recognized as a probe response (isProbe=true) and does
-                // not leak as an unsolicited dump into active banks or overwrite editor data.
-                this.markHardwareResponsive(false);
-                this.emit('hardware-timeout', { inPort: this.inPort, outPort: this.outPort });
-                this.emit('probe-end', { success: false });
+                const cb = this._probeCallback;
+                this._probeCallback = null;
+                if (markUnresponsiveOnTimeout) {
+                    // Preserve _isProbing so any late-arriving SysEx response is still
+                    // recognized as a probe response and does not overwrite editor data.
+                    this.markHardwareResponsive(false);
+                    this.emit('hardware-timeout', { inPort: this.inPort, outPort: this.outPort });
+                } else {
+                    this._isProbing = false;
+                }
+                if (emitProbeEvents) {
+                    this.emit('probe-end', { success: false });
+                }
+                if (cb) cb(null);
             }, timeoutMs);
         };
 
         scheduleAttemptTimeout();
-        return this.fetchProgram(0);
+        const sent = this.fetchProgram(slot);
+        if (!sent) {
+            this.cancelProbe();
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Probes downstream MM2 reachability by requesting Part A.
+     * If no reply arrives within timeoutMs (and optional retries are exhausted), marks hardware as unresponsive.
+     * Flagged as a probe so background health checks do not overwrite active editor patch data.
+     */
+    probeHardware(timeoutMs = 2000, { retries = 0 } = {}) {
+        return this._startProbeRequest(0, {
+            timeoutMs,
+            retries,
+            emitProbeEvents: true,
+            markUnresponsiveOnTimeout: true
+        });
+    }
+
+    /**
+     * Requests a single read-only SysEx dump for Part A (0) or Part B (1) without mutating editor state.
+     * Resolves with `{ program, slot, rawBytes, version }` on reply, or `null` on timeout/failure.
+     */
+    requestProgramDump(slot = 0, { timeoutMs = 2000, retries = 0, markUnresponsiveOnTimeout = false } = {}) {
+        return new Promise((resolve) => {
+            this._startProbeRequest(slot, {
+                timeoutMs,
+                retries,
+                emitProbeEvents: false,
+                markUnresponsiveOnTimeout,
+                onComplete: resolve
+            });
+        });
     }
 
     checkMM2Detection() {
@@ -517,17 +577,27 @@ class MidiManager {
             const isProbe = this._isProbing;
             this._isProbing = false;
             this.lastFetchedSlot = 0; // Consume fetch target slot so subsequent dumps default to Slot A
+            const probeCb = isProbe ? this._probeCallback : null;
             if (isProbe) {
+                this._probeCallback = null;
+                if (this._probeTimeout) {
+                    clearTimeout(this._probeTimeout);
+                    this._probeTimeout = null;
+                }
                 this.emit('probe-end', { success: true });
             }
             this.markHardwareResponsive(true);
-            this.emit('program-received', {
+            const payload = {
                 program,
                 slot,
                 rawBytes: normalized,
                 version,
                 isProbe
-            });
+            };
+            this.emit('program-received', payload);
+            if (probeCb) {
+                probeCb(payload);
+            }
         }
     }
 

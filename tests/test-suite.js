@@ -3811,10 +3811,11 @@ async function runAllTests(logger = console.log) {
         await syncApp.promptReconnectSync({ isReconnect: true, portName: 'MicroMonsta 2' });
         assertEqual(pushAllCount, 1, 'Connection sync push triggers pushAllPartsToHardware');
 
-        // 2. Live sync toggle uses the same unified sync-action-dialog
+        // 2. Live sync toggle uses the same unified sync-action-dialog (when HW differs or check times out)
         syncMidi.inPort = { id: 'mm2-in', name: 'MicroMonsta 2' };
         syncMidi.outPort = { id: 'mm2-out', name: 'MicroMonsta 2', send: () => { } };
         syncMidi.hardwareResponsive = true;
+        syncMidi.requestProgramDump = async () => null;
         const chkLiveSync = document.createElement('input');
         chkLiveSync.type = 'checkbox';
         chkLiveSync.id = 'chk-prog-live-sync';
@@ -4980,6 +4981,151 @@ async function runAllTests(logger = console.log) {
             const cy = dot.getAttribute('cy') || '';
             assert(!cx.includes('NaN') && !cy.includes('NaN'), `Algo ${algo} cutoff dot has finite coordinates (${cx}, ${cy})`);
         }
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
+    // =========================================================================
+    // Section 62: Skip Sync Dialog When Hardware & Editor Already Match
+    // =========================================================================
+    logger('\n--- [62] Skip Sync Dialog When Hardware & Editor Already Match ---');
+    try {
+        // 1. programsMatch helper
+        const progA = new MM2Program();
+        progA.name = 'LEAD_01';
+        progA.setValue('FILTER_FREQ', 120);
+        const syxActive = progA.toSysEx(-1); // CMD_LOAD_ACTIVE (0x03)
+        const syxLayerA = progA.toSysEx(0);  // CMD_LOAD_A (0x01)
+        assert(programsMatch(syxActive, syxLayerA), 'programsMatch ignores OFFSET_CMD differences');
+        assert(programsMatch(progA, syxActive), 'programsMatch compares MM2Program and raw SysEx');
+
+        const progDiffName = progA.clone();
+        progDiffName.name = 'LEAD_02';
+        assert(!programsMatch(progA, progDiffName), 'programsMatch detects patch name differences');
+
+        const progDiffParam = progA.clone();
+        progDiffParam.setValue('FILTER_FREQ', 121);
+        assert(!programsMatch(progA, progDiffParam), 'programsMatch detects parameter differences');
+
+        const v2Bytes = progA.toSysEx(0, 2);
+        assert(programsMatch(progA, v2Bytes), 'programsMatch normalizes v2 SysEx to v3 for comparison');
+
+        // 2. requestProgramDump read-only peek + timeout
+        const peekApp = new App();
+        peekApp.midi.saveSettings = () => { };
+        peekApp.showNotification = () => { };
+        peekApp.modeProbeTimeoutMs = 25;
+        peekApp.midi.inPort = { id: 'peek-in', name: 'MicroMonsta 2' };
+
+        const hwPartA = new MM2Program();
+        hwPartA.name = 'HW_A';
+        hwPartA.setValue('OSC1_SHAPE', 77);
+        const hwPartB = new MM2Program();
+        hwPartB.name = 'HW_B';
+        hwPartB.setValue('OSC2_SHAPE', 55);
+
+        let hwRespondPartB = false;
+        peekApp.midi.outPort = {
+            id: 'peek-out',
+            name: 'MicroMonsta 2',
+            send: (bytes) => {
+                if (bytes[6] === 0x41) {
+                    setTimeout(() => {
+                        peekApp.midi.handleCompleteSysEx(hwPartA.toSysEx(-1));
+                    }, 5);
+                } else if (bytes[6] === 0x42 && hwRespondPartB) {
+                    setTimeout(() => {
+                        peekApp.midi.handleCompleteSysEx(hwPartB.toSysEx(-1));
+                    }, 5);
+                }
+            }
+        };
+
+        const beforeName = peekApp.timbreA.name;
+        const peekResult = await peekApp.midi.requestProgramDump(0, { timeoutMs: 50 });
+        assert(peekResult !== null && peekResult.program.name === 'HW_A', 'requestProgramDump resolves with hardware Part A dump');
+        assertEqual(peekApp.timbreA.name, beforeName, 'requestProgramDump does not mutate editor timbreA');
+
+        const timeoutResult = await peekApp.midi.requestProgramDump(1, { timeoutMs: 25 });
+        assertEqual(timeoutResult, null, 'requestProgramDump resolves null on timeout');
+        assertEqual(peekApp.midi.hardwareResponsive, true, 'requestProgramDump timeout does not mark hardware unresponsive by default');
+
+        // 3. Live Sync activation skips dialog when HW matches editor
+        let modalShownCount = 0;
+        const peekSyncDialog = {
+            open: false,
+            returnValue: 'ignore',
+            _listeners: {},
+            addEventListener: (ev, fn) => { peekSyncDialog._listeners[ev] = fn; },
+            removeEventListener: (ev, fn) => { if (peekSyncDialog._listeners[ev] === fn) delete peekSyncDialog._listeners[ev]; },
+            showModal: () => {
+                modalShownCount++;
+                peekSyncDialog.returnValue = 'ignore';
+                if (peekSyncDialog._listeners.close) peekSyncDialog._listeners.close();
+            }
+        };
+        document.registerMockElement('sync-action-dialog', peekSyncDialog);
+        const chkLive = document.createElement('input');
+        chkLive.type = 'checkbox';
+        chkLive.id = 'chk-prog-live-sync';
+        document.registerMockElement('chk-prog-live-sync', chkLive);
+        peekApp.setupProgramBar();
+
+        peekApp.timbreA = hwPartA.clone();
+        chkLive.checked = true;
+        await chkLive.onchange();
+        assertEqual(modalShownCount, 0, 'Live Sync activation skips dialog when HW and editor match');
+        assertEqual(peekApp.midi.liveSync, true, 'Live Sync is enabled immediately when HW and editor match');
+
+        // Live Sync activation shows dialog when HW differs from editor
+        peekApp._setLiveSyncState(false);
+        peekApp.timbreA.setValue('OSC1_SHAPE', 12);
+        chkLive.checked = true;
+        await chkLive.onchange();
+        assertEqual(modalShownCount, 1, 'Live Sync activation shows dialog when HW and editor differ');
+        assertEqual(peekApp.midi.liveSync, false, 'Live Sync remains disabled when mismatch dialog is ignored');
+
+        // 4. Reconnect skips dialog when HW and editor match (monotimbral)
+        modalShownCount = 0;
+        peekApp._isPromptingSync = false;
+        peekApp.timbreA = hwPartA.clone();
+        peekApp.setTimbralMode('monotimbral');
+        hwRespondPartB = false;
+        await peekApp.promptReconnectSync({ isReconnect: true, portName: 'MicroMonsta 2' });
+        assertEqual(modalShownCount, 0, 'Reconnect skips dialog when monotimbral Part A matches and Part B is silent');
+        assertEqual(peekApp.syncStatus, 'synced', 'Reconnect sets syncStatus to synced when matched');
+
+        // 5. Reconnect skips dialog when bitimbral Part A & Part B both match
+        peekApp._isPromptingSync = false;
+        peekApp.setTimbralMode('bitimbral');
+        peekApp.timbreA = hwPartA.clone();
+        peekApp.timbreB = hwPartB.clone();
+        hwRespondPartB = true;
+        await peekApp.promptReconnectSync({ isReconnect: true, portName: 'MicroMonsta 2' });
+        assertEqual(modalShownCount, 0, 'Reconnect skips dialog when bitimbral Part A and Part B both match');
+
+        // 6. Reconnect shows dialog when Part A matches but Part B differs
+        peekApp._isPromptingSync = false;
+        peekApp.timbreB.setValue('OSC2_SHAPE', 99);
+        await peekApp.promptReconnectSync({ isReconnect: true, portName: 'MicroMonsta 2' });
+        assertEqual(modalShownCount, 1, 'Reconnect shows dialog when Part A matches but Part B differs');
+
+        // 7. Reconnect shows dialog immediately without probing Part B when Part A differs
+        peekApp._isPromptingSync = false;
+        let partBQueried = false;
+        const origOutSend = peekApp.midi.outPort.send;
+        peekApp.midi.outPort.send = (bytes) => {
+            if (bytes[6] === 0x42) partBQueried = true;
+            origOutSend(bytes);
+        };
+        peekApp.timbreA.setValue('OSC1_SHAPE', 1);
+        await peekApp.promptReconnectSync({ isReconnect: true, portName: 'MicroMonsta 2' });
+        assertEqual(modalShownCount, 2, 'Reconnect shows dialog when Part A differs');
+        assertEqual(partBQueried, false, 'Reconnect skips Part B probe when Part A already differs');
+
+        document.registerMockElement('sync-action-dialog', null);
+        document.registerMockElement('chk-prog-live-sync', null);
     } catch (e) {
         logger(`  Error: ${e.message}`);
         failed++;
