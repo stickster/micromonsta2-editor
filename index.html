@@ -126,12 +126,8 @@
                             title="Scan bank for duplicate patches">Manage Duplicates</button>
                         <button class="btn btn-sm btn-subtle" id="btn-condense-bank"
                             title="Remove empty/duplicate slots and pack sequentially">Condense Bank</button>
-                        <button class="btn btn-sm btn-subtle" id="btn-rename-bank"
-                            title="Rename the currently selected bank">Rename Bank</button>
                         <button class="btn btn-sm btn-danger" id="btn-delete-all-patches"
                             title="Delete all patches in the current bank">Delete All Patches</button>
-                        <button class="btn btn-sm btn-danger" id="btn-delete-bank"
-                            title="Delete the currently selected bank">Delete Bank</button>
                         <span id="bank-duplicates-badge" class="badge badge-warning" style="display: none;"></span>
                     </div>
 
@@ -265,6 +261,18 @@
             <form method="dialog" class="dialog-button-bar">
                 <button type="submit" value="cancel" class="btn btn-secondary" autofocus>Cancel</button>
                 <button type="submit" value="confirm" class="btn btn-warning">Push to MM2</button>
+            </form>
+        </div>
+    </dialog>
+
+    <!-- Delete Bank Confirmation Dialog -->
+    <dialog id="delete-bank-dialog" class="modal-dialog-native" aria-labelledby="delete-bank-title">
+        <div class="dialog-native-box">
+            <h3 id="delete-bank-title" class="dialog-title">Delete Bank?</h3>
+            <p id="delete-bank-desc" class="dialog-desc"></p>
+            <form method="dialog" class="dialog-button-bar">
+                <button type="submit" value="cancel" class="btn btn-secondary" autofocus>Cancel</button>
+                <button type="submit" value="confirm" class="btn btn-danger">Delete Bank</button>
             </form>
         </div>
     </dialog>
