@@ -2485,15 +2485,19 @@ footer.audition-footer {
 }
 
 .sync-badge {
-    font-size: 11px;
-    font-weight: 700;
-    font-family: var(--font-mono);
-    padding: 4px 8px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
     border-radius: 4px;
     border: 1px solid transparent;
     display: inline-flex;
     align-items: center;
-    white-space: nowrap;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.sync-badge svg {
+    display: block;
 }
 
 .sync-badge.synced {
@@ -2516,9 +2520,9 @@ footer.audition-footer {
 }
 
 .sync-badge.fetching {
-    background: rgba(155, 89, 182, 0.2);
-    color: var(--accent-purple);
-    border-color: rgba(155, 89, 182, 0.5);
+    background: rgba(0, 210, 255, 0.15);
+    color: var(--accent-cyan);
+    border-color: rgba(0, 210, 255, 0.4);
 }
 
 .sync-badge.error,
@@ -2530,9 +2534,9 @@ footer.audition-footer {
 }
 
 .sync-badge.offline {
-    background: rgba(149, 165, 166, 0.15);
-    color: var(--text-secondary);
-    border-color: rgba(149, 165, 166, 0.35);
+    background: rgba(238, 82, 83, 0.15);
+    color: var(--accent-red);
+    border-color: rgba(238, 82, 83, 0.35);
 }
 
 .undo-redo-group {

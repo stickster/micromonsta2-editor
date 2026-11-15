@@ -1404,33 +1404,48 @@ class App {
         if (!badge) return;
 
         badge.className = `sync-badge ${status}`;
-        switch (status) {
-            case 'synced':
-                badge.textContent = this.midi.liveSync ? 'Live Synced' : 'Synced with MM2';
-                badge.title = this.midi.liveSync
+        const wrapIcon = (paths) => `<svg class="icon-line" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+        const statusMeta = {
+            synced: {
+                icon: wrapIcon('<path d="M3 8.5 6.5 12 13 4.5"></path>'),
+                label: this.midi.liveSync ? 'Live Synced' : 'Synced with MM2',
+                title: this.midi.liveSync
                     ? 'Live Parameter Sync active (all tweaks stream immediately via NRPN)'
-                    : 'Sound matches hardware state';
-                break;
-            case 'streaming':
-                badge.textContent = 'Streaming NRPN...';
-                badge.title = 'Real-time parameter changes transmitting to MM2';
-                break;
-            case 'modified':
-                badge.textContent = 'Modified (Push to sync)';
-                badge.title = 'Edits pending. Push to MM2 or enable Live Sync.';
-                break;
-            case 'fetching':
-                badge.textContent = 'Fetching from MM2...';
-                badge.title = 'Requesting active edit buffer from synth hardware';
-                break;
-            case 'failed':
-                badge.textContent = 'Sync Failed (Offline)';
-                badge.title = 'Hardware did not respond to SysEx dump request. Check cables and channel settings.';
-                break;
-            case 'offline':
-                badge.textContent = 'Not Synced (Offline)';
-                badge.title = 'Not connected to MicroMonsta 2 hardware';
-                break;
+                    : 'Sound matches hardware state'
+            },
+            streaming: {
+                icon: wrapIcon('<path d="M9 1.5 3.5 9h4.5l-1 5.5L12.5 7H8l1-5.5Z"></path>'),
+                label: 'Streaming NRPN...',
+                title: 'Real-time parameter changes transmitting to MM2'
+            },
+            modified: {
+                icon: wrapIcon('<circle cx="8" cy="8" r="6"></circle><path d="M8 5v3.5"></path><path d="M8 11.2h.01"></path>'),
+                label: 'Modified (Push to sync)',
+                title: 'Edits pending. Push to MM2 or enable Live Sync.'
+            },
+            fetching: {
+                icon: wrapIcon('<path d="M8 2.5v10.5M4 9l4 4 4-4"></path>'),
+                label: 'Fetching from MM2...',
+                title: 'Requesting active edit buffer from synth hardware'
+            },
+            failed: {
+                icon: wrapIcon('<circle cx="8" cy="8" r="6"></circle><path d="M3.8 12.2 12.2 3.8"></path>'),
+                label: 'Sync Failed (Offline)',
+                title: 'Hardware did not respond to SysEx dump request. Check cables and channel settings.'
+            },
+            offline: {
+                icon: wrapIcon('<path d="M6.5 10.5 5 12a2.5 2.5 0 0 1-3.5-3.5l1.5-1.5a2.5 2.5 0 0 1 3.5 0"></path><path d="M9.5 5.5 11 4a2.5 2.5 0 0 1 3.5 3.5L13 9a2.5 2.5 0 0 1-3.5 0"></path><path d="M5.5 3v1.5M3 5.5h1.5M10.5 13v-1.5M13 10.5h-1.5"></path>'),
+                label: 'Not Synced (Offline)',
+                title: 'Not connected to MicroMonsta 2 hardware'
+            }
+        };
+        const meta = statusMeta[status];
+        if (meta) {
+            badge.innerHTML = meta.icon;
+            badge.title = meta.title;
+            if (typeof badge.setAttribute === 'function') {
+                badge.setAttribute('aria-label', meta.label);
+            }
         }
     }
 

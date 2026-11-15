@@ -950,7 +950,8 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
     });
 
     await runSection('\n--- [49] Non-Connected Sync Status Invariant Tests ---', async () => {
-        const mockBadge = { className: 'sync-badge synced', textContent: 'Synced', title: '' };
+        const mockBadge = document.createElement('div');
+        mockBadge.className = 'sync-badge synced';
         document.registerMockElement('editor-sync-badge', mockBadge);
 
         const offApp = new App();
@@ -966,7 +967,8 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         offApp.updateSyncStatus('synced');
         assertEqual(offApp.syncStatus, 'offline', 'Disconnected: updateSyncStatus(synced) resolves to offline');
         assertEqual(mockBadge.className, 'sync-badge offline', 'Disconnected: badge class is sync-badge offline');
-        assertEqual(mockBadge.textContent, 'Not Synced (Offline)', 'Disconnected: badge text is Not Synced (Offline)');
+        assertEqual(mockBadge.getAttribute('aria-label'), 'Not Synced (Offline)', 'Disconnected: badge aria-label is Not Synced (Offline)');
+        assert(mockBadge.innerHTML.includes('<svg'), 'Disconnected: badge renders SVG icon');
 
         offApp.updateSyncStatus('streaming');
         assertEqual(offApp.syncStatus, 'offline', 'Disconnected: updateSyncStatus(streaming) resolves to offline');
@@ -986,20 +988,20 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         offMidi.hardwareResponsive = false;
         offApp.updateSyncStatus('synced');
         assertEqual(offApp.syncStatus, 'failed', 'No Response: updateSyncStatus(synced) resolves to failed');
-        assertEqual(mockBadge.textContent, 'Sync Failed (Offline)', 'No Response: badge text is Sync Failed (Offline)');
+        assertEqual(mockBadge.getAttribute('aria-label'), 'Sync Failed (Offline)', 'No Response: badge aria-label is Sync Failed (Offline)');
 
         // 6. Connected allows synced, then losing connection via state-change clears synced -> offline
         offMidi.hardwareResponsive = true;
         offApp.updateSyncStatus('synced');
         assertEqual(offApp.syncStatus, 'synced', 'Connected: updateSyncStatus(synced) succeeds');
-        assertEqual(mockBadge.textContent, 'Synced with MM2', 'Connected: badge text is Synced with MM2');
+        assertEqual(mockBadge.getAttribute('aria-label'), 'Synced with MM2', 'Connected: badge aria-label is Synced with MM2');
 
         offMidi.inPort = null;
         offMidi.hardwareResponsive = null;
         offMidi.emit('state-change');
         assertEqual(offApp.syncStatus, 'offline', 'Losing port via state-change clears synced to offline');
         assertEqual(mockBadge.className, 'sync-badge offline', 'Losing port updates badge class to sync-badge offline');
-        assertEqual(mockBadge.textContent, 'Not Synced (Offline)', 'Losing port updates badge text to Not Synced (Offline)');
+        assertEqual(mockBadge.getAttribute('aria-label'), 'Not Synced (Offline)', 'Losing port updates badge aria-label to Not Synced (Offline)');
 
         document.registerMockElement('editor-sync-badge', null);
     });
@@ -1401,26 +1403,40 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         app._setLiveSyncState(true);
         app.updateSyncStatus('synced');
         assertEqual(app.syncStatus, 'synced', 'Initial syncStatus is synced');
-        assertEqual(badge.textContent, 'Live Synced', 'Badge shows Live Synced while Live Sync is active');
+        assertEqual(badge.getAttribute('aria-label'), 'Live Synced', 'Badge aria-label shows Live Synced while Live Sync is active');
+        assert(badge.innerHTML.includes('<svg') && badge.innerHTML.includes('fill="none"') && badge.innerHTML.includes('stroke="currentColor"'), 'Badge renders single-color outline SVG icon');
 
         // Uncheck Live Sync while synced -> should remain synced ("Synced with MM2"), not Modified
         chkLiveSync.checked = false;
         await chkLiveSync.onchange();
         assertEqual(app.midi.liveSync, false, 'Live Sync disabled');
         assertEqual(app.syncStatus, 'synced', 'Disabling Live Sync preserves synced status');
-        assertEqual(badge.textContent, 'Synced with MM2', 'Badge updates to Synced with MM2 instead of Modified');
+        assertEqual(badge.getAttribute('aria-label'), 'Synced with MM2', 'Badge aria-label updates to Synced with MM2 instead of Modified');
 
         // Subsequent parameter change while Live Sync is off -> now becomes Modified
         app.onParameterChanged('FILTER_FREQ', 140);
         assertEqual(app.syncStatus, 'modified', 'Parameter change after disabling Live Sync sets status to modified');
-        assertEqual(badge.textContent, 'Modified (Push to sync)', 'Badge updates to Modified after parameter change');
+        assertEqual(badge.getAttribute('aria-label'), 'Modified (Push to sync)', 'Badge aria-label updates to Modified after parameter change');
 
         // Remote disable via applyRemoteLiveSync(false) while synced also preserves synced
         app._setLiveSyncState(true);
         app.updateSyncStatus('synced');
         app.applyRemoteLiveSync(false);
         assertEqual(app.syncStatus, 'synced', 'applyRemoteLiveSync(false) preserves synced status');
-        assertEqual(badge.textContent, 'Synced with MM2', 'applyRemoteLiveSync(false) updates badge to Synced with MM2');
+        assertEqual(badge.getAttribute('aria-label'), 'Synced with MM2', 'applyRemoteLiveSync(false) updates badge aria-label to Synced with MM2');
+
+        // Verify all icon-only status states render distinct outline SVGs and classes
+        const expectedStates = ['synced', 'streaming', 'modified', 'fetching', 'failed', 'offline'];
+        const renderedIcons = new Set();
+        for (const st of expectedStates) {
+            if (st === 'offline') app.midi.inPort = null;
+            else app.midi.inPort = { id: 'in-1', name: 'MicroMonsta 2' };
+            app.updateSyncStatus(st);
+            assertEqual(badge.className, `sync-badge ${st}`, `Badge class reflects ${st}`);
+            assert(badge.innerHTML.includes('<svg') && badge.innerHTML.includes('stroke="currentColor"'), `Badge ${st} renders outline SVG`);
+            renderedIcons.add(badge.innerHTML);
+        }
+        assertEqual(renderedIcons.size, 6, 'All 6 sync status states render distinct SVG icons');
 
         document.registerMockElement('editor-sync-badge', null);
         document.registerMockElement('chk-prog-live-sync', null);
