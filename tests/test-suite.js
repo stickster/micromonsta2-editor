@@ -5256,6 +5256,92 @@ async function runAllTests(logger = console.log) {
         failed++;
     }
 
+    // =========================================================================
+    // [64] Control Focus Cleanup Tests (Buttons, Knobs, Selectors)
+    // =========================================================================
+    logger('\n--- [64] Control Focus Cleanup Tests ---');
+    try {
+        const focusProg = new MM2Program();
+
+        // Toggle button blurs after click
+        const toggleWrap = createToggleButton('ARP_OFF_ON', focusProg);
+        const toggleBtn = toggleWrap.querySelector('button') || toggleWrap.children[0];
+        let toggleBlurred = false;
+        toggleBtn.blur = () => { toggleBlurred = true; };
+        toggleBtn.click();
+        assertEqual(toggleBlurred, true, 'Toggle button blurs after click');
+
+        // Select blurs after change
+        const selectWrap = createSelect('FILTER_ALGO', focusProg);
+        const selectEl = selectWrap.querySelector('.control-select');
+        let selectBlurred = false;
+        selectEl.blur = () => { selectBlurred = true; };
+        selectEl.value = '1';
+        selectEl.dispatchEvent({ type: 'change', target: selectEl });
+        assertEqual(selectBlurred, true, 'Select blurs after change');
+
+        // Knob blurs after dblclick, wheel, and pointerup
+        const knobWrap = createKnob('FILTER_FREQ', focusProg);
+        let knobBlurs = 0;
+        knobWrap.blur = () => { knobBlurs++; };
+        knobWrap.dispatchEvent({ type: 'dblclick', preventDefault: () => {} });
+        assertEqual(knobBlurs, 1, 'Knob blurs after dblclick reset');
+        knobWrap.dispatchEvent({ type: 'wheel', deltaY: -10, preventDefault: () => {} });
+        assertEqual(knobBlurs, 2, 'Knob blurs after wheel');
+
+        const canvas = knobWrap.querySelector('.knob-canvas');
+        const origWinAdd = window.addEventListener;
+        const origWinRem = window.removeEventListener;
+        const winHandlers = new Map();
+        window.addEventListener = (ev, fn) => winHandlers.set(ev, fn);
+        window.removeEventListener = (ev) => winHandlers.delete(ev);
+        try {
+            canvas.dispatchEvent({ type: 'pointerdown', button: 0, clientX: 10, clientY: 10, preventDefault: () => {} });
+            const upFn = winHandlers.get('pointerup');
+            assert(typeof upFn === 'function', 'Knob registers pointerup listener on drag');
+            upFn();
+            assertEqual(knobBlurs, 3, 'Knob blurs after pointerup');
+        } finally {
+            window.addEventListener = origWinAdd;
+            window.removeEventListener = origWinRem;
+        }
+
+        // Global setupControlFocusCleanup blurs any button on click and select on change
+        if (typeof MM2App !== 'undefined' && MM2App.prototype && typeof MM2App.prototype.setupControlFocusCleanup === 'function') {
+            const docListeners = [];
+            const origDocAdd = document.addEventListener;
+            const origBoundFlag = document._mm2FocusCleanupBound;
+            document._mm2FocusCleanupBound = false;
+            document.addEventListener = (ev, fn, useCapture) => {
+                docListeners.push({ ev, fn, useCapture });
+            };
+            try {
+                MM2App.prototype.setupControlFocusCleanup.call({});
+                const clickHook = docListeners.find(l => l.ev === 'click' && l.useCapture === true);
+                const changeHook = docListeners.find(l => l.ev === 'change' && l.useCapture === true);
+                assert(!!clickHook, 'setupControlFocusCleanup registers capture-phase click listener');
+                assert(!!changeHook, 'setupControlFocusCleanup registers capture-phase change listener');
+
+                let anyBtnBlurred = false;
+                const anyBtn = { tagName: 'BUTTON', blur: () => { anyBtnBlurred = true; } };
+                const childInBtn = { tagName: 'SVG', closest: (sel) => (sel === 'button' ? anyBtn : null) };
+                clickHook.fn({ target: childInBtn });
+                assertEqual(anyBtnBlurred, true, 'Capture click listener blurs ancestor button');
+
+                let anySelectBlurred = false;
+                const anySelect = { tagName: 'SELECT', blur: () => { anySelectBlurred = true; } };
+                changeHook.fn({ target: anySelect });
+                assertEqual(anySelectBlurred, true, 'Capture change listener blurs select element');
+            } finally {
+                document.addEventListener = origDocAdd;
+                document._mm2FocusCleanupBound = origBoundFlag;
+            }
+        }
+    } catch (e) {
+        logger(`  Error: ${e.message}`);
+        failed++;
+    }
+
     logger(`\n========================================`);
     logger(` Test Results: ${passed} Passed, ${failed} Failed`);
     logger(`========================================\n`);

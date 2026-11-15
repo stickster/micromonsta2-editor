@@ -559,6 +559,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         if (finalVal !== startVal && onChangeCallback) {
             onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: startVal });
         }
+        if (typeof container.blur === 'function') container.blur();
     }
 
     canvas.addEventListener('pointerdown', onPointerDown);
@@ -593,6 +594,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
                 wheelStartVal = null;
             }, 350);
         }
+        if (typeof container.blur === 'function') container.blur();
     }, { passive: false });
 
     // Reset helper
@@ -607,6 +609,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
                 if (onChangeCallback) onChangeCallback(paramKey, defVal, { isFinal: true, prevVal: curVal });
             }
         }
+        if (typeof container.blur === 'function') container.blur();
     }
 
     // Double click to reset
@@ -869,6 +872,7 @@ function createToggleButton(paramKey, program, onChangeCallback, opts = {}) {
             updateVisual();
             if (onChangeCallback) onChangeCallback(paramKey, next, { isFinal: true, prevVal: current });
         }
+        if (typeof button.blur === 'function') button.blur();
     });
 
     container.appendChild(button);
@@ -1117,6 +1121,7 @@ function createSelect(paramKey, program, onChangeCallback) {
 
     select.addEventListener('change', () => {
         commitSelectValue(parseInt(select.value, 10));
+        if (typeof select.blur === 'function') select.blur();
     });
 
     select.addEventListener('keydown', (e) => {

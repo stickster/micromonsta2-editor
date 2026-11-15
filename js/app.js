@@ -104,6 +104,7 @@ class App {
         this.updateLiveSyncUI();
         this.updateFirmwareUI();
         this.setupKeyboardShortcuts();
+        this.setupControlFocusCleanup();
 
         // On load, always start in Editor mode
         this.switchView('editor');
@@ -156,6 +157,33 @@ class App {
                 this.redo();
             }
         });
+    }
+
+    /**
+     * Remove focus from buttons and select dropdowns after interaction so
+     * QWERTY keyboard piano notes do not visually highlight or re-trigger them.
+     */
+    setupControlFocusCleanup() {
+        if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return;
+        if (document._mm2FocusCleanupBound) return;
+        document._mm2FocusCleanupBound = true;
+
+        document.addEventListener('click', (e) => {
+            const target = e.target;
+            const btn = target && typeof target.closest === 'function'
+                ? target.closest('button')
+                : (target && target.tagName === 'BUTTON' ? target : null);
+            if (btn && typeof btn.blur === 'function') {
+                btn.blur();
+            }
+        }, true);
+
+        document.addEventListener('change', (e) => {
+            const target = e.target;
+            if (target && target.tagName === 'SELECT' && typeof target.blur === 'function') {
+                target.blur();
+            }
+        }, true);
     }
 
     bindEvents() {
