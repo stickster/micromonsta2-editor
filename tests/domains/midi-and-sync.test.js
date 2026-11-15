@@ -1377,4 +1377,53 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         document.registerMockElement('chk-prog-live-sync', null);
     });
 
+    await runSection('\n--- [65] Disabling Live Sync Preserves Synced Status Tests ---', async () => {
+        const app = new App();
+        if (app.tabSync) {
+            app.tabSync.destroy();
+            app.tabSync = null;
+        }
+        app.showNotification = () => { };
+        app.midi.inPort = { id: 'in-1', name: 'MicroMonsta 2' };
+        app.midi.outPort = { id: 'out-1', name: 'MicroMonsta 2', send: () => { } };
+        app.midi.hardwareResponsive = true;
+
+        const badge = document.createElement('span');
+        badge.id = 'editor-sync-badge';
+        document.registerMockElement('editor-sync-badge', badge);
+
+        const chkLiveSync = document.createElement('input');
+        chkLiveSync.type = 'checkbox';
+        chkLiveSync.id = 'chk-prog-live-sync';
+        document.registerMockElement('chk-prog-live-sync', chkLiveSync);
+
+        app.setupProgramBar();
+        app._setLiveSyncState(true);
+        app.updateSyncStatus('synced');
+        assertEqual(app.syncStatus, 'synced', 'Initial syncStatus is synced');
+        assertEqual(badge.textContent, 'Live Synced', 'Badge shows Live Synced while Live Sync is active');
+
+        // Uncheck Live Sync while synced -> should remain synced ("Synced with MM2"), not Modified
+        chkLiveSync.checked = false;
+        await chkLiveSync.onchange();
+        assertEqual(app.midi.liveSync, false, 'Live Sync disabled');
+        assertEqual(app.syncStatus, 'synced', 'Disabling Live Sync preserves synced status');
+        assertEqual(badge.textContent, 'Synced with MM2', 'Badge updates to Synced with MM2 instead of Modified');
+
+        // Subsequent parameter change while Live Sync is off -> now becomes Modified
+        app.onParameterChanged('FILTER_FREQ', 140);
+        assertEqual(app.syncStatus, 'modified', 'Parameter change after disabling Live Sync sets status to modified');
+        assertEqual(badge.textContent, 'Modified (Push to sync)', 'Badge updates to Modified after parameter change');
+
+        // Remote disable via applyRemoteLiveSync(false) while synced also preserves synced
+        app._setLiveSyncState(true);
+        app.updateSyncStatus('synced');
+        app.applyRemoteLiveSync(false);
+        assertEqual(app.syncStatus, 'synced', 'applyRemoteLiveSync(false) preserves synced status');
+        assertEqual(badge.textContent, 'Synced with MM2', 'applyRemoteLiveSync(false) updates badge to Synced with MM2');
+
+        document.registerMockElement('editor-sync-badge', null);
+        document.registerMockElement('chk-prog-live-sync', null);
+    });
+
 });

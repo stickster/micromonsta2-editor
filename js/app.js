@@ -3139,7 +3139,7 @@ class App {
                     }
                 } else {
                     this._setLiveSyncState(false);
-                    this.updateSyncStatus('modified');
+                    this._refreshSyncStatusAfterLiveSyncDisable();
                     this.showNotification('Live Sync DISABLED', 'info');
                 }
             };
@@ -4306,9 +4306,20 @@ class App {
         }
     }
 
+    _refreshSyncStatusAfterLiveSyncDisable() {
+        const nextStatus = (this.syncStatus === 'synced' || this.syncStatus === 'streaming')
+            ? 'synced'
+            : this.syncStatus;
+        this.updateSyncStatus(nextStatus);
+    }
+
     applyRemoteLiveSync(enabled) {
         this._setLiveSyncState(enabled, { broadcast: false });
-        this.updateSyncStatus(enabled && this.isConnectionGood ? 'synced' : 'modified');
+        if (enabled) {
+            this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
+        } else {
+            this._refreshSyncStatusAfterLiveSyncDisable();
+        }
     }
 
     applyLeaderState(state) {
