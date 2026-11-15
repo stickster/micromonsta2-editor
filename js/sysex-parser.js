@@ -242,6 +242,22 @@ function normalizeProgram(bytes) {
 }
 
 /**
+ * Compares two MM2Program instances or raw SysEx buffers for identical patch content
+ * (name, category, and all sound parameters, ignoring header/command/firmware bytes).
+ */
+function programsMatch(progA, progB) {
+    const rawA = progA instanceof MM2Program ? progA._data : (progA && progA.rawData ? progA.rawData : progA);
+    const rawB = progB instanceof MM2Program ? progB._data : (progB && progB.rawData ? progB.rawData : progB);
+    const normA = rawA ? normalizeProgram(rawA) : null;
+    const normB = rawB ? normalizeProgram(rawB) : null;
+    if (!normA || !normB) return false;
+    for (let i = OFFSET_NAME; i < SYSEX_V3_LEN - 1; i++) {
+        if (normA[i] !== normB[i]) return false;
+    }
+    return true;
+}
+
+/**
  * Extracts all valid MM2 SysEx messages with source firmware metadata from an arbitrary byte array
  * @returns {Array<{ bytes: Uint8Array, version: number, fwId: number }>}
  */
