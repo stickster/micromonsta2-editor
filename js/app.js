@@ -1001,6 +1001,20 @@ class App {
                 ? `Memory M${i + 1}: "${mem.name}" (click to load, drag to copy)`
                 : `Memory M${i + 1} (Empty — drag a Part or Memory here)`;
         }
+        const btnClear = document.getElementById('btn-mem-clear');
+        if (btnClear) {
+            btnClear.disabled = !this.memories.some(Boolean);
+        }
+    }
+
+    clearMemories() {
+        const hadMemories = this.memories.some(Boolean);
+        this.memories = [null, null, null, null];
+        this.saveMemories();
+        this.updateMemoryUI();
+        if (hadMemories) {
+            this.showNotification('Cleared all patch memories (M1-M4)', 'info');
+        }
     }
 
     loadMemoryToActivePart(memIdx) {
@@ -1018,6 +1032,13 @@ class App {
     storePartInMemory(srcSlot, memIdx) {
         if (memIdx < 0 || memIdx >= 4) return false;
         const srcTimbre = srcSlot === 1 ? this.timbreB : this.timbreA;
+        if (srcTimbre.isInit()) {
+            this.memories[memIdx] = null;
+            this.saveMemories();
+            this.updateMemoryUI();
+            this.showNotification(`Cleared Memory M${memIdx + 1}`, 'info');
+            return true;
+        }
         this.memories[memIdx] = new MM2Program(new Uint8Array(srcTimbre.rawData));
         this.saveMemories();
         this.updateMemoryUI();
@@ -1062,6 +1083,14 @@ class App {
         ].filter(Boolean);
         const appMain = els.appMain !== undefined ? els.appMain : document.querySelector('.app-main');
         const editorGrid = els.editorGrid !== undefined ? els.editorGrid : document.getElementById('editor-grid');
+        const clearBtn = els.clearButton !== undefined ? els.clearButton : document.getElementById('btn-mem-clear');
+
+        if (clearBtn) {
+            clearBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.clearMemories();
+            });
+        }
 
         const clearHover = () => {
             this._clearMemoryDragHover();

@@ -512,6 +512,39 @@ MM2TestRunner.register('Section Drag-and-Drop, Copy/Paste & Mod Matrix', async (
         memApp.undo();
         assertEqual(memApp.timbreB.name, 'OLD_B', 'Undo reverts Part A -> editor-grid replacement in 1 step');
         assertEqual(memApp.timbreB.getValue('OSC1_SHAPE'), 33, 'Undo restores Part B OSC1_SHAPE in 1 step');
+
+        // Clear all memories button resets M1-M4 and disables when empty
+        const clearBtn = document.createElement('button');
+        clearBtn.id = 'btn-mem-clear';
+        document.registerMockElement('btn-mem-clear', clearBtn);
+        memApp.wireMemoryAndPartDragDrop({
+            memButtons,
+            partButtons: [partA, partB],
+            appMain,
+            editorGrid,
+            clearButton: clearBtn
+        });
+        memApp.updateMemoryUI();
+        assertEqual(clearBtn.disabled, false, 'Memory Clear button is enabled when memories are populated');
+
+        // Dragging a Part in Init state to a populated memory clears that memory
+        memApp.timbreA.name = 'POP_PAT';
+        memApp.timbreA.setValue('OSC1_SHAPE', 77);
+        const popStore = {};
+        partA.dispatchEvent(makeEvent('dragstart', { _store: popStore }));
+        memButtons[0].dispatchEvent(makeEvent('drop', { _store: popStore }));
+        assert(memApp.memories[0] !== null, 'M1 is populated before Init drag');
+
+        memApp.timbreA = new MM2Program(); // Init state
+        const initDropStore = {};
+        partA.dispatchEvent(makeEvent('dragstart', { _store: initDropStore }));
+        memButtons[0].dispatchEvent(makeEvent('drop', { _store: initDropStore }));
+        assertEqual(memApp.memories[0], null, 'Dragging Init patch to M1 clears M1');
+
+        clearBtn.click();
+        assert(memApp.memories.every(m => m === null), 'Clicking Clear resets all M1-M4 memories to null');
+        assertEqual(clearBtn.disabled, true, 'Memory Clear button disables after clearing all memories');
+        document.registerMockElement('btn-mem-clear', null);
     });
 
     await runSection('\n--- [54] Mod Matrix Source & Destination Drag/Drop Tests ---', async () => {
