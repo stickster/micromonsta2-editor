@@ -365,11 +365,11 @@ MM2TestRunner.register('Cross-Tab Synchronization', async ({ assert, assertEqual
             leaderSync.handleIncomingMessage({ type, senderTabId: followerSync.tabId, ...payload });
         };
 
-        // Mock Live Sync checkbox and dialog to verify no dialog is shown on remote sync
-        const chkLiveSync = document.createElement('input');
-        chkLiveSync.type = 'checkbox';
-        chkLiveSync.id = 'chk-prog-live-sync';
-        document.registerMockElement('chk-prog-live-sync', chkLiveSync);
+        // Mock Live Sync button and dialog to verify no dialog is shown on remote sync
+        const btnLiveSync = document.createElement('button');
+        btnLiveSync.id = 'btn-prog-live-sync';
+        btnLiveSync.className = 'btn-param-toggle btn-live-sync';
+        document.registerMockElement('btn-prog-live-sync', btnLiveSync);
 
         let dialogShownCount = 0;
         const mockDialog = {
@@ -381,14 +381,16 @@ MM2TestRunner.register('Cross-Tab Synchronization', async ({ assert, assertEqual
         leaderApp._setLiveSyncState(true);
         assertEqual(leaderApp.midi.liveSync, true, 'Leader liveSync is true');
         assertEqual(followerApp.midi.liveSync, true, 'Follower liveSync synced to true');
-        assertEqual(chkLiveSync.checked, true, 'Live sync checkbox updated to checked');
+        assert(btnLiveSync.classList.contains('active'), 'Live sync button updated to active');
+        assertEqual(btnLiveSync.getAttribute('aria-pressed'), 'true', 'Live sync button aria-pressed updated to true');
         assertEqual(dialogShownCount, 0, 'Follower did not show live-sync confirmation dialog');
 
         // 2. Follower disables Live Sync -> Leader inherits state
         followerApp._setLiveSyncState(false);
         assertEqual(followerApp.midi.liveSync, false, 'Follower liveSync is false');
         assertEqual(leaderApp.midi.liveSync, false, 'Leader liveSync synced to false when toggled from follower');
-        assertEqual(chkLiveSync.checked, false, 'Live sync checkbox updated to unchecked');
+        assert(!btnLiveSync.classList.contains('active'), 'Live sync button updated to inactive');
+        assertEqual(btnLiveSync.getAttribute('aria-pressed'), 'false', 'Live sync button aria-pressed updated to false');
 
         // 3. Follower enables Live Sync -> Leader inherits state
         followerApp._setLiveSyncState(true);
@@ -396,16 +398,16 @@ MM2TestRunner.register('Cross-Tab Synchronization', async ({ assert, assertEqual
 
         // 4. REQUEST_LEADER_STATE includes liveSync and applyLeaderState restores it
         followerApp.midi.liveSync = false;
-        chkLiveSync.checked = false;
+        btnLiveSync.classList.remove('active');
         leaderSync.handleIncomingMessage({
             type: 'REQUEST_LEADER_STATE',
             senderTabId: followerSync.tabId
         });
         assertEqual(followerApp.midi.liveSync, true, 'New follower inherits liveSync=true from SYNC_LEADER_STATE');
-        assertEqual(chkLiveSync.checked, true, 'New follower checkbox checked after SYNC_LEADER_STATE');
+        assert(btnLiveSync.classList.contains('active'), 'New follower button active after SYNC_LEADER_STATE');
 
         // Cleanup
-        document.registerMockElement('chk-prog-live-sync', null);
+        document.registerMockElement('btn-prog-live-sync', null);
         document.registerMockElement('sync-action-dialog', null);
         leaderSync.destroy();
         followerSync.destroy();

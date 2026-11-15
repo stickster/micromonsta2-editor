@@ -1311,19 +1311,24 @@ class App {
             this.midi.saveSettings();
         }
         const isLive = !!(this.midi && this.midi.liveSync && connGood);
-        const chkLiveSync = document.getElementById('chk-prog-live-sync');
-        if (chkLiveSync) {
-            chkLiveSync.disabled = !connGood;
-            if (chkLiveSync.checked !== isLive) {
-                chkLiveSync.checked = isLive;
+        const btnLiveSync = document.getElementById('btn-prog-live-sync');
+        if (btnLiveSync) {
+            btnLiveSync.disabled = !connGood;
+            if (btnLiveSync.classList) {
+                btnLiveSync.classList.toggle('active', isLive);
             }
-            const labelEl = chkLiveSync.parentElement;
-            if (labelEl && labelEl.classList) {
-                labelEl.classList.toggle('disabled', !connGood);
-                labelEl.title = connGood
-                    ? 'Real-time NRPN parameter streaming to MM2 hardware'
-                    : 'Live Sync unavailable until MicroMonsta 2 connection is verified';
+            if (typeof btnLiveSync.setAttribute === 'function') {
+                btnLiveSync.setAttribute('aria-pressed', isLive ? 'true' : 'false');
             }
+            const stateBadge = typeof btnLiveSync.querySelector === 'function'
+                ? btnLiveSync.querySelector('.toggle-state-badge')
+                : null;
+            if (stateBadge) {
+                stateBadge.textContent = isLive ? 'ON' : 'OFF';
+            }
+            btnLiveSync.title = connGood
+                ? 'Real-time NRPN parameter streaming to MM2 hardware'
+                : 'Live Sync unavailable until MicroMonsta 2 connection is verified';
         }
 
         const btnFetch = document.getElementById('btn-prog-fetch');
@@ -2436,7 +2441,7 @@ class App {
             knobs.appendChild(createKnob(`ENV${i}_REL`, timbre, onChange));
             if (i === 1) knobs.appendChild(createKnob('ENV1_VCA_VEL_SENS', timbre, onChange));
             if (i === 2) knobs.appendChild(createKnob('ENV2_FLT_VEL_SENS', timbre, onChange));
-            knobs.appendChild(createToggleButton(`ENV${i}_RESET`, timbre, onChange, { showStateBadge: false }));
+            knobs.appendChild(createToggleButton(`ENV${i}_RESET`, timbre, onChange));
             pane.appendChild(knobs);
 
             this.wireSectionDropTarget(pane, 'env', i, timbre, onChange, {
@@ -3100,19 +3105,16 @@ class App {
             tempoContainer.appendChild(tempoKnob);
         }
 
-        // Live Sync switch on program bar
-        const chkLiveSync = document.getElementById('chk-prog-live-sync');
-        if (chkLiveSync) {
-            chkLiveSync.checked = this.midi.liveSync;
+        // Live Sync toggle button on program bar
+        const btnLiveSync = document.getElementById('btn-prog-live-sync');
+        if (btnLiveSync) {
             this.updateLiveSyncUI();
-            chkLiveSync.onchange = async () => {
+            btnLiveSync.onclick = async () => {
                 if (!this.isConnectionGood) {
-                    chkLiveSync.checked = false;
                     this.updateLiveSyncUI();
                     return;
                 }
-                if (chkLiveSync.checked) {
-                    chkLiveSync.checked = false; // Stay unchecked until choice confirmed
+                if (!(this.midi && this.midi.liveSync)) {
                     if (this._checkingLiveSync) return;
                     this._checkingLiveSync = true;
                     try {

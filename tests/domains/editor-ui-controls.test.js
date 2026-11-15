@@ -1083,23 +1083,27 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
         modRandBtn.click();
         assertEqual(seqCleanProg.getValue('ARP_PTN_STEP01'), 6, 'Mod Random preserves Note mode');
 
-        // No chords toggle + arrow inside Note section
-        const noChordsBtn = seqCleanEl.querySelector('#seq-no-chords-btn');
-        const noChordsArrow = seqCleanEl.querySelector('.seq-tool-arrow');
-        assert(noteTools.children.indexOf(noChordsBtn) < noteTools.children.indexOf(clearBtn), 'No chords toggle appears to the left of Note Clear button');
+        // Chords toggle + arrow inside Note section (defaults to ON)
+        const chordsBtn = seqCleanEl.querySelector('#seq-chords-btn');
+        const chordsArrow = seqCleanEl.querySelector('.seq-tool-arrow');
+        assert(noteTools.children.indexOf(chordsBtn) < noteTools.children.indexOf(clearBtn), 'Chords toggle appears to the left of Note Clear button');
         assert(noteTools.children.indexOf(randBtn) < noteTools.children.indexOf(clearBtn), 'Note Random button appears to the left of Note Clear button');
-        assert(noChordsArrow !== null && noChordsArrow.textContent === '←', 'Left-facing arrow indicator (←) is rendered');
-        assert(noteTools.children.indexOf(noChordsBtn) < noteTools.children.indexOf(noChordsArrow) &&
-            noteTools.children.indexOf(noChordsArrow) < noteTools.children.indexOf(randBtn), 'Left-facing arrow appears between No chords toggle and Note Random button');
-        assert(noChordsBtn !== null, 'seq-no-chords-btn toggle exists');
-        assert(noChordsBtn.className.includes('btn-param-toggle'), 'seq-no-chords-btn uses btn-param-toggle styling');
-        assertEqual(noChordsBtn.querySelector('.toggle-label').textContent, 'No chords', 'No chords toggle label is brief');
-        assertEqual(noChordsBtn.querySelector('.toggle-state-badge'), null, 'No chords toggle omits OFF/ON state badge');
-        assertEqual(noChordsBtn.getAttribute('aria-pressed'), 'false', 'No chords toggle aria-pressed starts false');
+        assert(chordsArrow !== null && chordsArrow.textContent === '←', 'Left-facing arrow indicator (←) is rendered');
+        assert(noteTools.children.indexOf(chordsBtn) < noteTools.children.indexOf(chordsArrow) &&
+            noteTools.children.indexOf(chordsArrow) < noteTools.children.indexOf(randBtn), 'Left-facing arrow appears between Chords toggle and Note Random button');
+        assert(chordsBtn !== null, 'seq-chords-btn toggle exists');
+        assert(chordsBtn.className.includes('btn-param-toggle'), 'seq-chords-btn uses btn-param-toggle styling');
+        assertEqual(chordsBtn.querySelector('.toggle-label').textContent, 'Chords', 'Chords toggle label is Chords');
+        const chordsBadge = chordsBtn.querySelector('.toggle-state-badge');
+        assert(chordsBadge !== null, 'Chords toggle includes OFF/ON state badge');
+        assertEqual(chordsBadge.textContent, 'ON', 'Chords toggle state badge starts as ON');
+        assert(chordsBtn.className.includes('active'), 'Chords toggle starts with active class');
+        assertEqual(chordsBtn.getAttribute('aria-pressed'), 'true', 'Chords toggle aria-pressed starts true');
 
-        noChordsBtn.click();
-        assert(noChordsBtn.className.includes('active'), 'No chords toggle adds active class when ON');
-        assertEqual(noChordsBtn.getAttribute('aria-pressed'), 'true', 'No chords toggle aria-pressed updates to true');
+        chordsBtn.click();
+        assert(!chordsBtn.className.includes('active'), 'Chords toggle removes active class when OFF');
+        assertEqual(chordsBtn.getAttribute('aria-pressed'), 'false', 'Chords toggle aria-pressed updates to false');
+        assertEqual(chordsBadge.textContent, 'OFF', 'Chords toggle state badge updates to OFF');
 
         let sawChord = false;
         for (let run = 0; run < 20; run++) {
@@ -1113,7 +1117,7 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
             }
             if (sawChord) break;
         }
-        assertEqual(sawChord, false, 'Randomize omits Chord (11) when No chords toggle is ON');
+        assertEqual(sawChord, false, 'Randomize omits Chord (11) when Chords toggle is OFF');
     });
 
     await runSection('\n--- [64] Control Focus Cleanup Tests ---', async () => {
@@ -1193,6 +1197,24 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
                 document._mm2FocusCleanupBound = origBoundFlag;
             }
         }
+    });
+
+    await runSection('\n--- [66] RTZ Toggle Consistency With Phase Reset Tests ---', async () => {
+        const prog = new MM2Program();
+        const rtzEl = createToggleButton('ENV1_RESET', () => prog, () => {});
+        const rtzBtn = rtzEl.querySelector('button.btn-param-toggle');
+        const rtzLabel = rtzBtn ? rtzBtn.querySelector('.toggle-label') : null;
+        const rtzBadge = rtzBtn ? rtzBtn.querySelector('.toggle-state-badge') : null;
+
+        assert(rtzBtn !== null, 'RTZ renders a btn-param-toggle button');
+        assertEqual(rtzLabel && rtzLabel.textContent, 'RTZ', 'RTZ button label is RTZ');
+        assert(rtzBadge !== null, 'RTZ button includes toggle-state-badge');
+        assertEqual(rtzBadge.textContent, 'OFF', 'RTZ state badge starts as OFF');
+
+        rtzBtn.click();
+        assertEqual(prog.getValue('ENV1_RESET'), 1, 'Clicking RTZ sets ENV1_RESET to 1');
+        assert(rtzBtn.classList.contains('active'), 'RTZ button gains active class when ON');
+        assertEqual(rtzBadge.textContent, 'ON', 'RTZ state badge updates to ON');
     });
 
 });

@@ -417,10 +417,11 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
 
     await runSection('\n--- [25] Live Sync UI & Fetch/Push Inactivity Tests ---', async () => {
         const testApp = new App();
-        const chkLiveSync = document.createElement('input');
-        chkLiveSync.type = 'checkbox';
-        chkLiveSync.id = 'chk-prog-live-sync';
-        document.registerMockElement('chk-prog-live-sync', chkLiveSync);
+        const btnLiveSync = document.createElement('button');
+        btnLiveSync.id = 'btn-prog-live-sync';
+        btnLiveSync.className = 'btn-param-toggle btn-live-sync';
+        btnLiveSync.innerHTML = '<span class="toggle-label">Live Sync</span><span class="toggle-state-badge">OFF</span>';
+        document.registerMockElement('btn-prog-live-sync', btnLiveSync);
 
         const btnFetch = document.createElement('button');
         btnFetch.id = 'btn-prog-fetch';
@@ -434,8 +435,9 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         testApp.updateLiveSyncUI();
         assertEqual(btnFetch.disabled, true, 'Fetch button disabled when hardware is disconnected');
         assertEqual(btnPush.disabled, true, 'Push button disabled when hardware is disconnected');
-        assertEqual(chkLiveSync.disabled, true, 'Live sync checkbox is disabled when hardware is disconnected');
-        assertEqual(chkLiveSync.checked, false, 'Live sync checkbox remains unchecked when disconnected');
+        assertEqual(btnLiveSync.disabled, true, 'Live sync button is disabled when hardware is disconnected');
+        assertEqual(btnLiveSync.classList.contains('active'), false, 'Live sync button remains inactive when disconnected');
+        assertEqual(btnLiveSync.getAttribute('aria-pressed'), 'false', 'Live sync button aria-pressed is false when disconnected');
 
         // Simulate verified good hardware connection
         testApp.midi.inPort = { id: 'in-1', name: 'MicroMonsta 2' };
@@ -445,17 +447,19 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         // Initially Live Sync is false
         testApp.midi.liveSync = false;
         testApp.updateLiveSyncUI();
-        assertEqual(chkLiveSync.disabled, false, 'Live sync checkbox enabled when connection is good');
+        assertEqual(btnLiveSync.disabled, false, 'Live sync button enabled when connection is good');
         assertEqual(btnFetch.disabled, false, 'Fetch button enabled when Live Sync is false');
         assertEqual(btnPush.disabled, false, 'Push button enabled when Live Sync is false');
-        assertEqual(chkLiveSync.checked, false, 'Live sync checkbox is unchecked');
+        assertEqual(btnLiveSync.classList.contains('active'), false, 'Live sync button is inactive');
 
         // Turn Live Sync on
         testApp.midi.liveSync = true;
         testApp.updateLiveSyncUI();
         assertEqual(btnFetch.disabled, true, 'Fetch button disabled when Live Sync is true');
         assertEqual(btnPush.disabled, true, 'Push button disabled when Live Sync is true');
-        assertEqual(chkLiveSync.checked, true, 'Live sync checkbox is checked');
+        assertEqual(btnLiveSync.classList.contains('active'), true, 'Live sync button is active');
+        assertEqual(btnLiveSync.getAttribute('aria-pressed'), 'true', 'Live sync button aria-pressed is true');
+        assertEqual(btnLiveSync.querySelector('.toggle-state-badge').textContent, 'ON', 'Live sync state badge updates to ON');
 
         // If connection drops while Live Sync is active, Live Sync auto-disables
         testApp.midi.hardwareResponsive = false;
@@ -463,8 +467,10 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         assertEqual(testApp.midi.liveSync, false, 'Live Sync automatically turns off if hardware becomes unresponsive');
         assertEqual(btnFetch.disabled, true, 'Fetch button disables when hardware becomes unresponsive');
         assertEqual(btnPush.disabled, true, 'Push button disables when hardware becomes unresponsive');
-        assertEqual(chkLiveSync.disabled, true, 'Live sync checkbox disables when hardware becomes unresponsive');
-        assertEqual(chkLiveSync.checked, false, 'Live sync checkbox unchecks when hardware becomes unresponsive');
+        assertEqual(btnLiveSync.disabled, true, 'Live sync button disables when hardware becomes unresponsive');
+        assertEqual(btnLiveSync.classList.contains('active'), false, 'Live sync button deactivates when hardware becomes unresponsive');
+        assertEqual(btnLiveSync.querySelector('.toggle-state-badge').textContent, 'OFF', 'Live sync state badge resets to OFF');
+        document.registerMockElement('btn-prog-live-sync', null);
     });
 
     await runSection('\n--- [33] Timbral Mode Monotimbral Protection Tests ---', async () => {
@@ -687,24 +693,23 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         syncMidi.outPort = { id: 'mm2-out', name: 'MicroMonsta 2', send: () => { } };
         syncMidi.hardwareResponsive = true;
         syncMidi.requestProgramDump = async () => null;
-        const chkLiveSync = document.createElement('input');
-        chkLiveSync.type = 'checkbox';
-        chkLiveSync.id = 'chk-prog-live-sync';
-        document.registerMockElement('chk-prog-live-sync', chkLiveSync);
+        const btnLiveSync = document.createElement('button');
+        btnLiveSync.id = 'btn-prog-live-sync';
+        btnLiveSync.className = 'btn-param-toggle btn-live-sync';
+        btnLiveSync.innerHTML = '<span class="toggle-label">Live Sync</span><span class="toggle-state-badge">OFF</span>';
+        document.registerMockElement('btn-prog-live-sync', btnLiveSync);
 
         // Minimal mock elements needed by buildEditorUI
         syncApp.setupProgramBar();
 
         // Ignore keeps liveSync disabled
         nextChoice = 'ignore';
-        chkLiveSync.checked = true;
-        await chkLiveSync.onchange();
+        await btnLiveSync.onclick();
         assertEqual(syncMidi.liveSync, false, 'Live sync ignore keeps liveSync disabled');
 
         // Fetch defers enabling liveSync until program-received completes
         nextChoice = 'fetch';
-        chkLiveSync.checked = true;
-        await chkLiveSync.onchange();
+        await btnLiveSync.onclick();
         assertEqual(syncMidi.liveSync, false, 'Live sync fetch does not enable liveSync before fetch completes');
         assertEqual(fetchCount, 2, 'Live sync fetch triggers fetchActiveProgram');
         syncMidi.emit('program-received', { program: new MM2Program(), slot: 0, isProbe: false });
@@ -713,8 +718,7 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         // Failed fetch (connection-lost) keeps liveSync disabled
         syncApp._setLiveSyncState(false);
         nextChoice = 'fetch';
-        chkLiveSync.checked = true;
-        await chkLiveSync.onchange();
+        await btnLiveSync.onclick();
         syncMidi.emit('connection-lost', { port: syncMidi.outPort, type: 'output' });
         assertEqual(syncMidi.liveSync, false, 'Live sync stays disabled when fetch fails');
 
@@ -723,8 +727,7 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         let sentProgCount = 0;
         syncMidi.outPort.send = () => { sentProgCount++; };
         nextChoice = 'push';
-        chkLiveSync.checked = true;
-        await chkLiveSync.onchange();
+        await btnLiveSync.onclick();
         assertEqual(syncMidi.liveSync, true, 'Live sync push enables liveSync');
         assertEqual(sentProgCount, 1, 'Live sync push sends active program to MM2');
 
@@ -735,7 +738,7 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         document.registerMockElement('sync-action-fetch-detail', null);
         document.registerMockElement('sync-action-push-detail', null);
         document.registerMockElement('sync-action-ignore-btn', null);
-        document.registerMockElement('chk-prog-live-sync', null);
+        document.registerMockElement('btn-prog-live-sync', null);
     });
 
     await runSection('\n--- [43] MIDI Input Port Selection Verification Tests ---', async () => {
@@ -1317,23 +1320,21 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
             }
         };
         document.registerMockElement('sync-action-dialog', peekSyncDialog);
-        const chkLive = document.createElement('input');
-        chkLive.type = 'checkbox';
-        chkLive.id = 'chk-prog-live-sync';
-        document.registerMockElement('chk-prog-live-sync', chkLive);
+        const btnLive = document.createElement('button');
+        btnLive.id = 'btn-prog-live-sync';
+        btnLive.className = 'btn-param-toggle btn-live-sync';
+        document.registerMockElement('btn-prog-live-sync', btnLive);
         peekApp.setupProgramBar();
 
         peekApp.timbreA = hwPartA.clone();
-        chkLive.checked = true;
-        await chkLive.onchange();
+        await btnLive.onclick();
         assertEqual(modalShownCount, 0, 'Live Sync activation skips dialog when HW and editor match');
         assertEqual(peekApp.midi.liveSync, true, 'Live Sync is enabled immediately when HW and editor match');
 
         // Live Sync activation shows dialog when HW differs from editor
         peekApp._setLiveSyncState(false);
         peekApp.timbreA.setValue('OSC1_SHAPE', 12);
-        chkLive.checked = true;
-        await chkLive.onchange();
+        await btnLive.onclick();
         assertEqual(modalShownCount, 1, 'Live Sync activation shows dialog when HW and editor differ');
         assertEqual(peekApp.midi.liveSync, false, 'Live Sync remains disabled when mismatch dialog is ignored');
 
@@ -1376,7 +1377,7 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         assertEqual(partBQueried, false, 'Reconnect skips Part B probe when Part A already differs');
 
         document.registerMockElement('sync-action-dialog', null);
-        document.registerMockElement('chk-prog-live-sync', null);
+        document.registerMockElement('btn-prog-live-sync', null);
     });
 
     await runSection('\n--- [65] Disabling Live Sync Preserves Synced Status Tests ---', async () => {
@@ -1394,10 +1395,11 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         badge.id = 'editor-sync-badge';
         document.registerMockElement('editor-sync-badge', badge);
 
-        const chkLiveSync = document.createElement('input');
-        chkLiveSync.type = 'checkbox';
-        chkLiveSync.id = 'chk-prog-live-sync';
-        document.registerMockElement('chk-prog-live-sync', chkLiveSync);
+        const btnLiveSync = document.createElement('button');
+        btnLiveSync.id = 'btn-prog-live-sync';
+        btnLiveSync.className = 'btn-param-toggle btn-live-sync';
+        btnLiveSync.innerHTML = '<span class="toggle-label">Live Sync</span><span class="toggle-state-badge">OFF</span>';
+        document.registerMockElement('btn-prog-live-sync', btnLiveSync);
 
         app.setupProgramBar();
         app._setLiveSyncState(true);
@@ -1405,11 +1407,14 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         assertEqual(app.syncStatus, 'synced', 'Initial syncStatus is synced');
         assertEqual(badge.getAttribute('aria-label'), 'Live Synced', 'Badge aria-label shows Live Synced while Live Sync is active');
         assert(badge.innerHTML.includes('<svg') && badge.innerHTML.includes('fill="none"') && badge.innerHTML.includes('stroke="currentColor"'), 'Badge renders single-color outline SVG icon');
+        assert(btnLiveSync.classList.contains('active'), 'Live Sync button has active class when ON');
+        assertEqual(btnLiveSync.getAttribute('aria-pressed'), 'true', 'Live Sync button aria-pressed is true when ON');
 
-        // Uncheck Live Sync while synced -> should remain synced ("Synced with MM2"), not Modified
-        chkLiveSync.checked = false;
-        await chkLiveSync.onchange();
+        // Toggle Live Sync off while synced -> should remain synced ("Synced with MM2"), not Modified
+        await btnLiveSync.onclick();
         assertEqual(app.midi.liveSync, false, 'Live Sync disabled');
+        assert(!btnLiveSync.classList.contains('active'), 'Live Sync button removes active class when OFF');
+        assertEqual(btnLiveSync.getAttribute('aria-pressed'), 'false', 'Live Sync button aria-pressed is false when OFF');
         assertEqual(app.syncStatus, 'synced', 'Disabling Live Sync preserves synced status');
         assertEqual(badge.getAttribute('aria-label'), 'Synced with MM2', 'Badge aria-label updates to Synced with MM2 instead of Modified');
 
@@ -1439,7 +1444,7 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         assertEqual(renderedIcons.size, 6, 'All 6 sync status states render distinct SVG icons');
 
         document.registerMockElement('editor-sync-badge', null);
-        document.registerMockElement('chk-prog-live-sync', null);
+        document.registerMockElement('btn-prog-live-sync', null);
     });
 
 });

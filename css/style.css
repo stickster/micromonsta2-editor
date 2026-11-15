@@ -954,6 +954,12 @@ main.app-main {
     color: var(--text-primary);
 }
 
+.btn-param-toggle:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
 .btn-param-toggle.active {
     background: rgba(0, 210, 255, 0.12);
     border-color: var(--accent-cyan);
@@ -961,12 +967,10 @@ main.app-main {
     box-shadow: 0 0 6px var(--accent-cyan-glow);
 }
 
-.env-pane .btn-param-toggle.active {
-    background: var(--accent-cyan);
-    border-color: var(--accent-cyan);
-    color: #000;
-    font-weight: 800;
-    box-shadow: 0 0 8px var(--accent-cyan-glow);
+.env-pane .btn-param-toggle {
+    flex-direction: column;
+    gap: 3px;
+    padding: 4px 8px;
 }
 
 .toggle-state-badge {
@@ -975,6 +979,8 @@ main.app-main {
     font-weight: 800;
     letter-spacing: 0.5px;
     padding: 1px 5px;
+    min-width: 32px;
+    text-align: center;
     border-radius: 3px;
     background: rgba(255, 255, 255, 0.06);
     color: var(--text-muted);
@@ -2586,35 +2592,8 @@ footer.audition-footer {
     background: rgba(0, 210, 211, 0.12);
 }
 
-.live-sync-switch {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--accent-cyan);
-    cursor: pointer;
-    background: var(--bg-card-inner);
-    padding: 5px 10px;
-    border-radius: 4px;
-    border: 1px solid var(--border-color);
-    transition: all 0.15s ease;
-}
-
-.live-sync-switch:hover {
-    border-color: var(--accent-cyan);
-}
-
-.live-sync-switch.disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-    pointer-events: none;
-    border-color: var(--border-color);
-    color: var(--text-muted);
-}
-
-.live-sync-label {
-    letter-spacing: 0.5px;
+.btn-live-sync {
+    letter-spacing: 0.3px;
 }
 
 .btn-fetch {

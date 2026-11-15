@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **UI:** Give all toggle buttons in interface consistent style.
 - **UI:** Replace the editor sync status badge text with single-color outline SVG icons using existing theme colors.
 - **Sync:** Preserve `Synced with MM2` status when disabling Live Sync instead of immediately marking the patch as `Modified`.
 - **Tests:** Split monolithic `tests/test-suite.js` into domain-focused files under `tests/domains/` with shared harness in `tests/test-helpers.js`.

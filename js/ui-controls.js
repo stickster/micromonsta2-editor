@@ -2073,32 +2073,38 @@ function createArpSequencer(program, onChangeCallback) {
     noteGroupLabel.textContent = 'Note';
     noteGroup.appendChild(noteGroupLabel);
 
-    let noChords = false;
-    const noChordsBtn = document.createElement('button');
-    noChordsBtn.type = 'button';
-    noChordsBtn.className = 'btn-param-toggle seq-no-chords-btn';
-    noChordsBtn.id = 'seq-no-chords-btn';
-    noChordsBtn.title = 'Omit Chord steps when randomizing pattern (Click to toggle)';
-    noChordsBtn.setAttribute('aria-pressed', 'false');
+    let includeChords = true;
+    const chordsBtn = document.createElement('button');
+    chordsBtn.type = 'button';
+    chordsBtn.className = 'btn-param-toggle seq-chords-btn active';
+    chordsBtn.id = 'seq-chords-btn';
+    chordsBtn.title = 'Include Chord steps when randomizing pattern (Click to toggle)';
+    chordsBtn.setAttribute('aria-pressed', 'true');
 
-    const noChordsLabel = document.createElement('span');
-    noChordsLabel.className = 'toggle-label';
-    noChordsLabel.textContent = 'No chords';
-    noChordsBtn.appendChild(noChordsLabel);
+    const chordsLabel = document.createElement('span');
+    chordsLabel.className = 'toggle-label';
+    chordsLabel.textContent = 'Chords';
+    chordsBtn.appendChild(chordsLabel);
 
-    noChordsBtn.addEventListener('click', (e) => {
+    const chordsStateBadge = document.createElement('span');
+    chordsStateBadge.className = 'toggle-state-badge';
+    chordsStateBadge.textContent = 'ON';
+    chordsBtn.appendChild(chordsStateBadge);
+
+    chordsBtn.addEventListener('click', (e) => {
         e.preventDefault();
-        noChords = !noChords;
-        noChordsBtn.setAttribute('aria-pressed', noChords ? 'true' : 'false');
-        noChordsBtn.classList.toggle('active', noChords);
+        includeChords = !includeChords;
+        chordsBtn.setAttribute('aria-pressed', includeChords ? 'true' : 'false');
+        chordsBtn.classList.toggle('active', includeChords);
+        chordsStateBadge.textContent = includeChords ? 'ON' : 'OFF';
     });
-    noteGroup.appendChild(noChordsBtn);
+    noteGroup.appendChild(chordsBtn);
 
-    const noChordsArrow = document.createElement('span');
-    noChordsArrow.className = 'seq-tool-arrow';
-    noChordsArrow.setAttribute('aria-hidden', 'true');
-    noChordsArrow.textContent = '←';
-    noteGroup.appendChild(noChordsArrow);
+    const chordsArrow = document.createElement('span');
+    chordsArrow.className = 'seq-tool-arrow';
+    chordsArrow.setAttribute('aria-hidden', 'true');
+    chordsArrow.textContent = '←';
+    noteGroup.appendChild(chordsArrow);
 
     const randBtn = document.createElement('button');
     randBtn.type = 'button';
@@ -2108,7 +2114,7 @@ function createArpSequencer(program, onChangeCallback) {
     randBtn.innerHTML = ICON_RANDOM_SVG;
     randBtn.addEventListener('click', () => {
         const basePool = [0, 0, 1, 2, 4, 5, 6, 11]; // Musical probability weights (11 = Chord)
-        const pool = noChords ? basePool.filter(v => v !== 11) : basePool;
+        const pool = includeChords ? basePool : basePool.filter(v => v !== 11);
         applyStepBatch('Randomize Arp Note Pattern', (numStr, setStepParam) => {
             setStepParam(`ARP_PTN_STEP${numStr}`, pool[Math.floor(Math.random() * pool.length)]);
         });

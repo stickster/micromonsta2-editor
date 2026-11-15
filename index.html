@@ -77,10 +77,8 @@
                 </div>
 
                 <div class="program-actions">
-                    <label class="live-sync-switch" title="Real-time NRPN parameter streaming to MM2 hardware">
-                        <input type="checkbox" id="chk-prog-live-sync">
-                        <span class="live-sync-label">Live Sync</span>
-                    </label>
+                    <button type="button" class="btn-param-toggle btn-live-sync" id="btn-prog-live-sync" aria-pressed="false"
+                        title="Real-time NRPN parameter streaming to MM2 hardware"><span class="toggle-label">Live Sync</span><span class="toggle-state-badge">OFF</span></button>
 
                     <button class="btn btn-fetch" id="btn-prog-fetch"
                         title="Fetch current sound patch directly from MM2 hardware">Fetch from MM2</button>
