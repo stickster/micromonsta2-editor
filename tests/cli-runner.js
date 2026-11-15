@@ -19,6 +19,14 @@ const scriptFiles = [
     'js/midi-manager.js',
     'js/ui-controls.js',
     'js/app.js',
+    'tests/test-helpers.js',
+    'tests/domains/sysex-and-specs.test.js',
+    'tests/domains/librarian.test.js',
+    'tests/domains/midi-and-sync.test.js',
+    'tests/domains/undo-and-compare.test.js',
+    'tests/domains/editor-ui-controls.test.js',
+    'tests/domains/drag-drop-and-mod.test.js',
+    'tests/domains/tab-sync.test.js',
     'tests/test-suite.js'
 ];
 
