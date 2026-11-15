@@ -277,6 +277,41 @@
         </div>
     </dialog>
 
+    <!-- Init Patch Confirmation Dialog -->
+    <dialog id="init-patch-dialog" class="modal-dialog-native" aria-labelledby="init-patch-title">
+        <div class="dialog-native-box">
+            <h3 id="init-patch-title" class="dialog-title">Initialize Patch?</h3>
+            <p id="init-patch-desc" class="dialog-desc"></p>
+            <form method="dialog" class="dialog-button-bar">
+                <button type="submit" value="cancel" class="btn btn-secondary" autofocus>Cancel</button>
+                <button type="submit" value="confirm" class="btn btn-warning">Init Patch</button>
+            </form>
+        </div>
+    </dialog>
+
+    <!-- Generic App Confirmation Dialog -->
+    <dialog id="app-confirm-dialog" class="modal-dialog-native" aria-labelledby="app-confirm-title">
+        <div class="dialog-native-box">
+            <h3 id="app-confirm-title" class="dialog-title"></h3>
+            <p id="app-confirm-desc" class="dialog-desc"></p>
+            <form method="dialog" class="dialog-button-bar">
+                <button type="submit" value="cancel" class="btn btn-secondary" autofocus>Cancel</button>
+                <button type="submit" value="confirm" id="app-confirm-ok-btn" class="btn btn-danger">Confirm</button>
+            </form>
+        </div>
+    </dialog>
+
+    <!-- Generic App Alert Dialog -->
+    <dialog id="app-alert-dialog" class="modal-dialog-native" aria-labelledby="app-alert-title">
+        <div class="dialog-native-box">
+            <h3 id="app-alert-title" class="dialog-title"></h3>
+            <p id="app-alert-desc" class="dialog-desc"></p>
+            <form method="dialog" class="dialog-button-bar">
+                <button type="submit" value="ok" class="btn btn-primary" autofocus>OK</button>
+            </form>
+        </div>
+    </dialog>
+
     <!-- Unified Sync Action Dialog (Fetch / Push / Ignore) -->
     <dialog id="sync-action-dialog" class="modal-dialog-native" aria-labelledby="sync-action-title">
         <div class="dialog-native-box">

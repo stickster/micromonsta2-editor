@@ -3223,10 +3223,10 @@ class App {
         // Program action buttons
         const btnInit = document.getElementById('btn-prog-init');
         if (btnInit) {
-            btnInit.onclick = () => {
+            btnInit.onclick = async () => {
                 const partLabel = `Part ${this.activeSlot === 0 ? 'A' : 'B'}`;
                 const liveSyncNote = this.midi.liveSync ? ' and immediately synchronize with connected MicroMonsta 2 hardware' : '';
-                if (confirm(`Reset ${partLabel} (${this.activeTimbre.name}) to default INIT values${liveSyncNote}?`)) {
+                if (await this._promptInitPatch(partLabel, this.activeTimbre.name, liveSyncNote)) {
                     const canSync = this.midi.liveSync && this.isConnectionGood;
                     this.replacePartWithRawData(this.activeSlot, new MM2Program().rawData, `Init ${partLabel}`, {
                         sendToHardware: false,
@@ -3268,7 +3268,10 @@ class App {
                     const buf = new Uint8Array(await file.arrayBuffer());
                     const msgs = extractSysExMessagesWithMeta(buf);
                     if (msgs.length === 0) {
-                        alert('No valid MicroMonsta 2 SysEx program dump found in this file.');
+                        await this._alertDialog({
+                            title: 'Invalid SysEx File',
+                            description: 'No valid MicroMonsta 2 SysEx program dump found in this file.'
+                        });
                         return;
                     }
                     this.activeTimbre.rawData = msgs[0].bytes;
@@ -3300,7 +3303,10 @@ class App {
                         this.showNotification(`Loaded program "${this.activeTimbre.name}" from ${file.name}`, 'success');
                     }
                 } catch (err) {
-                    alert('Error loading SysEx file: ' + err.message);
+                    await this._alertDialog({
+                        title: 'Error Loading SysEx File',
+                        description: err.message
+                    });
                 }
                 fileInput.value = '';
             };
@@ -3643,11 +3649,14 @@ class App {
         // Export Bank button
         const btnExportBank = document.getElementById('btn-export-bank');
         if (btnExportBank) {
-            btnExportBank.onclick = () => {
+            btnExportBank.onclick = async () => {
                 const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
                 const fwId = this.midi && this.midi.detectedFwId !== null ? this.midi.detectedFwId : SYSEX_V2_FW_ID;
                 if (!this.librarian.exportBankFile(this.librarian.activeBankIndex, null, fwVer, fwId)) {
-                    alert('Current bank is empty.');
+                    await this._alertDialog({
+                        title: 'Empty Bank',
+                        description: 'Current bank is empty.'
+                    });
                 }
             };
         }
@@ -3685,10 +3694,16 @@ class App {
                             this.showNotification(`Imported ${count} patches into "${this.librarian.activeBank.name}"`, 'success');
                         }
                     } else {
-                        alert('No valid MicroMonsta 2 SysEx patches found in file.');
+                        await this._alertDialog({
+                            title: 'Invalid SysEx File',
+                            description: 'No valid MicroMonsta 2 SysEx patches found in file.'
+                        });
                     }
                 } catch (err) {
-                    alert('Error importing bank: ' + err.message);
+                    await this._alertDialog({
+                        title: 'Error Importing Bank',
+                        description: err.message
+                    });
                 }
                 bankFileInput.value = '';
             };
@@ -3702,10 +3717,13 @@ class App {
 
         const btnCondense = document.getElementById('btn-condense-bank');
         if (btnCondense) {
-            btnCondense.onclick = () => {
-                const confirmed = confirm(
-                    `Condense "${this.librarian.activeBank.name}"?\n\nThis will remove duplicate patches and consolidate all slots into a clean sequential bank.`
-                );
+            btnCondense.onclick = async () => {
+                const confirmed = await this._confirmDialog({
+                    title: 'Condense Bank?',
+                    description: `Condense "${this.librarian.activeBank.name}"? This will remove duplicate patches and consolidate all slots into a clean sequential bank.`,
+                    confirmLabel: 'Condense',
+                    confirmClass: 'btn-warning'
+                });
                 if (confirmed) {
                     const res = this.librarian.condenseBank(this.librarian.activeBankIndex);
                     this.renderLibrarianBank();
@@ -3717,16 +3735,19 @@ class App {
         // Delete all patches in the current bank
         const btnDeleteAll = document.getElementById('btn-delete-all-patches');
         if (btnDeleteAll) {
-            btnDeleteAll.onclick = () => {
+            btnDeleteAll.onclick = async () => {
                 const bank = this.librarian.activeBank;
                 if (!bank) return;
                 if (bank.length === 0) {
                     this.showNotification(`"${bank.name}" is already empty.`, 'info');
                     return;
                 }
-                const confirmed = confirm(
-                    `Delete all ${bank.length} patches in "${bank.name}"?\n\nThis cannot be undone.`
-                );
+                const confirmed = await this._confirmDialog({
+                    title: 'Delete All Patches?',
+                    description: `Delete all ${bank.length} patches in "${bank.name}"? This cannot be undone.`,
+                    confirmLabel: 'Delete All',
+                    confirmClass: 'btn-danger'
+                });
                 if (confirmed) {
                     const removed = this.librarian.clearBank(this.librarian.activeBankIndex);
                     this.renderLibrarianBank();
@@ -3824,6 +3845,40 @@ class App {
             this.showNotification(`Deleted bank "${bankName}".`, 'success');
         }
         return ok;
+    }
+
+    async _confirmDialog({ title, description, confirmLabel = 'Confirm', confirmClass = 'btn-danger' }) {
+        const result = await this._openDialog('app-confirm-dialog', () => {
+            const titleEl = document.getElementById('app-confirm-title');
+            if (titleEl) titleEl.textContent = title;
+            const descEl = document.getElementById('app-confirm-desc');
+            if (descEl) descEl.textContent = description;
+            const okBtn = document.getElementById('app-confirm-ok-btn');
+            if (okBtn) {
+                okBtn.textContent = confirmLabel;
+                okBtn.className = `btn ${confirmClass}`;
+            }
+        });
+        return result === 'confirm';
+    }
+
+    async _alertDialog({ title, description }) {
+        await this._openDialog('app-alert-dialog', () => {
+            const titleEl = document.getElementById('app-alert-title');
+            if (titleEl) titleEl.textContent = title;
+            const descEl = document.getElementById('app-alert-desc');
+            if (descEl) descEl.textContent = description;
+        });
+    }
+
+    async _promptInitPatch(partLabel, patchName, liveSyncNote = '') {
+        const result = await this._openDialog('init-patch-dialog', () => {
+            const desc = document.getElementById('init-patch-desc');
+            if (desc) {
+                desc.textContent = `Reset ${partLabel} (${patchName}) to default INIT values${liveSyncNote}?`;
+            }
+        });
+        return result === 'confirm';
     }
 
     async _promptDeleteBank(bankName, patchNote) {
@@ -4019,8 +4074,14 @@ class App {
                 this.librarian.exportProgramFile(program, null, fwVer, fwId);
             };
 
-            row.querySelector('[data-action="delete"]').onclick = () => {
-                if (confirm(`Delete patch "${program.name}" from ${activeBank.name}?`)) {
+            row.querySelector('[data-action="delete"]').onclick = async () => {
+                const confirmed = await this._confirmDialog({
+                    title: 'Delete Patch?',
+                    description: `Delete patch "${program.name}" from ${activeBank.name}?`,
+                    confirmLabel: 'Delete',
+                    confirmClass: 'btn-danger'
+                });
+                if (confirmed) {
                     activeBank.removeProgram(originalIndex);
                     this.librarian.saveAllBanks();
                     this.renderLibrarianBank();

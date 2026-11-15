@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **UI:** Replace all remaining browser `confirm()` and `alert()` calls with app-styled `<dialog>` modals (`#app-confirm-dialog` and `#app-alert-dialog`).
 - **UI:** Dragging a Part in Init state onto a memory slot (`M1`–`M4`) clears that memory slot.
 - **UI:** Add a `Clear` button to the right of patch memories `M1`–`M4` to clear all stored memory slots.
 - **UI:** Give all toggle buttons in interface consistent style.

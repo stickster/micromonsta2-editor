@@ -289,12 +289,24 @@ MM2TestRunner.register('Undo/Redo & Compare Buffer', async ({ assert, assertEqua
 
     await runSection('\n--- [55] Init Button Atomic Undo/Redo Tests ---', async () => {
         const prevGetEl55 = document.getElementById;
-        const prevConfirm55 = global.confirm;
         try {
             const btnInit = document.createElement('button');
             btnInit.id = 'btn-prog-init';
-            document.getElementById = (id) => (id === 'btn-prog-init' ? btnInit : prevGetEl55(id));
-            global.confirm = () => true;
+            const initDialog = document.createElement('dialog');
+            initDialog.id = 'init-patch-dialog';
+            const initDesc = document.createElement('p');
+            initDesc.id = 'init-patch-desc';
+            let dialogOutcome = 'cancel';
+            initDialog.showModal = () => {
+                initDialog.returnValue = dialogOutcome;
+                initDialog.dispatchEvent(new Event('close'));
+            };
+            const map55 = {
+                'btn-prog-init': btnInit,
+                'init-patch-dialog': initDialog,
+                'init-patch-desc': initDesc
+            };
+            document.getElementById = (id) => map55[id] || prevGetEl55(id);
 
             const initApp = new App();
             initApp.timbreA.name = 'CUSTOM';
@@ -302,7 +314,17 @@ MM2TestRunner.register('Undo/Redo & Compare Buffer', async ({ assert, assertEqua
             assertEqual(initApp.undoStack.length, 1, 'Prior edit recorded on undoStack before Init');
 
             initApp.setupProgramBar();
-            btnInit.onclick();
+
+            // Cancel in dialog preserves patch
+            dialogOutcome = 'cancel';
+            await btnInit.onclick();
+            assertEqual(initApp.timbreA.name, 'CUSTOM', 'Canceling Init dialog preserves patch name');
+            assertEqual(initApp.timbreA.getValue('OSC1_SHAPE'), 88, 'Canceling Init dialog preserves OSC1_SHAPE');
+            assert(initDesc.textContent.includes('CUSTOM'), 'Init dialog description includes current patch name');
+
+            // Confirm in dialog initializes patch as 1 atomic undo entry
+            dialogOutcome = 'confirm';
+            await btnInit.onclick();
 
             assertEqual(initApp.timbreA.name, 'INIT', 'Init resets patch name to INIT');
             assertEqual(initApp.timbreA.getValue('OSC1_SHAPE'), 0, 'Init resets OSC1_SHAPE to default 0');
@@ -323,12 +345,8 @@ MM2TestRunner.register('Undo/Redo & Compare Buffer', async ({ assert, assertEqua
             initApp.redo();
             assertEqual(initApp.timbreA.name, 'INIT', 'Second Redo reapplies Init patch name');
             assertEqual(initApp.timbreA.getValue('OSC1_SHAPE'), 0, 'Second Redo reapplies Init OSC1_SHAPE');
-        } catch (e) {
-            logger(`  Error: ${e.message}`);
-            failed++;
         } finally {
             document.getElementById = prevGetEl55;
-            global.confirm = prevConfirm55;
         }
 
         // Section 56: LFO & Mod Matrix Inline Action Cleanup Tests

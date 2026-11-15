@@ -521,4 +521,117 @@ MM2TestRunner.register('Patch Librarian, Banks & Duplicates', async ({ assert, a
         assertEqual(bankTabs.children[1].querySelector('.bank-tab-title').querySelector('input'), null, 'Enter exits inline edit mode on newly created bank');
     });
 
+    await runSection('\n--- [67] App Confirm & Alert Dialog Tests ---', async () => {
+        const dlgApp = new App();
+        if (dlgApp.tabSync) {
+            dlgApp.tabSync.destroy();
+            dlgApp.tabSync = null;
+        }
+        dlgApp.showNotification = () => { };
+
+        const confirmDialog = document.createElement('dialog');
+        confirmDialog.id = 'app-confirm-dialog';
+        const confirmTitle = document.createElement('h3');
+        confirmTitle.id = 'app-confirm-title';
+        const confirmDesc = document.createElement('p');
+        confirmDesc.id = 'app-confirm-desc';
+        const confirmOkBtn = document.createElement('button');
+        confirmOkBtn.id = 'app-confirm-ok-btn';
+        let nextConfirmValue = 'cancel';
+        confirmDialog.showModal = () => {
+            confirmDialog.returnValue = nextConfirmValue;
+            confirmDialog.dispatchEvent(new Event('close'));
+        };
+
+        const alertDialog = document.createElement('dialog');
+        alertDialog.id = 'app-alert-dialog';
+        const alertTitle = document.createElement('h3');
+        alertTitle.id = 'app-alert-title';
+        const alertDesc = document.createElement('p');
+        alertDesc.id = 'app-alert-desc';
+        let alertShownCount = 0;
+        alertDialog.showModal = () => {
+            alertShownCount++;
+            alertDialog.returnValue = 'ok';
+            alertDialog.dispatchEvent(new Event('close'));
+        };
+
+        document.registerMockElement('app-confirm-dialog', confirmDialog);
+        document.registerMockElement('app-confirm-title', confirmTitle);
+        document.registerMockElement('app-confirm-desc', confirmDesc);
+        document.registerMockElement('app-confirm-ok-btn', confirmOkBtn);
+        document.registerMockElement('app-alert-dialog', alertDialog);
+        document.registerMockElement('app-alert-title', alertTitle);
+        document.registerMockElement('app-alert-desc', alertDesc);
+
+        const bankTabs = document.createElement('div');
+        bankTabs.id = 'bank-tabs';
+        document.registerMockElement('bank-tabs', bankTabs);
+
+        const btnExportBank = document.createElement('button');
+        btnExportBank.id = 'btn-export-bank';
+        const btnCondense = document.createElement('button');
+        btnCondense.id = 'btn-condense-bank';
+        const btnDeleteAll = document.createElement('button');
+        btnDeleteAll.id = 'btn-delete-all-patches';
+        document.registerMockElement('btn-export-bank', btnExportBank);
+        document.registerMockElement('btn-condense-bank', btnCondense);
+        document.registerMockElement('btn-delete-all-patches', btnDeleteAll);
+
+        let browserDialogCalled = false;
+        global.confirm = () => { browserDialogCalled = true; return true; };
+        global.alert = () => { browserDialogCalled = true; };
+
+        try {
+            dlgApp.buildLibrarianUI();
+
+            // 1. Exporting empty bank shows app-alert-dialog
+            await btnExportBank.onclick();
+            assertEqual(browserDialogCalled, false, 'Export empty bank does not invoke browser alert()');
+            assertEqual(alertShownCount, 1, 'Export empty bank opens app-alert-dialog');
+            assertEqual(alertTitle.textContent, 'Empty Bank', 'Alert dialog title set to Empty Bank');
+            assertEqual(alertDesc.textContent, 'Current bank is empty.', 'Alert dialog description set');
+
+            // 2. Condense bank uses app-confirm-dialog
+            dlgApp.librarian.addBank('Test Bank');
+            const p1 = new MM2Program();
+            p1.name = 'DUP_PAT';
+            dlgApp.librarian.activeBank.addProgram(p1);
+            dlgApp.librarian.activeBank.addProgram(p1.clone());
+            assertEqual(dlgApp.librarian.activeBank.length, 2, 'Bank has 2 duplicate patches');
+
+            nextConfirmValue = 'cancel';
+            await btnCondense.onclick();
+            assertEqual(browserDialogCalled, false, 'Condense bank does not invoke browser confirm()');
+            assertEqual(dlgApp.librarian.activeBank.length, 2, 'Condense canceled leaves 2 patches');
+
+            nextConfirmValue = 'confirm';
+            await btnCondense.onclick();
+            assertEqual(dlgApp.librarian.activeBank.length, 1, 'Condense confirmed removes duplicate');
+
+            // 3. Delete all patches uses app-confirm-dialog
+            nextConfirmValue = 'cancel';
+            await btnDeleteAll.onclick();
+            assertEqual(dlgApp.librarian.activeBank.length, 1, 'Delete all canceled preserves patch');
+
+            nextConfirmValue = 'confirm';
+            await btnDeleteAll.onclick();
+            assertEqual(dlgApp.librarian.activeBank.length, 0, 'Delete all confirmed clears bank');
+        } finally {
+            delete global.confirm;
+            delete global.alert;
+            document.registerMockElement('app-confirm-dialog', null);
+            document.registerMockElement('app-confirm-title', null);
+            document.registerMockElement('app-confirm-desc', null);
+            document.registerMockElement('app-confirm-ok-btn', null);
+            document.registerMockElement('app-alert-dialog', null);
+            document.registerMockElement('app-alert-title', null);
+            document.registerMockElement('app-alert-desc', null);
+            document.registerMockElement('bank-tabs', null);
+            document.registerMockElement('btn-export-bank', null);
+            document.registerMockElement('btn-condense-bank', null);
+            document.registerMockElement('btn-delete-all-patches', null);
+        }
+    });
+
 });
