@@ -441,6 +441,17 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
         assert(!appLatchBtn.classList.contains('active'), 'Restored connection turns off global latch');
         assert(!appKey0.classList.contains('pressed'), 'Restored connection clears active note selections');
 
+        // Verify CSS :root width tokens prevent 1200px desktop/screenshot side gutters
+        if (typeof require !== 'undefined') {
+            const fs = require('fs');
+            const path = require('path');
+            const cssText = fs.readFileSync(path.join(__dirname, '../../css/style.css'), 'utf8');
+            const minMatch = cssText.match(/--min-app-width:\s*(\d+)px/);
+            const maxMatch = cssText.match(/--max-app-width:\s*(\d+)px/);
+            assert(minMatch && parseInt(minMatch[1], 10) >= 1200, 'CSS :root --min-app-width is at least 1200px');
+            assert(maxMatch && parseInt(maxMatch[1], 10) >= 1200, 'CSS :root --max-app-width is at least 1200px to avoid side gutters');
+        }
+
         kbd.setOctave(3); // Octave 3 base is (3+1)*12 = 48. Offsets 0..24 span notes 48..72
 
         const key0 = kbd.querySelector('[data-offset="0"]');

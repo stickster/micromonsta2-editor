@@ -1,8 +1,8 @@
 /* MicroMonsta 2 Editor & Patch Librarian - Clean Vanilla CSS Stylesheet */
 
 :root {
-    --min-app-width: 600px;
-    --max-app-width: 1080px;
+    --min-app-width: 1200px;
+    --max-app-width: 1600px;
 
     --bg-dark: #121316;
     --bg-panel: #1a1c22;
@@ -24,16 +24,6 @@
 
     --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-}
-
-/* Resolution-Dependent Minimum Width (2× on HiDPI Displays) */
-@media (-webkit-min-device-pixel-ratio: 2),
-(min-resolution: 192dpi),
-(min-resolution: 2dppx) {
-    :root {
-        --min-app-width: 1200px;
-        --max-app-width: 1600px;
-    }
 }
 
 * {
