@@ -360,7 +360,7 @@ main.app-main {
     max-width: var(--max-app-width);
     min-width: var(--min-app-width);
     margin: 0 auto;
-    padding: 16px 20px 180px 20px;
+    padding: 16px 20px 100px 20px;
 }
 
 .tab-content {
