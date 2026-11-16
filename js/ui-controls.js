@@ -2678,13 +2678,17 @@ function createKeyboard(midiManager, getActiveProgram) {
         });
     }
 
+    function resetLatchAndNotes() {
+        latchActive = false;
+        if (latchBtn) latchBtn.classList.remove('active');
+        releaseAllNotes();
+    }
+
     // MIDI Panic (All Notes Off)
     const panicBtn = controls.querySelector('#kbd-panic');
     if (panicBtn) {
         panicBtn.addEventListener('click', () => {
-            latchActive = false;
-            if (latchBtn) latchBtn.classList.remove('active');
-            releaseAllNotes();
+            resetLatchAndNotes();
             if (typeof midiManager.sendAllNotesOff === 'function') {
                 midiManager.sendAllNotesOff();
             } else if (midiManager.outPort) {
@@ -2800,6 +2804,7 @@ function createKeyboard(midiManager, getActiveProgram) {
     container.noteOn = noteOn;
     container.noteOff = noteOff;
     container.updateKeyboardHighlights = updateKeyboardHighlights;
+    container.resetLatchAndNotes = resetLatchAndNotes;
 
     return container;
 }

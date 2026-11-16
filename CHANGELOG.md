@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **UI:** Reset global latch and held audition notes on Fetch, Arp enable, or MIDI connection drop/restore.
 - **UI:** Bind `!` key to trigger MIDI Panic mode.
 - **CI:** Add release workflow to publish a minimal runtime `.zip` (`index.html`, `css/`, `js/`, `LICENSE`) on `v*` tags.
 - **UI:** Replace all remaining browser `confirm()` and `alert()` calls with app-styled `<dialog>` modals (`#app-confirm-dialog` and `#app-alert-dialog`).

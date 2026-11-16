@@ -397,6 +397,50 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
         assert(!latchBtnEl.classList.contains('active'), '! key triggers Panic and deactivates Latch');
         assertEqual(kbdAllNotesOffCalled, 2, '! key triggers midiManager.sendAllNotesOff()');
 
+        // Verify resetLatchAndNotes() clears global latch and note selections
+        latchBtnEl.click();
+        kbd.noteOn(48);
+        assert(latchBtnEl.classList.contains('active'), 'Latch activates before resetLatchAndNotes');
+        assert(kbd.querySelector('[data-offset="0"]').classList.contains('pressed'), 'Note selection active before resetLatchAndNotes');
+        kbd.resetLatchAndNotes();
+        assert(!latchBtnEl.classList.contains('active'), 'resetLatchAndNotes deactivates Latch');
+        assert(!kbd.querySelector('[data-offset="0"]').classList.contains('pressed'), 'resetLatchAndNotes clears active note selections');
+
+        // Verify App resets global latch and note selections on Fetch, enabling Arp, and connection drop/restore
+        const appLatch = new App();
+        appLatch.midi.outPort = { id: 'out-1', name: 'MicroMonsta 2', send: () => {} };
+        appLatch.midi.inPort = { id: 'in-1', name: 'MicroMonsta 2' };
+        appLatch.bindEvents();
+        appLatch.auditionKeyboard = kbd;
+        const appLatchBtn = latchBtnEl;
+        const appKey0 = kbd.querySelector('[data-offset="0"]');
+
+        const activateLatchAndNote = () => {
+            if (!appLatchBtn.classList.contains('active')) appLatchBtn.click();
+            kbd.noteOn(48);
+        };
+
+        activateLatchAndNote();
+        appLatch.fetchActiveProgram(0);
+        clearTimeout(appLatch._fetchTimeout);
+        assert(!appLatchBtn.classList.contains('active'), 'Fetch turns off global latch');
+        assert(!appKey0.classList.contains('pressed'), 'Fetch clears active note selections');
+
+        activateLatchAndNote();
+        appLatch.onParameterChanged('ARP_OFF_ON', 1);
+        assert(!appLatchBtn.classList.contains('active'), 'Enabling Arp turns off global latch');
+        assert(!appKey0.classList.contains('pressed'), 'Enabling Arp clears active note selections');
+
+        activateLatchAndNote();
+        appLatch.midi.emit('connection-lost', { port: appLatch.midi.outPort, type: 'output' });
+        assert(!appLatchBtn.classList.contains('active'), 'Dropped connection turns off global latch');
+        assert(!appKey0.classList.contains('pressed'), 'Dropped connection clears active note selections');
+
+        activateLatchAndNote();
+        appLatch.midi.emit('connection-restored', { port: appLatch.midi.outPort, type: 'output' });
+        assert(!appLatchBtn.classList.contains('active'), 'Restored connection turns off global latch');
+        assert(!appKey0.classList.contains('pressed'), 'Restored connection clears active note selections');
+
         kbd.setOctave(3); // Octave 3 base is (3+1)*12 = 48. Offsets 0..24 span notes 48..72
 
         const key0 = kbd.querySelector('[data-offset="0"]');

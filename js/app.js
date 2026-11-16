@@ -250,6 +250,7 @@ class App {
                 return;
             }
             const partLabel = slot === 1 ? 'B' : 'A';
+            this.resetAuditionLatch();
             this.replacePartWithRawData(slot, program.rawData, `Fetch Part ${partLabel} (${program.name})`, {
                 sendToHardware: false,
                 syncStatus: this.isConnectionGood ? 'synced' : 'offline',
@@ -290,6 +291,7 @@ class App {
             const isFollowerTab = this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower);
             if (hasBothPorts && !this._hadBothPortsConnected) {
                 this._hadBothPortsConnected = true;
+                this.resetAuditionLatch();
                 const isMM2Pair = this.midi.isMM2Port(this.midi.inPort) && this.midi.isMM2Port(this.midi.outPort);
                 if (!isMM2Pair && !isFollowerTab) {
                     const isReconnect = this._hasDetectedMM2Once;
@@ -300,11 +302,17 @@ class App {
                     });
                 }
             } else if (!hasBothPorts) {
+                if (this._hadBothPortsConnected) {
+                    this.resetAuditionLatch();
+                }
                 this._hadBothPortsConnected = false;
             }
         });
 
         this.midi.on('hardware-responsiveness-changed', ({ responsive, previous, isRemote }) => {
+            if (responsive !== previous) {
+                this.resetAuditionLatch();
+            }
             if (responsive === true && this.syncStatus === 'failed') {
                 this.updateSyncStatus(this.midi.liveSync ? 'synced' : 'modified');
             } else if (responsive === false && (this.syncStatus === 'synced' || this.syncStatus === 'streaming' || this.syncStatus === 'fetching')) {
@@ -362,6 +370,9 @@ class App {
             targetTimbre.setValue(paramKey, value);
 
             if (slot === this.activeSlot) {
+                if (paramKey === 'ARP_OFF_ON' && value) {
+                    this.resetAuditionLatch();
+                }
                 // If it's an oscillator parameter, switch active oscillator tab if needed
                 const oscMatch = paramKey.match(/^OSC(\d)_/);
                 if (oscMatch) {
@@ -405,6 +416,7 @@ class App {
         });
 
         this.midi.on('connection-lost', ({ port, type }) => {
+            this.resetAuditionLatch();
             const name = (port && port.name) ? port.name : 'MicroMonsta 2';
             // Cancel any pending fetch or timbral mode probe timeouts to prevent false fetch error warnings or crashes
             if (this._fetchTimeout) {
@@ -432,6 +444,7 @@ class App {
         });
 
         this.midi.on('connection-restored', ({ port, type }) => {
+            this.resetAuditionLatch();
             const name = (port && port.name) ? port.name : 'MicroMonsta 2';
             this.showNotification(`✓ MIDI Connection Restored: ${name} (${type})`, 'success');
             if (this.syncStatus === 'failed' && this.midi.inPort && this.midi.outPort) {
@@ -725,6 +738,9 @@ class App {
             this.recordUndo(key, prevVal, val, meta.label);
         }
         this.activeTimbre.setValue(key, val);
+        if (key === 'ARP_OFF_ON' && val) {
+            this.resetAuditionLatch();
+        }
         this.refreshVisualizerFor(key);
         if (this.tabSync) {
             this.tabSync.broadcast('PARAM_CHANGE', {
@@ -1489,6 +1505,7 @@ class App {
             this.switchView('settings');
             return;
         }
+        this.resetAuditionLatch();
         this.updateSyncStatus('fetching');
         const slot = targetSlot;
 
@@ -4316,6 +4333,9 @@ class App {
         targetTimbre.setValue(key, val);
 
         if (slot === this.activeSlot) {
+            if (key === 'ARP_OFF_ON' && val) {
+                this.resetAuditionLatch();
+            }
             this.refreshVisualizerFor(key);
 
             const oscMatch = key.match(/^OSC(\d)_/);
@@ -4488,11 +4508,18 @@ class App {
         });
     }
 
+    resetAuditionLatch() {
+        if (this.auditionKeyboard && typeof this.auditionKeyboard.resetLatchAndNotes === 'function') {
+            this.auditionKeyboard.resetLatchAndNotes();
+        }
+    }
+
     buildAuditionUI() {
         const container = document.getElementById('audition-toolbar-container');
         if (!container) return;
         container.innerHTML = '';
-        container.appendChild(createKeyboard(this.midi, () => this.activeTimbre));
+        this.auditionKeyboard = createKeyboard(this.midi, () => this.activeTimbre);
+        container.appendChild(this.auditionKeyboard);
     }
 
     showNotification(msg, type = 'info') {
