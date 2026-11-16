@@ -21,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **UI:** Reorganize `SEQUENCER` toolbar into `Note` and `Mod` sections, and replace `Copy to all` with drag-only `Copy` (`All`, `Note`, `Mod`) drop targets.
 - **Sync:** Skip Fetch/Push/Ignore dialog on Live Sync activation or verified reconnect when hardware and editor patches already match.
 - **UI:** Create Bank now creates a bank tab button immediately and enters inline rename mode without a browser `prompt()` dialog.
-- **UI:** Delete Bank now uses an app-styled `<dialog>` (`#delete-bank-dialog`) instead of a browser `confirm()` dialog.
 - **UI:** Removed redundant Rename Bank and Delete Bank toolbar buttons (bank tabs provide inline rename and `✕` delete).
 
 - **UI:** Make librarian bank tab titles directly editable on single-click with Enter/Escape handling.
