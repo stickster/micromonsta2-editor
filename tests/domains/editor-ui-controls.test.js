@@ -388,6 +388,15 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
         assert(!latchBtnEl.classList.contains('active'), 'Panic deactivates Latch');
         assert(!kbd.querySelector('[data-offset="0"]').classList.contains('pressed'), 'Panic releases held/latched keys');
         assertEqual(kbdAllNotesOffCalled, 1, 'Panic calls midiManager.sendAllNotesOff()');
+
+        // Verify '!' key triggers Panic
+        latchBtnEl.click();
+        assert(latchBtnEl.classList.contains('active'), 'Latch button re-activates before ! key test');
+        kbd.noteOn(60);
+        window.dispatchEvent({ type: 'keydown', key: '!', code: 'Digit1', shiftKey: true, preventDefault: () => {} });
+        assert(!latchBtnEl.classList.contains('active'), '! key triggers Panic and deactivates Latch');
+        assertEqual(kbdAllNotesOffCalled, 2, '! key triggers midiManager.sendAllNotesOff()');
+
         kbd.setOctave(3); // Octave 3 base is (3+1)*12 = 48. Offsets 0..24 span notes 48..72
 
         const key0 = kbd.querySelector('[data-offset="0"]');

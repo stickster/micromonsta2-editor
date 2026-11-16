@@ -2454,7 +2454,7 @@ function createKeyboard(midiManager, getActiveProgram) {
                 <input type="range" class="wheel-slider" id="mod-wheel" min="0" max="127" value="0">
             </div>
         </div>
-        <button class="btn btn-sm btn-panic" id="kbd-panic" title="MIDI Panic — All Notes Off (CC 123)">Panic</button>
+        <button class="btn btn-sm btn-panic" id="kbd-panic" title="MIDI Panic — All Notes Off (CC 123, ! key)">Panic</button>
     `;
 
     const kbdWrapper = document.createElement('div');
@@ -2767,6 +2767,9 @@ function createKeyboard(midiManager, getActiveProgram) {
             } else if (e.code === 'Space') {
                 e.preventDefault();
                 latchBtn.click();
+            } else if (e.key === '!') {
+                e.preventDefault();
+                if (panicBtn) panicBtn.click();
             } else if (KEY_NOTE_MAP[e.code] !== undefined && !activeQwertyNotes.has(e.code)) {
                 e.preventDefault();
                 const note = (currentOctave + 1) * 12 + KEY_NOTE_MAP[e.code];
