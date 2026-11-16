@@ -7,23 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- **UI:** Reset global latch and held audition notes on Fetch, Arp enable, or MIDI connection drop/restore.
+---
+
+## [0.5.0] - 2026-11-15
+
+### Added
 - **UI:** Bind `!` key to trigger MIDI Panic mode.
-- **CI:** Add release workflow to publish a minimal runtime `.zip` (`index.html`, `css/`, `js/`, `LICENSE`) on `v*` tags.
-- **UI:** Replace all remaining browser `confirm()` and `alert()` calls with app-styled `<dialog>` modals (`#app-confirm-dialog` and `#app-alert-dialog`).
-- **UI:** Dragging a Part in Init state onto a memory slot (`M1`–`M4`) clears that memory slot.
 - **UI:** Add a `Clear` button to the right of patch memories `M1`–`M4` to clear all stored memory slots.
+- **UI:** Dragging a Part in Init state onto a memory slot (`M1`–`M4`) clears that memory slot.
+
+### Changed
+- **UI:** Replace all remaining browser `confirm()` and `alert()` calls with app-styled `<dialog>` modals (`#app-confirm-dialog` and `#app-alert-dialog`).
 - **UI:** Give all toggle buttons in interface consistent style.
 - **UI:** Replace the editor sync status badge text with single-color outline SVG icons using existing theme colors.
-- **Sync:** Preserve `Synced with MM2` status when disabling Live Sync instead of immediately marking the patch as `Modified`.
-- **Tests:** Split monolithic `tests/test-suite.js` into domain-focused files under `tests/domains/` with shared harness in `tests/test-helpers.js`.
-- **UI:** Remove focus from buttons, knobs, and selectors after interaction so QWERTY keyboard piano notes do not highlight or re-trigger previous controls.
 - **UI:** Reorganize `SEQUENCER` toolbar into `Note` and `Mod` sections, and replace `Copy to all` with drag-only `Copy` (`All`, `Note`, `Mod`) drop targets.
-- **Sync:** Skip Fetch/Push/Ignore dialog on Live Sync activation or verified reconnect when hardware and editor patches already match.
 - **UI:** Create Bank now creates a bank tab button immediately and enters inline rename mode without a browser `prompt()` dialog.
 - **UI:** Removed redundant Rename Bank and Delete Bank toolbar buttons (bank tabs provide inline rename and `✕` delete).
 
 - **UI:** Make librarian bank tab titles directly editable on single-click with Enter/Escape handling.
+- **Sync:** Skip Fetch/Push/Ignore dialog on Live Sync activation or verified reconnect when hardware and editor patches already match.
+
+### Fixed
+- **UI:** Remove wasted space in the audition keyboard footer.
+- **UI:** Reset global latch and held audition notes on Fetch, Arp enable, or MIDI connection drop/restore.
+- **Sync:** Preserve `Synced with MM2` status when disabling Live Sync instead of immediately marking the patch as `Modified`.
+- **UI:** Remove focus from buttons, knobs, and selectors after interaction so QWERTY keyboard piano notes do not highlight or re-trigger previous controls.
+
+### CI & Maintenance
+- **CI:** Add release workflow to publish a minimal runtime `.zip` (`index.html`, `css/`, `js/`, `LICENSE`) on `v*` tags.
+- **Tests:** Split monolithic `tests/test-suite.js` into domain-focused files under `tests/domains/` with shared harness in `tests/test-helpers.js`.
+
+---
+
+## [0.4.4] - 2026-11-14
+
+### Changed
+- **UI:** Link header and settings app version badges to the GitHub repository.
+
+### CI & Maintenance
 - **CI:** Instruct `gemini-triage` and `gemini-review` workflows to fetch full issue/PR details and post comments/reviews via `gh` CLI.
 - **CI:** Add `workflow_dispatch` handoff from `gemini-triage` to `gemini-assist` for actionable issues.
 - **CI:** Authenticate `gh` CLI via `gh auth login --with-token` before running Gemini CLI so `gh` remains authenticated despite shell env var redaction.
