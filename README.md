@@ -38,6 +38,7 @@ If you want to connect the app to your hardware, whether from the website or fro
 - **Patch Convenience:** `Part A ↔ Part B` copying built in. Two modes available:
    - Use **Fetch from MM2** / **Push to MM2** for quick transfers from/to current hardware state. Use the `Compare` toggle to hear differences quickly, OR:
    - Use **Live Sync** mode which streams changes directly to hardware over 7-bit/14-bit NRPN (great for testing modulations).
+   - **Four (4) patch memories** for quick comparisons of entire patches.
 - **Full Multi-step Undo / Redo:** Uses`Cmd/Ctrl+Z`, `Cmd/Ctrl+Y` to make it easy to rewind or replay changes.
 - **Built-In Keyboard and Chorder Preview**: Always-available bottom keyboard with QWERTY note input, octave controls, latch, pitch/mod wheels, MIDI Panic, and dual-color highlighting of Chorder chords.
 - **Patch Librarian and Duplicate Manager**: Organize banks locally, search and filter by category, import/export `.syx` files, and detect or condense redundant duplicate patches.
