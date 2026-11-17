@@ -41,7 +41,7 @@ If you want to connect the app to your hardware, whether from the website or fro
    - **Four (4) patch memories** for quick comparisons of entire patches.
 - **Full Multi-step Undo / Redo:** Uses`Cmd/Ctrl+Z`, `Cmd/Ctrl+Y` to make it easy to rewind or replay changes.
 - **Built-In Keyboard and Chorder Preview**: Always-available bottom keyboard with QWERTY note input, octave controls, latch, pitch/mod wheels, MIDI Panic, and dual-color highlighting of Chorder chords.
-- **Patch Librarian and Duplicate Manager**: Organize banks locally, search and filter by category, import/export `.syx` files, and detect or condense redundant duplicate patches.
+- **Patch Librarian and Duplicate Manager**: Organize and duplicate banks locally, drag-and-drop to reorder, copy, or move patches (including multi-select) across banks with Undo/Redo, search and filter by category, import/export `.syx` files, and detect or condense redundant duplicate patches.
 - **Privacy Respecting and Zero Setup**: Runs **100% LOCALLY** in your browser with zero dependencies, no account, and no data leaving your machine. 
 - **Multi-window coordination**: Supports multiple instances in case you want to see Parts A and B simultaneously. Extra browser windows don't collide over MIDI.
 
