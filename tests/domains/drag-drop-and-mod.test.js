@@ -903,4 +903,117 @@ MM2TestRunner.register('Section Drag-and-Drop, Copy/Paste & Mod Matrix', async (
         assertEqual(mtxResetApp.activeTimbre.getValue('MTX2_SRC'), 0, 'Redo reapplies cleared MTX2_SRC');
     });
 
+    await runSection('\n--- [69] Editor Drag-and-Drop Drop Tips Tests ---', async () => {
+        const makeEvt = (type, extra = {}) => {
+            const store = extra._store || {};
+            return {
+                type,
+                relatedTarget: extra.relatedTarget || null,
+                preventDefault() { },
+                stopPropagation() { },
+                dataTransfer: {
+                    effectAllowed: '',
+                    dropEffect: '',
+                    setData(k, v) { store[k] = v; },
+                    getData(k) { return store[k] || ''; }
+                }
+            };
+        };
+
+        const tipApp = new App();
+        tipApp.setTimbralMode('bitimbral', { broadcast: false });
+        const mBtns = [0, 1].map(i => {
+            const b = document.createElement('button');
+            b.dataset = { mem: String(i) };
+            return b;
+        });
+        const pA = document.createElement('button');
+        pA.dataset = { slot: '0' };
+        const pB = document.createElement('button');
+        pB.dataset = { slot: '1' };
+        const eGrid = document.createElement('div');
+        tipApp.wireMemoryAndPartDragDrop({ memButtons: mBtns, partButtons: [pA, pB], appMain: null, editorGrid: eGrid, clearButton: null });
+
+        // 1. Memory -> Memory
+        const m1 = new MM2Program();
+        m1.name = 'MEM_ONE';
+        tipApp.memories[0] = m1;
+        const mCopyStore = {};
+        mBtns[0].dispatchEvent(makeEvt('dragstart', { _store: mCopyStore }));
+        mBtns[1].dispatchEvent(makeEvt('dragover', { _store: mCopyStore }));
+        assertEqual(mBtns[1].getAttribute('data-drop-tip'), 'Drop to copy Memory M1 to M2', 'Memory -> Memory shows copy drop tip');
+        mBtns[1].dispatchEvent(makeEvt('dragleave', { _store: mCopyStore }));
+        assertEqual(mBtns[1].getAttribute('data-drop-tip') || '', '', 'Memory -> Memory clears drop tip on dragleave');
+
+        // 2. Part -> Memory (non-Init vs Init)
+        tipApp.timbreA.name = 'CUSTOM';
+        tipApp.timbreA.setValue('OSC1_SHAPE', 55);
+        const pMemStore = {};
+        pA.dispatchEvent(makeEvt('dragstart', { _store: pMemStore }));
+        mBtns[0].dispatchEvent(makeEvt('dragover', { _store: pMemStore }));
+        assertEqual(mBtns[0].getAttribute('data-drop-tip'), 'Drop to store Part A in Memory M1', 'Non-Init Part -> Memory shows store drop tip');
+
+        tipApp.timbreA = new MM2Program();
+        mBtns[0].dispatchEvent(makeEvt('dragover', { _store: pMemStore }));
+        assertEqual(mBtns[0].getAttribute('data-drop-tip'), 'Drop to clear Memory M1', 'Init Part -> Memory shows clear drop tip');
+
+        // 3 & 4. Part A -> Part B button vs Part A -> editorGrid (Part B active): consistent tip
+        const pPartStore = {};
+        pA.dispatchEvent(makeEvt('dragstart', { _store: pPartStore }));
+        pB.dispatchEvent(makeEvt('dragover', { _store: pPartStore }));
+        assertEqual(pB.getAttribute('data-drop-tip'), 'Drop to copy Part A to Part B', 'Part A -> Part B button shows copy drop tip');
+        tipApp.selectPart(1);
+        eGrid.dispatchEvent(makeEvt('dragover', { _store: pPartStore }));
+        assertEqual(eGrid.getAttribute('data-drop-tip'), 'Drop to copy Part A to Part B', 'Part A -> editorGrid (Part B active) uses identical copy drop tip');
+
+        // 5. Section copy (OSC tab vs OSC body consistent tip)
+        const oscTab1 = document.createElement('button');
+        const oscTab2 = document.createElement('button');
+        const oscBody = document.createElement('div');
+        tipApp.wireSectionDragSource(oscTab1, 'osc', 1);
+        tipApp.wireSectionDropTarget(oscTab2, 'osc', 2, () => tipApp.activeTimbre, () => {});
+        tipApp.wireSectionDropTarget(oscBody, 'osc', 2, () => tipApp.activeTimbre, () => {});
+        const oscStore = {};
+        oscTab1.dispatchEvent(makeEvt('dragstart', { _store: oscStore }));
+        oscTab2.dispatchEvent(makeEvt('dragover', { _store: oscStore }));
+        oscBody.dispatchEvent(makeEvt('dragover', { _store: oscStore }));
+        assertEqual(oscTab2.getAttribute('data-drop-tip'), 'Drop to copy OSC 1 to OSC 2', 'OSC tab drop target shows copy drop tip');
+        assertEqual(oscBody.getAttribute('data-drop-tip'), 'Drop to copy OSC 1 to OSC 2', 'OSC body drop target uses identical copy drop tip');
+
+        // 6. Mod Matrix Src/Dst field copy
+        const src1 = document.createElement('div');
+        const src2 = document.createElement('div');
+        tipApp.wireMtxFieldDragDrop(src1, 'src', 1, () => tipApp.activeTimbre, () => {});
+        tipApp.wireMtxFieldDragDrop(src2, 'src', 2, () => tipApp.activeTimbre, () => {});
+        const mtxFieldStore = {};
+        src1.dispatchEvent(makeEvt('dragstart', { _store: mtxFieldStore }));
+        src2.dispatchEvent(makeEvt('dragover', { _store: mtxFieldStore }));
+        assertEqual(src2.getAttribute('data-drop-tip'), 'Drop to copy Slot 1 Source to Slot 2', 'Mtx field drop target shows copy drop tip');
+
+        // 7. Mod source -> parameter control
+        const modContainer = document.createElement('div');
+        const lfoDrag = document.createElement('span');
+        const paramCtrl = document.createElement('div');
+        paramCtrl.setAttribute('data-param', 'FILTER_FREQ');
+        modContainer.appendChild(paramCtrl);
+        tipApp.wireSectionDragSource(lfoDrag, 'lfo', 1);
+        tipApp.wireModSourceToDestinationDropTargets(modContainer, () => tipApp.activeTimbre, () => {});
+        const modStore = {};
+        lfoDrag.dispatchEvent(makeEvt('dragstart', { _store: modStore }));
+        paramCtrl.dispatchEvent(makeEvt('dragover', { _store: modStore }));
+        assert((paramCtrl.getAttribute('data-drop-tip') || '').includes('Add to mod matrix: LFO 1 ->'), 'Mod destination control shows mod matrix drop tip');
+
+        // 8. Sequencer step -> step and step -> Copy All
+        const seqProg = new MM2Program();
+        const seqEl = createArpSequencer(() => seqProg, () => {});
+        const steps = seqEl.querySelectorAll('.step-col');
+        const copyAllBtn = seqEl.querySelectorAll('.seq-copy-all-btn')[0];
+        const seqStore = {};
+        steps[0].dispatchEvent(makeEvt('dragstart', { _store: seqStore }));
+        steps[1].dispatchEvent(makeEvt('dragover', { _store: seqStore }));
+        assertEqual(steps[1].getAttribute('data-drop-tip'), 'Drop to copy Step 1 to Step 2', 'Sequencer step shows copy drop tip');
+        copyAllBtn.dispatchEvent(makeEvt('dragover', { _store: seqStore }));
+        assert((copyAllBtn.getAttribute('data-drop-tip') || '').includes('from Step 1 to all steps'), 'Sequencer copy-all button shows copy drop tip');
+    });
+
 });

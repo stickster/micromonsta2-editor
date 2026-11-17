@@ -1708,6 +1708,35 @@ function createLFOWaveformPreview(lfoNumber, program) {
 }
 
 /**
+ * Sets and clears the shared floating drop-tip banner (rendered on body::after).
+ */
+function setAppDropTip(el, text) {
+    if (el && typeof el.setAttribute === 'function') {
+        el.setAttribute('data-drop-tip', text);
+    }
+    if (typeof document !== 'undefined' && document.body && typeof document.body.setAttribute === 'function') {
+        document.body.setAttribute('data-drop-tip', text);
+    }
+}
+
+function clearAppDropTip(el) {
+    const clearNode = (node) => {
+        if (!node) return;
+        if (typeof node.removeAttribute === 'function') {
+            node.removeAttribute('data-drop-tip');
+        } else if (typeof node.setAttribute === 'function') {
+            node.setAttribute('data-drop-tip', '');
+        }
+    };
+    clearNode(el);
+    if (typeof document !== 'undefined' && document.body) {
+        clearNode(document.body);
+    }
+}
+
+let _activeCardSectionDrag = null;
+
+/**
  * Creates a synthesizer card with Drag-and-Drop section copying and Action Menu (Copy, Paste, Reset, Randomize)
  */
 function createSectionCard(title, sectionType, sectionIndex, program, onChangeCallback, opts = {}) {
@@ -1857,11 +1886,11 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
     // Section Drag-and-Drop Setup (multi-instance sections only)
     if (!isSingleton) {
         titleGroup.addEventListener('dragstart', (e) => {
-            e.dataTransfer.setData('text/plain', JSON.stringify({
-                kind: 'section',
-                sectionType,
-                sectionIndex
-            }));
+            _activeCardSectionDrag = { kind: 'section', sectionType, sectionIndex };
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'copy';
+                e.dataTransfer.setData('text/plain', JSON.stringify(_activeCardSectionDrag));
+            }
             card.classList.add('is-dragging');
             document.querySelectorAll(`.synth-card[data-section-type="${sectionType}"]`).forEach(c => {
                 if (c !== card) c.classList.add('valid-drop-target');
@@ -1869,25 +1898,38 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
         });
 
         titleGroup.addEventListener('dragend', () => {
+            _activeCardSectionDrag = null;
             card.classList.remove('is-dragging');
             document.querySelectorAll('.valid-drop-target').forEach(c => c.classList.remove('valid-drop-target'));
-            document.querySelectorAll('.drop-hover').forEach(c => c.classList.remove('drop-hover'));
+            document.querySelectorAll('.drop-hover').forEach(c => {
+                c.classList.remove('drop-hover');
+                clearAppDropTip(c);
+            });
+            clearAppDropTip(null);
         });
 
         card.addEventListener('dragover', (e) => {
             e.preventDefault();
             if (card.classList.contains('valid-drop-target')) {
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
                 card.classList.add('drop-hover');
+                const secLabel = sectionType.toUpperCase();
+                if (_activeCardSectionDrag && _activeCardSectionDrag.sectionType === sectionType) {
+                    setAppDropTip(card, `Drop to copy ${secLabel} ${_activeCardSectionDrag.sectionIndex} to ${secLabel} ${sectionIndex}`);
+                }
             }
         });
 
         card.addEventListener('dragleave', () => {
             card.classList.remove('drop-hover');
+            clearAppDropTip(card);
         });
 
         card.addEventListener('drop', (e) => {
             e.preventDefault();
             card.classList.remove('drop-hover');
+            clearAppDropTip(card);
+            _activeCardSectionDrag = null;
             try {
                 const data = JSON.parse(e.dataTransfer.getData('text/plain'));
                 if (data.kind === 'section' && data.sectionType === sectionType && data.sectionIndex !== sectionIndex) {
@@ -1970,14 +2012,17 @@ function createArpSequencer(program, onChangeCallback) {
             e.stopPropagation();
             if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
             btn.classList.add('slot-drop-hover');
+            setAppDropTip(btn, `Drop to copy ${label.toLowerCase()} from Step ${activeStepDrag} to all steps`);
         });
         btn.addEventListener('dragleave', (e) => {
             e.stopPropagation();
             btn.classList.remove('slot-drop-hover');
+            clearAppDropTip(btn);
         });
         btn.addEventListener('drop', (e) => {
             e.preventDefault();
             e.stopPropagation();
+            clearAppDropTip(btn);
             setDropTargetsVisible(false);
             try {
                 const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
@@ -2227,7 +2272,9 @@ function createArpSequencer(program, onChangeCallback) {
             setDropTargetsVisible(false);
             stepsGrid.querySelectorAll('.step-col.slot-drop-hover').forEach(el => {
                 el.classList.remove('slot-drop-hover');
+                clearAppDropTip(el);
             });
+            clearAppDropTip(null);
         });
         col.addEventListener('dragover', (e) => {
             if (activeStepDrag === null || activeStepDrag === i) return;
@@ -2235,6 +2282,7 @@ function createArpSequencer(program, onChangeCallback) {
             e.stopPropagation();
             if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
             col.classList.add('slot-drop-hover');
+            setAppDropTip(col, `Drop to copy Step ${activeStepDrag} to Step ${i}`);
         });
         col.addEventListener('dragleave', (e) => {
             e.stopPropagation();
@@ -2242,11 +2290,13 @@ function createArpSequencer(program, onChangeCallback) {
                 return;
             }
             col.classList.remove('slot-drop-hover');
+            clearAppDropTip(col);
         });
         col.addEventListener('drop', (e) => {
             e.preventDefault();
             e.stopPropagation();
             col.classList.remove('slot-drop-hover');
+            clearAppDropTip(col);
             setDropTargetsVisible(false);
             try {
                 const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';

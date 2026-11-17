@@ -1128,26 +1128,22 @@ class App {
     }
 
     _setDropTip(el, text) {
+        if (typeof setAppDropTip === 'function') {
+            setAppDropTip(el, text);
+            return;
+        }
         if (el && typeof el.setAttribute === 'function') {
             el.setAttribute('data-drop-tip', text);
-        }
-        if (typeof document !== 'undefined' && document.body && typeof document.body.setAttribute === 'function') {
-            document.body.setAttribute('data-drop-tip', text);
         }
     }
 
     _clearDropTip(el) {
-        const clearTarget = (node) => {
-            if (!node) return;
-            if (typeof node.removeAttribute === 'function') {
-                node.removeAttribute('data-drop-tip');
-            } else if (typeof node.setAttribute === 'function') {
-                node.setAttribute('data-drop-tip', '');
-            }
-        };
-        clearTarget(el);
-        if (typeof document !== 'undefined' && document.body) {
-            clearTarget(document.body);
+        if (typeof clearAppDropTip === 'function') {
+            clearAppDropTip(el);
+            return;
+        }
+        if (el && typeof el.removeAttribute === 'function') {
+            el.removeAttribute('data-drop-tip');
         }
     }
 
@@ -1235,12 +1231,24 @@ class App {
                 e.stopPropagation();
                 if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
                 btn.classList.add('slot-drop-hover');
+                if (validMem) {
+                    this._setDropTip(btn, `Drop to copy Memory M${active.index + 1} to M${memIdx + 1}`);
+                } else if (validPart) {
+                    const srcTimbre = active.slot === 1 ? this.timbreB : this.timbreA;
+                    const srcLabel = active.slot === 0 ? 'A' : 'B';
+                    if (srcTimbre && typeof srcTimbre.isInit === 'function' && srcTimbre.isInit()) {
+                        this._setDropTip(btn, `Drop to clear Memory M${memIdx + 1}`);
+                    } else {
+                        this._setDropTip(btn, `Drop to store Part ${srcLabel} in Memory M${memIdx + 1}`);
+                    }
+                }
             });
 
             btn.addEventListener('dragleave', (e) => {
                 e.stopPropagation();
                 if (e.relatedTarget && typeof btn.contains === 'function' && btn.contains(e.relatedTarget)) return;
                 btn.classList.remove('slot-drop-hover');
+                this._clearDropTip(btn);
             });
 
             btn.addEventListener('drop', (e) => {
@@ -1288,12 +1296,16 @@ class App {
                 e.stopPropagation();
                 if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
                 btn.classList.add('slot-drop-hover');
+                const srcLabel = active.slot === 0 ? 'A' : 'B';
+                const dstLabel = slot === 0 ? 'A' : 'B';
+                this._setDropTip(btn, `Drop to copy Part ${srcLabel} to Part ${dstLabel}`);
             });
 
             btn.addEventListener('dragleave', (e) => {
                 e.stopPropagation();
                 if (e.relatedTarget && typeof btn.contains === 'function' && btn.contains(e.relatedTarget)) return;
                 btn.classList.remove('slot-drop-hover');
+                this._clearDropTip(btn);
             });
 
             btn.addEventListener('drop', (e) => {
@@ -1324,11 +1336,15 @@ class App {
                 e.stopPropagation();
                 if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
                 editorGrid.classList.add('slot-drop-hover');
+                const srcLabel = active.slot === 0 ? 'A' : 'B';
+                const dstLabel = this.activeSlot === 0 ? 'A' : 'B';
+                this._setDropTip(editorGrid, `Drop to copy Part ${srcLabel} to Part ${dstLabel}`);
             });
 
             editorGrid.addEventListener('dragleave', (e) => {
                 if (e.relatedTarget && typeof editorGrid.contains === 'function' && editorGrid.contains(e.relatedTarget)) return;
                 editorGrid.classList.remove('slot-drop-hover');
+                this._clearDropTip(editorGrid);
             });
 
             editorGrid.addEventListener('drop', (e) => {
@@ -1844,9 +1860,11 @@ class App {
         dragEl.addEventListener('dragend', () => {
             this._activeDragSection = null;
             dragContainer.classList.remove('is-dragging');
+            this._clearDropTip(null);
             if (typeof document !== 'undefined' && document.querySelectorAll) {
                 document.querySelectorAll('.tab-drop-hover, .slot-drop-hover, .lfo-dst-drop-hover').forEach(el => {
                     el.classList.remove('tab-drop-hover', 'slot-drop-hover', 'lfo-dst-drop-hover');
+                    this._clearDropTip(el);
                 });
             }
         });
@@ -1857,6 +1875,13 @@ class App {
      */
     wireSectionDropTarget(targetEl, sectionType, targetIndex, timbre, onChange, { hoverClass = 'slot-drop-hover', onDrop } = {}) {
         const resolveTargetIndex = () => (typeof targetIndex === 'function' ? targetIndex() : targetIndex);
+        const SECTION_TIP_LABELS = {
+            osc: 'OSC',
+            env: 'ENV',
+            lfo: 'LFO',
+            mult: 'Mult',
+            mtx: 'Mtx'
+        };
 
         targetEl.addEventListener('dragover', (e) => {
             const active = this._activeDragSection;
@@ -1868,6 +1893,8 @@ class App {
             e.stopPropagation();
             if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
             targetEl.classList.add(hoverClass);
+            const secLabel = SECTION_TIP_LABELS[sectionType] || sectionType.toUpperCase();
+            this._setDropTip(targetEl, `Drop to copy ${secLabel} ${active.sectionIndex} to ${secLabel} ${dstIdx}`);
         });
 
         targetEl.addEventListener('dragleave', (e) => {
@@ -1876,12 +1903,14 @@ class App {
                 return;
             }
             targetEl.classList.remove(hoverClass);
+            this._clearDropTip(targetEl);
         });
 
         targetEl.addEventListener('drop', (e) => {
             e.preventDefault();
             e.stopPropagation();
             targetEl.classList.remove(hoverClass);
+            this._clearDropTip(targetEl);
             try {
                 const dstIdx = resolveTargetIndex();
                 const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
@@ -1926,9 +1955,11 @@ class App {
         el.addEventListener('dragend', () => {
             this._activeDragMtxField = null;
             el.classList.remove('is-dragging');
+            this._clearDropTip(null);
             if (typeof document !== 'undefined' && document.querySelectorAll) {
                 document.querySelectorAll('.mtx-select-src.slot-drop-hover, .mtx-select-dst.slot-drop-hover').forEach(node => {
                     node.classList.remove('slot-drop-hover');
+                    this._clearDropTip(node);
                 });
             }
         });
@@ -1942,6 +1973,7 @@ class App {
             e.stopPropagation();
             if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
             el.classList.add('slot-drop-hover');
+            this._setDropTip(el, `Drop to copy Slot ${active.slotIndex} ${kindLabel} to Slot ${slotIndex}`);
         });
 
         el.addEventListener('dragleave', (e) => {
@@ -1949,6 +1981,7 @@ class App {
                 return;
             }
             el.classList.remove('slot-drop-hover');
+            this._clearDropTip(el);
         });
 
         el.addEventListener('drop', (e) => {
@@ -1965,6 +1998,7 @@ class App {
             e.preventDefault();
             e.stopPropagation();
             el.classList.remove('slot-drop-hover');
+            this._clearDropTip(el);
 
             const prog = timbre();
             if (!prog) return;
@@ -2069,8 +2103,10 @@ class App {
             if (!dstVal) return;
 
             el.addEventListener('dragover', (e) => {
-                if (!resolveModSource(this._activeDragSection)) return;
-                if (this._findFirstEmptyMtxSlot(timbre()) === null) return;
+                const modSrc = resolveModSource(this._activeDragSection);
+                if (!modSrc) return;
+                const emptySlot = this._findFirstEmptyMtxSlot(timbre());
+                if (emptySlot === null) return;
                 e.preventDefault();
                 e.stopPropagation();
                 if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
@@ -2087,6 +2123,8 @@ class App {
                     }
                 }
                 el.classList.add('lfo-dst-drop-hover');
+                const dstLabel = (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get('MTX1_DST')?.values?.[dstVal]) || paramKey;
+                this._setDropTip(el, `Add to mod matrix: ${modSrc.srcLabel} -> ${dstLabel}`);
             });
 
             el.addEventListener('dragleave', (e) => {
@@ -2094,6 +2132,7 @@ class App {
                     return;
                 }
                 el.classList.remove('lfo-dst-drop-hover');
+                this._clearDropTip(el);
             });
 
             el.addEventListener('drop', (e) => {
@@ -2113,6 +2152,7 @@ class App {
                 e.preventDefault();
                 e.stopPropagation();
                 el.classList.remove('lfo-dst-drop-hover');
+                this._clearDropTip(el);
 
                 const { srcVal, srcLabel } = modSrc;
                 const dstLabel = (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get('MTX1_DST')?.values?.[dstVal]) || paramKey;
