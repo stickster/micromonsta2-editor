@@ -9,3 +9,15 @@ gha-creds-*.json
 # Backup files
 \#*
 *~
+
+# System files
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.directory
+.Trash-*
