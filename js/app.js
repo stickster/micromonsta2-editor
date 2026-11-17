@@ -50,6 +50,9 @@ class App {
 
         this.memories = [null, null, null, null];
         this._activeMemoryDrag = null;
+        this._activeLibrarianDrag = null;
+        this.selectedProgIndices = new Set();
+        this._lastSelectedProgIndex = null;
         this.loadMemories();
 
         // Sound Design Solo & Mute States & Active Tabs
@@ -839,6 +842,10 @@ class App {
             this._applyPartSnapshot(action.slot, action.prevRawData, 'undo', `Undo: ${action.label || 'Part Change'}`);
             return;
         }
+        if (action.type === 'bank-snapshot') {
+            this._applyBankSnapshot(action.bankIndex, action.prevPrograms, `Undo: ${action.label || 'Bank Change'}`);
+            return;
+        }
 
         if (action.changes && Array.isArray(action.changes)) {
             for (const ch of action.changes) {
@@ -879,6 +886,10 @@ class App {
             this._applyPartSnapshot(action.slot, action.newRawData, 'redo', `Redo: ${action.label || 'Part Change'}`);
             return;
         }
+        if (action.type === 'bank-snapshot') {
+            this._applyBankSnapshot(action.bankIndex, action.newPrograms, `Redo: ${action.label || 'Bank Change'}`);
+            return;
+        }
 
         if (action.changes && Array.isArray(action.changes)) {
             for (const ch of action.changes) {
@@ -904,6 +915,36 @@ class App {
         this.updateUndoRedoUI();
         const label = action.label || (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get(action.key)?.label) || action.key;
         this.showNotification(`Redo: ${label}`, 'info');
+    }
+
+    _recordBankUndo(bankIndex, prevPrograms, newPrograms, label) {
+        this.undoStack.push({
+            type: 'bank-snapshot',
+            bankIndex,
+            prevPrograms,
+            newPrograms,
+            label
+        });
+        if (this.undoStack.length > this.maxHistory) {
+            this.undoStack.shift();
+        }
+        this.redoStack = [];
+        this.updateUndoRedoUI();
+    }
+
+    _applyBankSnapshot(bankIndex, programsRaw, toastMsg) {
+        const bank = this.librarian && this.librarian.banks[bankIndex];
+        if (!bank) return;
+        bank.programs = programsRaw.map(bytes => new MM2Program(new Uint8Array(bytes)));
+        if (this.librarian.activeBankIndex !== bankIndex) {
+            this.librarian.activeBankIndex = bankIndex;
+        }
+        if (this.selectedProgIndices) this.selectedProgIndices.clear();
+        this._lastSelectedProgIndex = null;
+        this.librarian.saveAllBanks();
+        this.renderLibrarianBank();
+        this.updateUndoRedoUI();
+        this.showNotification(toastMsg, 'info');
     }
 
     updateUndoRedoUI() {
@@ -1086,20 +1127,38 @@ class App {
         return true;
     }
 
+    _setDropTip(el, text) {
+        if (el && typeof el.setAttribute === 'function') {
+            el.setAttribute('data-drop-tip', text);
+        }
+        if (typeof document !== 'undefined' && document.body && typeof document.body.setAttribute === 'function') {
+            document.body.setAttribute('data-drop-tip', text);
+        }
+    }
+
     _clearDropTip(el) {
-        if (!el) return;
-        if (typeof el.removeAttribute === 'function') {
-            el.removeAttribute('data-drop-tip');
-        } else if (typeof el.setAttribute === 'function') {
-            el.setAttribute('data-drop-tip', '');
+        const clearTarget = (node) => {
+            if (!node) return;
+            if (typeof node.removeAttribute === 'function') {
+                node.removeAttribute('data-drop-tip');
+            } else if (typeof node.setAttribute === 'function') {
+                node.setAttribute('data-drop-tip', '');
+            }
+        };
+        clearTarget(el);
+        if (typeof document !== 'undefined' && document.body) {
+            clearTarget(document.body);
         }
     }
 
     _clearMemoryDragHover() {
         if (typeof document === 'undefined' || !document.querySelectorAll) return;
-        document.querySelectorAll('.memory-btn.slot-drop-hover, .part-btn.slot-drop-hover, .app-main.slot-drop-hover, #editor-grid.slot-drop-hover, .prog-row.slot-drop-hover').forEach(el => {
+        document.querySelectorAll('.memory-btn.slot-drop-hover, .part-btn.slot-drop-hover, .app-main.slot-drop-hover, #editor-grid.slot-drop-hover, .prog-row.slot-drop-hover, .bank-tab.slot-drop-hover, #btn-add-bank.slot-drop-hover').forEach(el => {
             el.classList.remove('slot-drop-hover');
             this._clearDropTip(el);
+        });
+        document.querySelectorAll('.bank-tab.bank-insert-before, .bank-tab.bank-insert-after, .prog-row.prog-insert-before, .prog-row.prog-insert-after').forEach(el => {
+            el.classList.remove('bank-insert-before', 'bank-insert-after', 'prog-insert-before', 'prog-insert-after');
         });
     }
 
@@ -1291,7 +1350,46 @@ class App {
         }
 
         if (appMain) {
+            const isBelowProgList = (e) => {
+                if (typeof document === 'undefined' || !e || typeof e.clientY !== 'number') return true;
+                const progListEl = document.getElementById('librarian-prog-list');
+                if (!progListEl || typeof progListEl.getBoundingClientRect !== 'function') return true;
+                const rect = progListEl.getBoundingClientRect();
+                return !rect || e.clientY >= rect.bottom;
+            };
+
             appMain.addEventListener('dragover', (e) => {
+                const activeLib = this._activeLibrarianDrag;
+                if (
+                    this.currentView === 'librarian' &&
+                    activeLib &&
+                    activeLib.type === 'prog-move' &&
+                    this.librarian &&
+                    activeLib.bankIndex === this.librarian.activeBankIndex &&
+                    isBelowProgList(e)
+                ) {
+                    const bank = this.librarian.activeBank;
+                    const count = activeLib.progIndices ? activeLib.progIndices.length : 1;
+                    if (!bank || bank.length === 0 || (count === 1 && activeLib.progIndex === bank.length - 1)) {
+                        clearHover();
+                        if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+                        return;
+                    }
+                    e.preventDefault();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                    const progListEl = typeof document !== 'undefined' ? document.getElementById('librarian-prog-list') : null;
+                    const rows = progListEl && progListEl.children ? Array.from(progListEl.children) : [];
+                    rows.forEach((r, i) => {
+                        if (r.classList) {
+                            r.classList.remove('prog-insert-before', 'slot-drop-hover');
+                            r.classList.toggle('prog-insert-after', i === rows.length - 1);
+                        }
+                    });
+                    const slotLabel = `#${bank.length.toString().padStart(2, '0')}`;
+                    this._setDropTip(appMain, count > 1 ? `Drop to move ${count} patches to ${slotLabel}` : `Drop to move patch to ${slotLabel}`);
+                    return;
+                }
+
                 const active = this._activeMemoryDrag;
                 if (!active || active.kind !== 'memory' || !this.memories[active.index]) {
                     return;
@@ -1302,14 +1400,12 @@ class App {
                 e.preventDefault();
                 if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
                 appMain.classList.add('slot-drop-hover');
-                if (typeof appMain.setAttribute === 'function') {
-                    if (this.currentView === 'editor') {
-                        const partLabel = this.activeSlot === 1 ? 'B' : 'A';
-                        appMain.setAttribute('data-drop-tip', `Drop to load Memory M${active.index + 1} into Part ${partLabel}`);
-                    } else if (this.currentView === 'librarian') {
-                        const bankName = this.librarian && this.librarian.activeBank ? this.librarian.activeBank.name : 'current bank';
-                        appMain.setAttribute('data-drop-tip', `Drop to add Memory M${active.index + 1} to "${bankName}"`);
-                    }
+                if (this.currentView === 'editor') {
+                    const partLabel = this.activeSlot === 1 ? 'B' : 'A';
+                    this._setDropTip(appMain, `Drop to load Memory M${active.index + 1} into Part ${partLabel}`);
+                } else if (this.currentView === 'librarian') {
+                    const bankName = this.librarian && this.librarian.activeBank ? this.librarian.activeBank.name : 'current bank';
+                    this._setDropTip(appMain, `Drop to add Memory M${active.index + 1} to "${bankName}"`);
                 }
             });
 
@@ -1320,6 +1416,50 @@ class App {
             });
 
             appMain.addEventListener('drop', async (e) => {
+                const raw = e && e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+                let libData = null;
+                try {
+                    libData = raw ? JSON.parse(raw) : this._activeLibrarianDrag;
+                } catch (err) { }
+                if (
+                    this.currentView === 'librarian' &&
+                    libData &&
+                    libData.type === 'prog-move' &&
+                    this.librarian &&
+                    libData.bankIndex === this.librarian.activeBankIndex &&
+                    isBelowProgList(e)
+                ) {
+                    const bank = this.librarian.activeBank;
+                    if (!bank || bank.length === 0) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    clearHover();
+                    const indices = Array.isArray(libData.progIndices) && libData.progIndices.length > 0
+                        ? libData.progIndices
+                        : [libData.progIndex];
+                    const lastIdx = bank.length - 1;
+                    const prevPrograms = bank.programs.map(p => new Uint8Array(p.rawData));
+                    let undoLabel = null;
+                    if (indices.length > 1) {
+                        if (bank.moveProgramsGroup(indices, lastIdx)) {
+                            undoLabel = `Move ${indices.length} patches to #${lastIdx + 1}`;
+                        }
+                        if (this.selectedProgIndices) this.selectedProgIndices.clear();
+                        this._lastSelectedProgIndex = null;
+                        this.showNotification(`Moved ${indices.length} patches to slot #${lastIdx + 1}`, 'info');
+                    } else if (indices[0] !== lastIdx && bank.moveProgram(indices[0], lastIdx)) {
+                        undoLabel = `Move patch to #${lastIdx + 1}`;
+                    }
+                    if (undoLabel) {
+                        const newPrograms = bank.programs.map(p => new Uint8Array(p.rawData));
+                        this._recordBankUndo(this.librarian.activeBankIndex, prevPrograms, newPrograms, undoLabel);
+                    }
+                    this._activeLibrarianDrag = null;
+                    this.librarian.saveAllBanks();
+                    this.renderLibrarianBank();
+                    return;
+                }
+
                 const data = this._parseDragPayload(e);
                 if (!data || data.kind !== 'memory' || !this.memories[data.index]) {
                     return;
@@ -3688,8 +3828,10 @@ class App {
             };
         }
 
-        // Add Bank button
+        // Add Bank button & .bank-tabs-bar trailing area (drop target to duplicate a dragged bank)
         const btnAddBank = document.getElementById('btn-add-bank');
+        const bankTabsBar = typeof document.querySelector === 'function' ? document.querySelector('.bank-tabs-bar') : null;
+        const bankTabsContainer = document.getElementById('bank-tabs');
         if (btnAddBank) {
             btnAddBank.onclick = () => {
                 const defaultName = `Bank ${this.librarian.banks.length + 1}`;
@@ -3705,6 +3847,157 @@ class App {
                     this.startInlineBankRename(newIndex, tabTitle, newTab);
                 }
             };
+        }
+
+        const isInsideBankTabs = (target) => {
+            if (!bankTabsContainer || !target) return false;
+            if (target === bankTabsContainer) return true;
+            return typeof bankTabsContainer.contains === 'function' && bankTabsContainer.contains(target);
+        };
+
+        const clearDuplicateHover = () => {
+            if (btnAddBank) {
+                btnAddBank.classList.remove('slot-drop-hover');
+                this._clearDropTip(btnAddBank);
+            }
+        };
+
+        const clearBankInsertMarkers = () => {
+            if (!bankTabsContainer || !bankTabsContainer.children) return;
+            for (let i = 0; i < bankTabsContainer.children.length; i++) {
+                const t = bankTabsContainer.children[i];
+                if (t && t.classList) t.classList.remove('bank-insert-before', 'bank-insert-after');
+            }
+        };
+
+        const updateBankInsertIndicator = (fromIndex, clientX) => {
+            clearBankInsertMarkers();
+            if (!bankTabsContainer || !bankTabsContainer.children) return fromIndex;
+            const tabs = Array.from(bankTabsContainer.children);
+            if (tabs.length === 0) return fromIndex;
+            let insertPos = tabs.length;
+            if (typeof clientX === 'number') {
+                insertPos = 0;
+                for (let i = 0; i < tabs.length; i++) {
+                    const rect = typeof tabs[i].getBoundingClientRect === 'function' ? tabs[i].getBoundingClientRect() : null;
+                    if (!rect || (rect.left + rect.width / 2) < clientX) {
+                        insertPos = i + 1;
+                    }
+                }
+            }
+            const toIndex = fromIndex < insertPos ? insertPos - 1 : insertPos;
+            const clampedTo = Math.max(0, Math.min(tabs.length - 1, toIndex));
+            if (clampedTo !== fromIndex) {
+                if (insertPos < tabs.length && tabs[insertPos].classList) {
+                    tabs[insertPos].classList.add('bank-insert-before');
+                } else if (tabs[tabs.length - 1].classList) {
+                    tabs[tabs.length - 1].classList.add('bank-insert-after');
+                }
+            }
+            return clampedTo;
+        };
+
+        this._updateBankInsertIndicator = updateBankInsertIndicator;
+        this._clearBankInsertMarkers = clearBankInsertMarkers;
+
+        if (bankTabsContainer) {
+            bankTabsContainer.ondragover = (e) => {
+                const activeDrag = this._activeLibrarianDrag;
+                if (!activeDrag || activeDrag.type !== 'bank-reorder') return;
+                e.preventDefault();
+                if (e.stopPropagation) e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                clearDuplicateHover();
+                updateBankInsertIndicator(activeDrag.fromIndex, e.clientX);
+            };
+
+            bankTabsContainer.ondragleave = (e) => {
+                if (e.relatedTarget && typeof bankTabsContainer.contains === 'function' && bankTabsContainer.contains(e.relatedTarget)) return;
+                clearBankInsertMarkers();
+            };
+
+            bankTabsContainer.ondrop = (e) => {
+                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+                let data = null;
+                try {
+                    data = raw ? JSON.parse(raw) : this._activeLibrarianDrag;
+                } catch (err) { }
+                if (!data || data.type !== 'bank-reorder') return;
+                e.preventDefault();
+                if (e.stopPropagation) e.stopPropagation();
+                clearDuplicateHover();
+                const toIndex = updateBankInsertIndicator(data.fromIndex, e.clientX);
+                clearBankInsertMarkers();
+                this._activeLibrarianDrag = null;
+                if (toIndex !== data.fromIndex) {
+                    this.librarian.reorderBanks(data.fromIndex, toIndex);
+                    this.renderLibrarianBank();
+                }
+            };
+        }
+
+        const handleDuplicateDragOver = (e) => {
+            const activeDrag = this._activeLibrarianDrag;
+            if (!activeDrag || activeDrag.type !== 'bank-reorder') return;
+            if (e.currentTarget === bankTabsBar && isInsideBankTabs(e.target)) {
+                clearDuplicateHover();
+                return;
+            }
+            e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+            if (btnAddBank) {
+                btnAddBank.classList.add('slot-drop-hover');
+                const srcBank = this.librarian.banks[activeDrag.fromIndex];
+                if (srcBank) {
+                    this._setDropTip(btnAddBank, `Drop to duplicate "${srcBank.name}"`);
+                }
+            }
+        };
+
+        const handleDuplicateDragLeave = (targetEl, e) => {
+            if (e.relatedTarget && typeof targetEl.contains === 'function' && targetEl.contains(e.relatedTarget)) return;
+            clearDuplicateHover();
+        };
+
+        const handleDuplicateDrop = (e) => {
+            if (e.currentTarget === bankTabsBar && isInsideBankTabs(e.target)) return;
+            e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            clearDuplicateHover();
+            try {
+                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+                const data = raw ? JSON.parse(raw) : this._activeLibrarianDrag;
+                if (!data || data.type !== 'bank-reorder') return;
+                const newBank = this.librarian.duplicateBank(data.fromIndex);
+                this._activeLibrarianDrag = null;
+                if (newBank) {
+                    const newIndex = this.librarian.banks.length - 1;
+                    this.librarian.activeBankIndex = newIndex;
+                    this.selectedProgIndices.clear();
+                    this._lastSelectedProgIndex = null;
+                    this.renderLibrarianBank();
+                    this.showNotification(`Duplicated bank as "${newBank.name}"`, 'success');
+
+                    const bankTabs = document.getElementById('bank-tabs');
+                    const newTab = bankTabs && bankTabs.children ? bankTabs.children[newIndex] : null;
+                    const tabTitle = newTab ? newTab.querySelector('.bank-tab-title') : null;
+                    if (tabTitle) {
+                        this.startInlineBankRename(newIndex, tabTitle, newTab);
+                    }
+                }
+            } catch (err) { }
+        };
+
+        if (btnAddBank) {
+            btnAddBank.ondragover = handleDuplicateDragOver;
+            btnAddBank.ondragleave = (e) => handleDuplicateDragLeave(btnAddBank, e);
+            btnAddBank.ondrop = handleDuplicateDrop;
+        }
+        if (bankTabsBar) {
+            bankTabsBar.ondragover = handleDuplicateDragOver;
+            bankTabsBar.ondragleave = (e) => handleDuplicateDragLeave(bankTabsBar, e);
+            bankTabsBar.ondrop = handleDuplicateDrop;
         }
 
         // Export Bank button
@@ -3977,6 +4270,8 @@ class App {
             tab.onclick = () => {
                 if (this.librarian.activeBankIndex === idx) return;
                 this.librarian.activeBankIndex = idx;
+                this.selectedProgIndices.clear();
+                this._lastSelectedProgIndex = null;
                 this.renderLibrarianBank();
             };
 
@@ -3997,20 +4292,87 @@ class App {
                 };
             }
 
-            // Drag to reorder banks
+            // Drag to reorder banks or receive dragged patches from another bank
             tab.ondragstart = (e) => {
-                e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'bank-reorder', fromIndex: idx }));
+                const payload = { type: 'bank-reorder', fromIndex: idx };
+                this._activeLibrarianDrag = payload;
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = 'copyMove';
+                    e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+                }
                 tab.classList.add('dragging');
             };
-            tab.ondragend = () => tab.classList.remove('dragging');
-            tab.ondragover = (e) => e.preventDefault();
+            tab.ondragend = () => {
+                this._activeLibrarianDrag = null;
+                tab.classList.remove('dragging');
+                this._clearMemoryDragHover();
+            };
+            tab.ondragover = (e) => {
+                e.preventDefault();
+                if (e.stopPropagation) e.stopPropagation();
+                const btnAdd = document.getElementById('btn-add-bank');
+                if (btnAdd) {
+                    btnAdd.classList.remove('slot-drop-hover');
+                    this._clearDropTip(btnAdd);
+                }
+                const activeDrag = this._activeLibrarianDrag;
+                if (activeDrag && activeDrag.type === 'bank-reorder') {
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                    if (typeof this._updateBankInsertIndicator === 'function') {
+                        this._updateBankInsertIndicator(activeDrag.fromIndex, e.clientX);
+                    }
+                    return;
+                }
+                if (activeDrag && activeDrag.type === 'prog-move' && activeDrag.bankIndex !== idx) {
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                    tab.classList.add('slot-drop-hover');
+                    const count = activeDrag.progIndices ? activeDrag.progIndices.length : 1;
+                    const srcBank = this.librarian.banks[activeDrag.bankIndex];
+                    const firstIdx = activeDrag.progIndices ? activeDrag.progIndices[0] : activeDrag.progIndex;
+                    const firstProg = srcBank ? srcBank.getProgram(firstIdx) : null;
+                    const label = count > 1 ? `${count} patches` : (firstProg ? `"${firstProg.name}"` : 'patch');
+                    this._setDropTip(tab, `Drop to move ${label} to "${bank.name}"`);
+                }
+            };
+            tab.ondragleave = (e) => {
+                if (e.relatedTarget && typeof tab.contains === 'function' && tab.contains(e.relatedTarget)) return;
+                tab.classList.remove('slot-drop-hover');
+                this._clearDropTip(tab);
+            };
             tab.ondrop = (e) => {
                 e.preventDefault();
+                if (e.stopPropagation) e.stopPropagation();
+                tab.classList.remove('slot-drop-hover');
+                this._clearDropTip(tab);
+                if (typeof this._clearBankInsertMarkers === 'function') {
+                    this._clearBankInsertMarkers();
+                }
                 try {
-                    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+                    const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+                    const data = raw ? JSON.parse(raw) : this._activeLibrarianDrag;
+                    if (!data) return;
                     if (data.type === 'bank-reorder') {
-                        this.librarian.reorderBanks(data.fromIndex, idx);
-                        this.renderLibrarianBank();
+                        const toIndex = typeof this._updateBankInsertIndicator === 'function' && typeof e.clientX === 'number'
+                            ? this._updateBankInsertIndicator(data.fromIndex, e.clientX)
+                            : idx;
+                        if (typeof this._clearBankInsertMarkers === 'function') this._clearBankInsertMarkers();
+                        this._activeLibrarianDrag = null;
+                        if (toIndex !== data.fromIndex) {
+                            this.librarian.reorderBanks(data.fromIndex, toIndex);
+                            this.renderLibrarianBank();
+                        }
+                    } else if (data.type === 'prog-move' && data.bankIndex !== idx) {
+                        const indices = Array.isArray(data.progIndices) && data.progIndices.length > 0
+                            ? data.progIndices
+                            : [data.progIndex];
+                        const movedCount = this.librarian.moveProgramsToBank(data.bankIndex, indices, idx);
+                        this._activeLibrarianDrag = null;
+                        if (movedCount > 0) {
+                            this.selectedProgIndices.clear();
+                            this._lastSelectedProgIndex = null;
+                            this.renderLibrarianBank();
+                            this.showNotification(`Moved ${movedCount} ${movedCount === 1 ? 'patch' : 'patches'} to "${bank.name}"`, 'success');
+                        }
                     }
                 } catch (err) { }
             };
@@ -4056,18 +4418,211 @@ class App {
             return;
         }
 
+        // Prune stale program selection indices
+        if (this.selectedProgIndices && this.selectedProgIndices.size > 0) {
+            for (const idx of [...this.selectedProgIndices]) {
+                if (idx < 0 || idx >= activeBank.length) {
+                    this.selectedProgIndices.delete(idx);
+                }
+            }
+        }
+
+        const clearProgInsertMarkers = () => {
+            const rows = progList.children || [];
+            for (let r = 0; r < rows.length; r++) {
+                if (rows[r] && rows[r].classList) {
+                    rows[r].classList.remove('prog-insert-before', 'prog-insert-after', 'slot-drop-hover');
+                }
+                this._clearDropTip(rows[r]);
+            }
+        };
+
+        const computeProgTarget = (e, fallbackIndex, allowReplace = false) => {
+            const rows = progList.children ? Array.from(progList.children) : [];
+            if (rows.length === 0 || typeof e.clientY !== 'number') {
+                return { row: rows[fallbackIndex] || null, index: fallbackIndex, isAfter: false, mode: 'insert' };
+            }
+            for (let r = 0; r < rows.length; r++) {
+                const rEl = rows[r];
+                const rect = typeof rEl.getBoundingClientRect === 'function' ? rEl.getBoundingClientRect() : null;
+                if (!rect) continue;
+                const rIdx = rEl.dataset && rEl.dataset.progIndex !== undefined ? parseInt(rEl.dataset.progIndex, 10) : r;
+                if (e.clientY <= rect.bottom || r === rows.length - 1) {
+                    const edge = rect.height * 0.28;
+                    if (allowReplace && e.clientY >= rect.top + edge && e.clientY <= rect.bottom - edge) {
+                        return { row: rEl, index: rIdx, isAfter: false, mode: 'replace' };
+                    }
+                    const mid = rect.top + rect.height / 2;
+                    const isAfter = e.clientY > mid;
+                    return { row: rEl, index: rIdx, isAfter, mode: 'insert' };
+                }
+            }
+            return { row: rows[fallbackIndex] || null, index: fallbackIndex, isAfter: false, mode: 'insert' };
+        };
+
+        const resolveSingleInsertDest = (srcIdx, targetIdx, isAfter, hasClientY) => {
+            let dest = targetIdx;
+            if (hasClientY) {
+                if (isAfter && srcIdx > targetIdx) {
+                    dest = Math.min(activeBank.length - 1, targetIdx + 1);
+                } else if (!isAfter && srcIdx < targetIdx) {
+                    dest = Math.max(0, targetIdx - 1);
+                }
+            }
+            return dest;
+        };
+
+        const applyProgDragOver = (e, fallbackRow, fallbackIndex, fallbackName) => {
+            const activeLib = this._activeLibrarianDrag;
+            if (!activeLib || activeLib.type !== 'prog-move' || activeLib.bankIndex !== this.librarian.activeBankIndex) {
+                return false;
+            }
+            if (e.stopPropagation) e.stopPropagation();
+
+            const count = activeLib.progIndices ? activeLib.progIndices.length : 1;
+            if (count === 1 && (e.altKey || e.shiftKey) && fallbackRow) {
+                if (fallbackIndex === activeLib.progIndex) {
+                    clearProgInsertMarkers();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+                    return true;
+                }
+                e.preventDefault();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+                clearProgInsertMarkers();
+                fallbackRow.classList.add('slot-drop-hover');
+                const slotLabel = `#${(fallbackIndex + 1).toString().padStart(2, '0')}`;
+                this._setDropTip(fallbackRow, `Drop to swap with ${slotLabel} "${fallbackName}"`);
+                return true;
+            }
+
+            const target = computeProgTarget(e, fallbackIndex, count === 1);
+            const targetRow = target.row || fallbackRow;
+            const targetIdx = target.index !== undefined ? target.index : fallbackIndex;
+
+            // Disallow no-op move or copy at the same location
+            if (count === 1) {
+                const isSameReplace = target.mode === 'replace' && targetIdx === activeLib.progIndex;
+                const isSameInsert = target.mode !== 'replace' &&
+                    resolveSingleInsertDest(activeLib.progIndex, targetIdx, target.isAfter, typeof e.clientY === 'number') === activeLib.progIndex;
+                if (isSameReplace || isSameInsert) {
+                    clearProgInsertMarkers();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+                    return true;
+                }
+            }
+
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            const rows = progList.children || [];
+            for (let r = 0; r < rows.length; r++) {
+                if (rows[r] !== targetRow && rows[r].classList) {
+                    rows[r].classList.remove('prog-insert-before', 'prog-insert-after', 'slot-drop-hover');
+                    this._clearDropTip(rows[r]);
+                }
+            }
+            if (targetRow && targetRow.classList) {
+                const slotLabel = `#${(targetIdx + 1).toString().padStart(2, '0')}`;
+                if (target.mode === 'replace') {
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                    targetRow.classList.remove('prog-insert-before', 'prog-insert-after');
+                    targetRow.classList.add('slot-drop-hover');
+                    const targetProg = activeBank.getProgram(targetIdx);
+                    const targetName = targetProg ? targetProg.name : fallbackName;
+                    this._setDropTip(targetRow, `Drop to copy patch onto ${slotLabel} "${targetName}"`);
+                } else {
+                    targetRow.classList.toggle('prog-insert-before', !target.isAfter);
+                    targetRow.classList.toggle('prog-insert-after', target.isAfter);
+                    targetRow.classList.add('slot-drop-hover');
+                    this._setDropTip(targetRow, count > 1 ? `Drop to move ${count} patches to ${slotLabel}` : `Drop to move patch to ${slotLabel}`);
+                }
+            }
+            return true;
+        };
+
+        const applyProgDrop = (e, fallbackIndex) => {
+            const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+            let data = null;
+            try {
+                data = raw ? JSON.parse(raw) : this._activeLibrarianDrag;
+            } catch (err) { }
+            if (!data || data.type !== 'prog-move') return false;
+
+            e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            clearProgInsertMarkers();
+
+            const indices = Array.isArray(data.progIndices) && data.progIndices.length > 0
+                ? data.progIndices
+                : [data.progIndex];
+            const target = computeProgTarget(e, fallbackIndex, indices.length === 1);
+            const targetIndex = target.index !== undefined ? target.index : fallbackIndex;
+
+            const prevPrograms = activeBank.programs.map(p => new Uint8Array(p.rawData));
+            let undoLabel = null;
+
+            if (indices.length > 1) {
+                if (activeBank.moveProgramsGroup(indices, targetIndex)) {
+                    undoLabel = `Move ${indices.length} patches to #${targetIndex + 1}`;
+                }
+                this.selectedProgIndices.clear();
+                this._lastSelectedProgIndex = null;
+                this.showNotification(`Moved ${indices.length} patches to slot #${targetIndex + 1}`, 'info');
+            } else if (e.altKey || e.shiftKey) {
+                if (activeBank.swapPrograms(indices[0], targetIndex)) {
+                    undoLabel = `Swap #${indices[0] + 1} and #${targetIndex + 1}`;
+                }
+                this.showNotification(`Swapped slot #${indices[0] + 1} and slot #${targetIndex + 1}`, 'info');
+            } else if (target.mode === 'replace' && indices[0] !== targetIndex) {
+                const srcProg = activeBank.getProgram(indices[0]);
+                if (srcProg) {
+                    activeBank.setProgram(targetIndex, srcProg.clone());
+                    undoLabel = `Copy "${srcProg.name}" to #${targetIndex + 1}`;
+                    this.showNotification(`Copied "${srcProg.name}" to slot #${targetIndex + 1}`, 'success');
+                }
+            } else {
+                const destIndex = resolveSingleInsertDest(indices[0], targetIndex, target.isAfter, typeof e.clientY === 'number');
+                if (destIndex !== indices[0] && activeBank.moveProgram(indices[0], destIndex)) {
+                    undoLabel = `Move patch to #${destIndex + 1}`;
+                }
+            }
+            if (undoLabel) {
+                const newPrograms = activeBank.programs.map(p => new Uint8Array(p.rawData));
+                this._recordBankUndo(this.librarian.activeBankIndex, prevPrograms, newPrograms, undoLabel);
+            }
+            this._activeLibrarianDrag = null;
+            this.librarian.saveAllBanks();
+            this.renderLibrarianBank();
+            return true;
+        };
+
+        progList.ondragover = (e) => {
+            applyProgDragOver(e, null, 0, '');
+        };
+        progList.ondragleave = (e) => {
+            if (e.relatedTarget && typeof progList.contains === 'function' && progList.contains(e.relatedTarget)) return;
+            clearProgInsertMarkers();
+        };
+        progList.ondrop = (e) => {
+            applyProgDrop(e, activeBank.length - 1);
+        };
+
         visiblePrograms.forEach(({ program, originalIndex }) => {
             const row = document.createElement('div');
             const isDup = dupInfo.duplicateIndices.has(originalIndex);
-            row.className = `prog-row ${isDup ? 'is-duplicate' : ''}`;
+            const isSelected = this.selectedProgIndices && this.selectedProgIndices.has(originalIndex);
+            row.className = `prog-row${isDup ? ' is-duplicate' : ''}${isSelected ? ' selected' : ''}`;
             row.setAttribute('draggable', 'true');
+            if (row.dataset) row.dataset.progIndex = String(originalIndex);
 
             const catOptions = LOOKUPS.categories.map((cat, cIdx) =>
                 `<option value="${cIdx}" ${cIdx === program.category ? 'selected' : ''}>${cat}</option>`
             ).join('');
 
             row.innerHTML = `
-                <div class="prog-drag-handle" title="Drag to reorder or swap">⋮⋮</div>
+                <div class="prog-drag-handle" title="Drag to reorder, swap, or move to another bank">⋮⋮</div>
+                <button type="button" class="prog-select-cb${isSelected ? ' active' : ''}" aria-pressed="${isSelected ? 'true' : 'false'}" title="Select patch for multi-drag" aria-label="Select ${program.name}">
+                    <svg class="prog-select-check" viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2.2 6.2 4.8 8.8 9.8 3.2"></polyline></svg>
+                </button>
                 <div class="prog-slot-num">#${(originalIndex + 1).toString().padStart(2, '0')}</div>
                 <div class="prog-name">${program.name}</div>
                 <select class="prog-cat-badge prog-cat-select" data-prog-index="${originalIndex}" title="Edit category">
@@ -4081,6 +4636,76 @@ class App {
                     <button class="btn btn-sm btn-danger" data-action="delete" title="Delete">✕</button>
                 </div>
             `;
+
+            const syncSelectionUI = () => {
+                const rows = progList.children || [];
+                for (let r = 0; r < rows.length; r++) {
+                    const rEl = rows[r];
+                    const rIdx = rEl.dataset && rEl.dataset.progIndex !== undefined ? parseInt(rEl.dataset.progIndex, 10) : NaN;
+                    if (Number.isNaN(rIdx)) continue;
+                    const sel = this.selectedProgIndices.has(rIdx);
+                    if (rEl.classList) rEl.classList.toggle('selected', sel);
+                    const rCb = rEl.querySelector ? rEl.querySelector('.prog-select-cb') : null;
+                    if (rCb) {
+                        if (rCb.classList && typeof rCb.classList.toggle === 'function') {
+                            rCb.classList.toggle('active', sel);
+                        }
+                        if (typeof rCb.setAttribute === 'function') {
+                            rCb.setAttribute('aria-pressed', sel ? 'true' : 'false');
+                        }
+                        rCb.checked = sel;
+                    }
+                }
+            };
+
+            const applySelection = (mode, shiftKey) => {
+                if (shiftKey && this._lastSelectedProgIndex !== null) {
+                    const startPos = visiblePrograms.findIndex(v => v.originalIndex === this._lastSelectedProgIndex);
+                    const endPos = visiblePrograms.findIndex(v => v.originalIndex === originalIndex);
+                    if (startPos !== -1 && endPos !== -1) {
+                        const lo = Math.min(startPos, endPos);
+                        const hi = Math.max(startPos, endPos);
+                        if (mode === 'single') this.selectedProgIndices.clear();
+                        for (let p = lo; p <= hi; p++) {
+                            this.selectedProgIndices.add(visiblePrograms[p].originalIndex);
+                        }
+                    }
+                } else if (mode === 'toggle') {
+                    if (this.selectedProgIndices.has(originalIndex)) {
+                        this.selectedProgIndices.delete(originalIndex);
+                    } else {
+                        this.selectedProgIndices.add(originalIndex);
+                    }
+                } else {
+                    const wasOnly = this.selectedProgIndices.size === 1 && this.selectedProgIndices.has(originalIndex);
+                    this.selectedProgIndices.clear();
+                    if (!wasOnly) this.selectedProgIndices.add(originalIndex);
+                }
+                this._lastSelectedProgIndex = originalIndex;
+                syncSelectionUI();
+            };
+
+            const selectCb = row.querySelector('.prog-select-cb');
+            if (selectCb) {
+                selectCb.onclick = (e) => {
+                    if (e && e.stopPropagation) e.stopPropagation();
+                    applySelection('toggle', !!(e && e.shiftKey));
+                };
+                selectCb.onmousedown = (e) => {
+                    if (e && e.stopPropagation) e.stopPropagation();
+                };
+            }
+
+            row.onclick = (e) => {
+                if (e && e.target && typeof e.target.closest === 'function' && e.target.closest('button, select, input, .prog-drag-handle')) {
+                    return;
+                }
+                if (e && (e.metaKey || e.ctrlKey)) {
+                    applySelection('toggle', false);
+                } else {
+                    applySelection('single', !!(e && e.shiftKey));
+                }
+            };
 
             // Category change handler
             const catSelect = row.querySelector('.prog-cat-select');
@@ -4151,16 +4776,30 @@ class App {
                 }
             };
 
-            // Drag-and-Drop Program Reordering & Swapping
+            // Drag-and-Drop Program Reordering, Swapping & Cross-Bank Moving
             row.ondragstart = (e) => {
-                e.dataTransfer.setData('text/plain', JSON.stringify({
+                const useGroup = this.selectedProgIndices && this.selectedProgIndices.has(originalIndex) && this.selectedProgIndices.size > 0;
+                const dragIndices = useGroup
+                    ? Array.from(this.selectedProgIndices).filter(i => i >= 0 && i < activeBank.length).sort((a, b) => a - b)
+                    : [originalIndex];
+                const payload = {
                     type: 'prog-move',
                     bankIndex: this.librarian.activeBankIndex,
-                    progIndex: originalIndex
-                }));
+                    progIndex: originalIndex,
+                    progIndices: dragIndices
+                };
+                this._activeLibrarianDrag = payload;
+                if (e.dataTransfer) {
+                    e.dataTransfer.effectAllowed = 'copyMove';
+                    e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+                }
                 row.classList.add('dragging');
             };
-            row.ondragend = () => row.classList.remove('dragging');
+            row.ondragend = () => {
+                this._activeLibrarianDrag = null;
+                row.classList.remove('dragging');
+                this._clearMemoryDragHover();
+            };
             row.ondragover = (e) => {
                 const active = this._activeMemoryDrag;
                 if (active && active.kind === 'memory' && this.memories[active.index]) {
@@ -4173,21 +4812,24 @@ class App {
                         this._clearDropTip(appMain);
                     }
                     row.classList.add('slot-drop-hover');
-                    if (typeof row.setAttribute === 'function') {
-                        const slotLabel = `#${(originalIndex + 1).toString().padStart(2, '0')}`;
-                        row.setAttribute('data-drop-tip', `Drop to replace ${slotLabel} "${program.name}" with Memory M${active.index + 1}`);
-                    }
+                    const slotLabel = `#${(originalIndex + 1).toString().padStart(2, '0')}`;
+                    this._setDropTip(row, `Drop to replace ${slotLabel} "${program.name}" with Memory M${active.index + 1}`);
+                    return;
+                }
+                if (applyProgDragOver(e, row, originalIndex, program.name)) {
                     return;
                 }
                 e.preventDefault();
             };
             row.ondragleave = (e) => {
                 if (e.relatedTarget && typeof row.contains === 'function' && row.contains(e.relatedTarget)) return;
-                row.classList.remove('slot-drop-hover');
-                this._clearDropTip(row);
+                if (!this._activeLibrarianDrag || this._activeLibrarianDrag.type !== 'prog-move') {
+                    row.classList.remove('slot-drop-hover', 'prog-insert-before', 'prog-insert-after');
+                    this._clearDropTip(row);
+                }
             };
             row.ondrop = async (e) => {
-                row.classList.remove('slot-drop-hover');
+                row.classList.remove('slot-drop-hover', 'prog-insert-before', 'prog-insert-after');
                 this._clearDropTip(row);
                 const memData = this._parseDragPayload(e);
                 if (memData && memData.kind === 'memory' && this.memories[memData.index]) {
@@ -4211,22 +4853,7 @@ class App {
                     }
                     return;
                 }
-                e.preventDefault();
-                try {
-                    const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-                    if (data.type === 'prog-move') {
-                        if (e.altKey || e.shiftKey) {
-                            // Alt-drop: Swap programs!
-                            activeBank.swapPrograms(data.progIndex, originalIndex);
-                            this.showNotification(`Swapped slot #${data.progIndex + 1} and slot #${originalIndex + 1}`, 'info');
-                        } else {
-                            // Standard drop: Reorder
-                            activeBank.moveProgram(data.progIndex, originalIndex);
-                        }
-                        this.librarian.saveAllBanks();
-                        this.renderLibrarianBank();
-                    }
-                } catch (err) { }
+                applyProgDrop(e, originalIndex);
             };
 
             progList.appendChild(row);

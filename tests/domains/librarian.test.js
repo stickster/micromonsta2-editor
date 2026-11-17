@@ -639,4 +639,357 @@ MM2TestRunner.register('Patch Librarian, Banks & Duplicates', async ({ assert, a
         }
     });
 
+    await runSection('\n--- [68] Librarian Cross-Bank & Multi-Select Drag-and-Drop Tests ---', async () => {
+        // 1. MM2Bank.moveProgramsGroup unit behavior
+        const grpBank = new MM2Bank('GroupTest');
+        ['A', 'B', 'C', 'D', 'E'].forEach(n => {
+            const p = new MM2Program();
+            p.name = n;
+            grpBank.addProgram(p);
+        });
+        grpBank.moveProgramsGroup([2, 4], 1); // C, E -> index 1
+        assertEqual(grpBank.programs.map(p => p.name).join(','), 'A,C,E,B,D', 'moveProgramsGroup moves non-contiguous group up consecutively');
+
+        grpBank.moveProgramsGroup([0, 2], 4); // A, E -> end
+        assertEqual(grpBank.programs.map(p => p.name).join(','), 'C,B,D,A,E', 'moveProgramsGroup moves non-contiguous group down consecutively to end');
+
+        // 2. App UI: cross-bank single patch drag, multi-select group reorder & cross-bank move with drop tips
+        const dndApp = new App();
+        dndApp.librarian = {
+            banks: [new MM2Bank('BankOne'), new MM2Bank('BankTwo')],
+            activeBankIndex: 0,
+            get activeBank() { return this.banks[this.activeBankIndex]; },
+            saveAllBanks: async () => {},
+            moveProgramsToBank: PatchLibrarian.prototype.moveProgramsToBank,
+            duplicateBank: PatchLibrarian.prototype.duplicateBank,
+            reorderBanks: PatchLibrarian.prototype.reorderBanks
+        };
+        ['P1', 'P2', 'P3', 'P4'].forEach(n => {
+            const p = new MM2Program();
+            p.name = n;
+            dndApp.librarian.banks[0].addProgram(p);
+        });
+        const existingB2 = new MM2Program();
+        existingB2.name = 'B2_01';
+        dndApp.librarian.banks[1].addProgram(existingB2);
+
+        let lastNotif = '';
+        dndApp.showNotification = (msg) => { lastNotif = msg; };
+
+        const prevCreateEl = document.createElement;
+        document.createElement = (tag) => {
+            const el = prevCreateEl.call(document, tag);
+            const origQS = el.querySelector ? el.querySelector.bind(el) : () => null;
+            el.querySelector = (sel) => {
+                const found = origQS(sel);
+                if (found) return found;
+                if (sel === '.prog-select-cb') {
+                    if (!el._cb) el._cb = { checked: false, onclick: null, onmousedown: null };
+                    return el._cb;
+                }
+                return { onclick: null, ondblclick: null };
+            };
+            return el;
+        };
+
+        try {
+            const bankTabsEl = document.createElement('div');
+            bankTabsEl.id = 'bank-tabs';
+            document.registerMockElement('bank-tabs', bankTabsEl);
+            const progListEl = document.createElement('div');
+            progListEl.id = 'librarian-prog-list';
+            document.registerMockElement('librarian-prog-list', progListEl);
+
+            dndApp.renderLibrarianBank();
+            assertEqual(bankTabsEl.children.length, 2, 'Rendered 2 bank tabs');
+            assertEqual(progListEl.children.length, 4, 'Rendered 4 program rows');
+
+            // Single patch drag to BankTwo tab
+            const singleDragStore = {};
+            const row0 = progListEl.children[0];
+            const bank2Tab = bankTabsEl.children[1];
+            row0.ondragstart({
+                dataTransfer: {
+                    effectAllowed: '',
+                    setData: (k, v) => { singleDragStore[k] = v; }
+                }
+            });
+            bank2Tab.ondragover({
+                preventDefault: () => {},
+                dataTransfer: { dropEffect: '' }
+            });
+            assert(bank2Tab.classList.contains('slot-drop-hover'), 'Target bank tab highlights on single patch dragover');
+            assertEqual(bank2Tab.getAttribute('data-drop-tip'), 'Drop to move "P1" to "BankTwo"', 'Target bank tab shows single patch drop tip');
+            bank2Tab.ondrop({
+                preventDefault: () => {},
+                dataTransfer: { getData: (k) => singleDragStore[k] || '' }
+            });
+            assertEqual(bank2Tab.getAttribute('data-drop-tip') || '', '', 'Target bank tab clears drop tip after drop');
+            assertEqual(dndApp.librarian.banks[0].programs.map(p => p.name).join(','), 'P2,P3,P4', 'Source bank removes moved patch');
+            assertEqual(dndApp.librarian.banks[1].programs.map(p => p.name).join(','), 'B2_01,P1', 'Target bank appends moved patch to end');
+            assert(lastNotif.includes('BankTwo'), 'Notification mentions target bank');
+
+            // Multi-select patches (index 0: P2 and index 2: P4) and reorder onto index 1 (P3)
+            const cb0 = progListEl.children[0].querySelector('.prog-select-cb');
+            const cb2 = progListEl.children[2].querySelector('.prog-select-cb');
+            cb0.onclick({ stopPropagation: () => {}, shiftKey: false });
+            cb2.onclick({ stopPropagation: () => {}, shiftKey: false });
+            assertEqual(dndApp.selectedProgIndices.size, 2, 'Multi-select tracks 2 selected patches');
+
+            const groupReorderStore = {};
+            progListEl.children[2].ondragstart({
+                dataTransfer: {
+                    effectAllowed: '',
+                    setData: (k, v) => { groupReorderStore[k] = v; }
+                }
+            });
+            const targetRow1 = progListEl.children[1];
+            targetRow1.ondragover({
+                preventDefault: () => {},
+                dataTransfer: { dropEffect: '' }
+            });
+            assert(targetRow1.classList.contains('slot-drop-hover'), 'Target row highlights on group dragover');
+            assert(targetRow1.classList.contains('prog-insert-before'), 'Target row gets prog-insert-before (+) insertion space on dragover');
+            assertEqual(targetRow1.getAttribute('data-drop-tip'), 'Drop to move 2 patches to #02', 'Target row shows multi-patch reorder drop tip');
+            await targetRow1.ondrop({
+                preventDefault: () => {},
+                altKey: false,
+                shiftKey: false,
+                dataTransfer: { getData: (k) => groupReorderStore[k] || '' }
+            });
+            assert(!targetRow1.classList.contains('prog-insert-before'), 'Target row clears prog-insert-before after drop');
+            assertEqual(dndApp.librarian.banks[0].programs.map(p => p.name).join(','), 'P2,P4,P3', 'Group reorder places P2, P4 consecutively and pushes P3 down');
+            assertEqual(dndApp.selectedProgIndices.size, 0, 'Selection clears after group reorder');
+
+            // Undo & Redo group reorder
+            dndApp.undo();
+            assertEqual(dndApp.librarian.banks[0].programs.map(p => p.name).join(','), 'P2,P3,P4', 'Undo restores patch order before group reorder');
+            dndApp.redo();
+            assertEqual(dndApp.librarian.banks[0].programs.map(p => p.name).join(','), 'P2,P4,P3', 'Redo reapplies group reorder');
+
+            // Single patch drop ON middle of another row copies/pastes patch at that location
+            progListEl.children.forEach((rEl, rIdx) => {
+                rEl.getBoundingClientRect = () => ({ top: rIdx * 40, bottom: (rIdx + 1) * 40, height: 40 });
+            });
+            const copyDropStore = {};
+            const copyDragDT = {
+                effectAllowed: '',
+                setData: (k, v) => { copyDropStore[k] = v; }
+            };
+            progListEl.children[0].ondragstart({
+                dataTransfer: copyDragDT
+            });
+            assertEqual(copyDragDT.effectAllowed, 'copyMove', 'Row dragstart sets effectAllowed to copyMove so copy dropEffect is permitted');
+            const row2CenterY = 100; // Middle of row 2 (80..120)
+            progListEl.children[2].ondragover({
+                preventDefault: () => {},
+                stopPropagation: () => {},
+                clientY: row2CenterY,
+                dataTransfer: { dropEffect: '' }
+            });
+            assert(!progListEl.children[2].classList.contains('prog-insert-before'), 'Middle drop-on does not show insert-before gap');
+            assertEqual(progListEl.children[2].getAttribute('data-drop-tip'), 'Drop to copy patch onto #03 "P3"', 'Middle drop-on shows copy drop tip');
+            await progListEl.children[2].ondrop({
+                preventDefault: () => {},
+                stopPropagation: () => {},
+                altKey: false,
+                shiftKey: false,
+                clientY: row2CenterY,
+                dataTransfer: { getData: (k) => copyDropStore[k] || '' }
+            });
+            assertEqual(dndApp.librarian.banks[0].programs.map(p => p.name).join(','), 'P2,P4,P2', 'Drop-on copies P2 onto slot #03 without removing #01');
+
+            // Undo & Redo copy/paste drop-on
+            dndApp.undo();
+            assertEqual(dndApp.librarian.banks[0].programs.map(p => p.name).join(','), 'P2,P4,P3', 'Undo restores original patch before copy/paste');
+            dndApp.redo();
+            assertEqual(dndApp.librarian.banks[0].programs.map(p => p.name).join(','), 'P2,P4,P2', 'Redo reapplies copy/paste');
+
+            // Restore P3 at index 2 for remaining tests
+            const restoreP3 = new MM2Program();
+            restoreP3.name = 'P3';
+            dndApp.librarian.banks[0].setProgram(2, restoreP3);
+            dndApp.renderLibrarianBank();
+
+            // Dragging onto same location (own middle or adjacent top edge of row 1) is disallowed/ignored
+            progListEl.children.forEach((rEl, rIdx) => {
+                rEl.getBoundingClientRect = () => ({ top: rIdx * 40, bottom: (rIdx + 1) * 40, height: 40 });
+            });
+            const sameStore = {};
+            const sameDT = { effectAllowed: '', setData: (k, v) => { sameStore[k] = v; } };
+            progListEl.children[0].ondragstart({ dataTransfer: sameDT });
+            const sameOverDT = { dropEffect: '' };
+            progListEl.children[0].ondragover({
+                preventDefault: () => {},
+                stopPropagation: () => {},
+                clientY: 20, // own middle
+                dataTransfer: sameOverDT
+            });
+            assertEqual(sameOverDT.dropEffect, 'none', 'Drop-on own row sets dropEffect to none');
+            assert(!progListEl.children[0].classList.contains('slot-drop-hover'), 'Drop-on own row does not highlight');
+            progListEl.children[1].ondragover({
+                preventDefault: () => {},
+                stopPropagation: () => {},
+                clientY: 42, // top edge of row 1 (resolves to same index 0)
+                dataTransfer: sameOverDT
+            });
+            assertEqual(sameOverDT.dropEffect, 'none', 'Insert before adjacent next row (same slot 0) sets dropEffect to none');
+            assert(!progListEl.children[1].classList.contains('prog-insert-before'), 'Insert before adjacent next row does not show + gap');
+            const undoLenBeforeSame = dndApp.undoStack.length;
+            await progListEl.children[0].ondrop({
+                preventDefault: () => {},
+                stopPropagation: () => {},
+                clientY: 20,
+                dataTransfer: { getData: (k) => sameStore[k] || '' }
+            });
+            assertEqual(dndApp.undoStack.length, undoLenBeforeSame, 'Dropping on same location does not record undo entry');
+
+            // Dragging patch into vertical space below end of bank moves it to last slot
+            const appMainEl = document.createElement('main');
+            dndApp.currentView = 'librarian';
+            dndApp.wireMemoryAndPartDragDrop({ memButtons: [], partButtons: [], appMain: appMainEl, editorGrid: null, clearButton: null });
+            progListEl.getBoundingClientRect = () => ({ top: 0, bottom: 120 });
+
+            const belowStore = {};
+            progListEl.children[0].ondragstart({ dataTransfer: { effectAllowed: '', setData: (k, v) => { belowStore[k] = v; } } });
+            await appMainEl.dispatchEvent({
+                type: 'dragover',
+                clientY: 200,
+                preventDefault: () => {},
+                stopPropagation: () => {},
+                dataTransfer: { dropEffect: '' }
+            });
+            assert(progListEl.children[2].classList.contains('prog-insert-after'), 'Hovering below bank highlights last row with prog-insert-after (+)');
+            assertEqual(appMainEl.getAttribute('data-drop-tip'), 'Drop to move patch to #03', 'Hovering below bank shows move-to-last-slot drop tip');
+            await appMainEl.dispatchEvent({
+                type: 'drop',
+                clientY: 200,
+                preventDefault: () => {},
+                stopPropagation: () => {},
+                dataTransfer: { getData: (k) => belowStore[k] || '' }
+            });
+            assertEqual(dndApp.librarian.banks[0].programs.map(p => p.name).join(','), 'P4,P3,P2', 'Dropping below bank moves patch to last slot');
+            dndApp.undo();
+            assertEqual(dndApp.librarian.banks[0].programs.map(p => p.name).join(','), 'P2,P4,P3', 'Undo restores patch order after below-bank drop');
+
+            // Multi-select patches (P2, P4) and drag onto BankTwo tab
+            progListEl.children[0].querySelector('.prog-select-cb').onclick({ stopPropagation: () => {}, shiftKey: false });
+            progListEl.children[1].querySelector('.prog-select-cb').onclick({ stopPropagation: () => {}, shiftKey: false });
+            const groupBankStore = {};
+            progListEl.children[0].ondragstart({
+                dataTransfer: {
+                    effectAllowed: '',
+                    setData: (k, v) => { groupBankStore[k] = v; }
+                }
+            });
+            const bank2TabAfter = bankTabsEl.children[1];
+            bank2TabAfter.ondragover({
+                preventDefault: () => {},
+                dataTransfer: { dropEffect: '' }
+            });
+            assertEqual(bank2TabAfter.getAttribute('data-drop-tip'), 'Drop to move 2 patches to "BankTwo"', 'Target bank tab shows multi-patch drop tip');
+            bank2TabAfter.ondrop({
+                preventDefault: () => {},
+                dataTransfer: { getData: (k) => groupBankStore[k] || '' }
+            });
+            assertEqual(dndApp.librarian.banks[0].programs.map(p => p.name).join(','), 'P3', 'Source bank retains only unselected patch');
+            assertEqual(dndApp.librarian.banks[1].programs.map(p => p.name).join(','), 'B2_01,P1,P2,P4', 'Target bank appends multi-select group to end');
+
+            // Drag BankOne tab onto New Bank button to duplicate with "(copy <N>)" and increment N on collision
+            const btnAddBank = document.createElement('button');
+            btnAddBank.id = 'btn-add-bank';
+            document.registerMockElement('btn-add-bank', btnAddBank);
+            dndApp.buildLibrarianUI();
+
+            const dupBankStore1 = {};
+            bankTabsEl.children[0].ondragstart({
+                dataTransfer: {
+                    effectAllowed: '',
+                    setData: (k, v) => { dupBankStore1[k] = v; }
+                }
+            });
+            btnAddBank.ondragover({
+                preventDefault: () => {},
+                dataTransfer: { dropEffect: '' }
+            });
+            assert(btnAddBank.classList.contains('slot-drop-hover'), 'New Bank button highlights on bank dragover');
+            assertEqual(btnAddBank.getAttribute('data-drop-tip'), 'Drop to duplicate "BankOne"', 'New Bank button shows duplicate drop tip');
+            btnAddBank.ondrop({
+                preventDefault: () => {},
+                dataTransfer: { getData: (k) => dupBankStore1[k] || '' }
+            });
+            assertEqual(btnAddBank.getAttribute('data-drop-tip') || '', '', 'New Bank button clears drop tip after drop');
+            assertEqual(dndApp.librarian.banks.length, 3, 'Dropping bank onto New Bank creates a duplicated bank');
+            assertEqual(dndApp.librarian.banks[2].name, 'BankOne (copy 1)', 'First duplicate uses "(copy 1)" suffix');
+            assertEqual(dndApp.librarian.banks[2].programs.map(p => p.name).join(','), 'P3', 'Duplicated bank clones source programs');
+            const dupTabTitle = bankTabsEl.children[2] ? bankTabsEl.children[2].querySelector('.bank-tab-title') : null;
+            assert(dupTabTitle && dupTabTitle.children && dupTabTitle.children[0] && dupTabTitle.children[0].className === 'bank-tab-title-input', 'Duplicated bank automatically enters inline rename mode');
+
+            // Duplicate "BankOne (copy 1)" directly via .bank-tabs-bar -> strips "(copy 1)" and increments to "(copy 2)"
+            const bankTabsBarEl = document.createElement('div');
+            bankTabsBarEl.className = 'bank-tabs-bar';
+            const prevQS = document.querySelector;
+            document.querySelector = (sel) => (sel === '.bank-tabs-bar' ? bankTabsBarEl : prevQS.call(document, sel));
+            try {
+                dndApp.buildLibrarianUI();
+                const dupBankStore2 = {};
+                bankTabsEl.children[2].ondragstart({
+                    dataTransfer: {
+                        effectAllowed: '',
+                        setData: (k, v) => { dupBankStore2[k] = v; }
+                    }
+                });
+                bankTabsBarEl.ondragover({
+                    preventDefault: () => {},
+                    dataTransfer: { dropEffect: '' }
+                });
+                assert(btnAddBank.classList.contains('slot-drop-hover'), 'New Bank button highlights when dragging over .bank-tabs-bar');
+                assertEqual(btnAddBank.getAttribute('data-drop-tip'), 'Drop to duplicate "BankOne (copy 1)"', '.bank-tabs-bar shows duplicate drop tip');
+                bankTabsBarEl.ondrop({
+                    preventDefault: () => {},
+                    dataTransfer: { getData: (k) => dupBankStore2[k] || '' }
+                });
+                assertEqual(dndApp.librarian.banks.length, 4, 'Dropping onto .bank-tabs-bar creates duplicated bank');
+                assertEqual(dndApp.librarian.banks[3].name, 'BankOne (copy 2)', 'Duplicating "(copy 1)" produces "(copy 2)" instead of "(copy 1) (copy 1)"');
+
+                // Dropping a bank tab into #bank-tabs gap between tabs inserts/reorders instead of duplicating
+                bankTabsEl.children.forEach((tabEl, tIdx) => {
+                    tabEl.getBoundingClientRect = () => ({ left: tIdx * 100, width: 90 });
+                });
+                const gapStore = {};
+                bankTabsEl.children[0].ondragstart({
+                    dataTransfer: {
+                        effectAllowed: '',
+                        setData: (k, v) => { gapStore[k] = v; }
+                    }
+                });
+                // Drop at clientX = 195 (between tab 1 [100..190] and tab 2 [200..290])
+                bankTabsEl.ondragover({
+                    preventDefault: () => {},
+                    stopPropagation: () => {},
+                    clientX: 195,
+                    dataTransfer: { dropEffect: '' }
+                });
+                assert(!btnAddBank.classList.contains('slot-drop-hover'), 'Between-tab dragover does not highlight New Bank button');
+                assert(bankTabsEl.children[2].classList.contains('bank-insert-before'), 'Between-tab dragover marks next bank tab with bank-insert-before (+) space');
+                bankTabsEl.ondrop({
+                    preventDefault: () => {},
+                    stopPropagation: () => {},
+                    clientX: 195,
+                    dataTransfer: { getData: (k) => gapStore[k] || '' }
+                });
+                assert(!bankTabsEl.children[2].classList.contains('bank-insert-before'), 'Between-tab drop clears bank-insert-before marker');
+                assertEqual(dndApp.librarian.banks.length, 4, 'Between-tab drop does not duplicate bank');
+                assertEqual(dndApp.librarian.banks.map(b => b.name).join(','), 'BankTwo,BankOne,BankOne (copy 1),BankOne (copy 2)', 'Between-tab drop inserts BankOne between BankTwo and BankOne (copy 1)');
+            } finally {
+                document.querySelector = prevQS;
+                document.registerMockElement('btn-add-bank', null);
+            }
+        } finally {
+            document.createElement = prevCreateEl;
+            document.registerMockElement('bank-tabs', null);
+            document.registerMockElement('librarian-prog-list', null);
+        }
+    });
+
 });

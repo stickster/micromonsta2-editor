@@ -280,6 +280,51 @@ class PatchLibrarian {
     }
 
     /**
+     * Moves one or more programs (by indices) from sourceBankIdx to the end of targetBankIdx.
+     */
+    moveProgramsToBank(sourceBankIdx, progIndices, targetBankIdx) {
+        if (sourceBankIdx === targetBankIdx) return 0;
+        const srcBank = this.banks[sourceBankIdx];
+        const dstBank = this.banks[targetBankIdx];
+        if (!srcBank || !dstBank || !Array.isArray(progIndices)) return 0;
+
+        const sorted = [...new Set(progIndices)]
+            .filter(i => Number.isInteger(i) && i >= 0 && i < srcBank.length)
+            .sort((a, b) => a - b);
+        if (sorted.length === 0) return 0;
+
+        const indexSet = new Set(sorted);
+        const moved = sorted.map(i => srcBank.programs[i]);
+        srcBank.programs = srcBank.programs.filter((_, i) => !indexSet.has(i));
+        moved.forEach(p => dstBank.addProgram(p));
+
+        this.saveAllBanks();
+        return moved.length;
+    }
+
+    /**
+     * Duplicates a bank with a unique "(copy <N>)" suffix.
+     */
+    duplicateBank(sourceBankIdx) {
+        const srcBank = this.banks[sourceBankIdx];
+        if (!srcBank) return null;
+
+        const baseName = srcBank.name.replace(/\s+\(copy \d+\)$/, '');
+        let n = 1;
+        let candidate = `${baseName} (copy ${n})`;
+        while (this.banks.some(b => b.name === candidate)) {
+            n++;
+            candidate = `${baseName} (copy ${n})`;
+        }
+
+        const newBank = new MM2Bank(candidate, this.banks.length);
+        srcBank.programs.forEach(p => newBank.addProgram(p.clone()));
+        this.banks.push(newBank);
+        this.saveAllBanks();
+        return newBank;
+    }
+
+    /**
      * Handles incoming captured program from MM2 hardware.
      * Always appends to the currently selected (active) bank.
      */

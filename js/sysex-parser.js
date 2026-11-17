@@ -531,6 +531,38 @@ class MM2Bank {
         return false;
     }
 
+    /**
+     * Moves a group of programs (by indices) consecutively to targetIndex,
+     * pushing other programs down.
+     */
+    moveProgramsGroup(fromIndices, toIndex) {
+        if (!Array.isArray(fromIndices) || fromIndices.length === 0) return false;
+        if (toIndex < 0 || toIndex >= this.programs.length) return false;
+        const sorted = [...new Set(fromIndices)]
+            .filter(i => Number.isInteger(i) && i >= 0 && i < this.programs.length)
+            .sort((a, b) => a - b);
+        if (sorted.length === 0) return false;
+        if (sorted.length === 1) {
+            return this.moveProgram(sorted[0], toIndex);
+        }
+
+        const selectedSet = new Set(sorted);
+        const moved = sorted.map(i => this.programs[i]);
+        const remaining = this.programs.filter((_, i) => !selectedSet.has(i));
+
+        let insertAt;
+        if (toIndex > sorted[sorted.length - 1]) {
+            insertAt = Math.min(toIndex - sorted.length + 1, remaining.length);
+        } else {
+            const beforeCount = sorted.filter(i => i < toIndex).length;
+            insertAt = Math.max(0, Math.min(toIndex - beforeCount, remaining.length));
+        }
+
+        remaining.splice(insertAt, 0, ...moved);
+        this.programs = remaining;
+        return true;
+    }
+
     sortByName(ascending = true) {
         this.programs.sort((a, b) => {
             const cmp = a.name.localeCompare(b.name);

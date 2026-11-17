@@ -2026,13 +2026,26 @@ main.app-main {
 
 .prog-row {
     display: grid;
-    grid-template-columns: 24px 44px 1fr 100px auto auto;
+    grid-template-columns: 24px 20px 44px 1fr 100px auto auto;
     align-items: center;
     gap: 12px;
     padding: 8px 14px;
     border-bottom: 1px solid var(--border-color);
     background: var(--bg-card-inner);
-    transition: background 0.15s ease;
+    transition: background 0.15s ease, margin 0.15s ease;
+}
+
+.prog-select-cb {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent-cyan);
+    cursor: pointer;
+    margin: 0;
+}
+
+.prog-row.selected {
+    background: rgba(0, 210, 211, 0.1);
+    border-left: 3px solid var(--accent-cyan);
 }
 
 .prog-row:last-child {
@@ -2577,14 +2590,97 @@ footer.audition-footer {
 .part-btn.slot-drop-hover,
 .app-main.slot-drop-hover,
 #editor-grid.slot-drop-hover,
-.prog-row.slot-drop-hover {
+.prog-row.slot-drop-hover,
+.bank-tab.slot-drop-hover,
+#btn-add-bank.slot-drop-hover {
     outline: 2px dashed var(--accent-cyan);
     outline-offset: -2px;
     background: rgba(0, 210, 211, 0.12);
 }
 
-main.app-main.slot-drop-hover[data-drop-tip]:not([data-drop-tip=""])::after,
-.prog-row.slot-drop-hover[data-drop-tip]:not([data-drop-tip=""])::after {
+.bank-tab {
+    position: relative;
+    transition: margin 0.10s ease;
+}
+
+.bank-tab.bank-insert-before {
+    margin-left: 28px;
+}
+
+.bank-tab.bank-insert-after {
+    margin-right: 28px;
+}
+
+.bank-tab.bank-insert-before::before,
+.bank-tab.bank-insert-after::after {
+    content: '+';
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px dashed var(--accent-cyan);
+    background: rgba(0, 210, 211, 0.18);
+    color: var(--accent-cyan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.bank-tab.bank-insert-before::before {
+    left: -24px;
+}
+
+.bank-tab.bank-insert-after::after {
+    right: -24px;
+}
+
+.prog-row {
+    position: relative;
+}
+
+.prog-row.prog-insert-before {
+    margin-top: 16px;
+}
+
+.prog-row.prog-insert-after {
+    margin-bottom: 16px;
+}
+
+.prog-row.prog-insert-before::before,
+.prog-row.prog-insert-after::after {
+    content: '+';
+    position: absolute;
+    left: 14px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px dashed var(--accent-cyan);
+    background: rgba(0, 210, 211, 0.18);
+    color: var(--accent-cyan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.75rem;
+    line-height: 1;
+    pointer-events: none;
+}
+
+.prog-row.prog-insert-before::before {
+    top: -15px;
+}
+
+.prog-row.prog-insert-after::after {
+    bottom: -15px;
+}
+
+body[data-drop-tip]:not([data-drop-tip=""])::after {
     content: attr(data-drop-tip);
     position: fixed;
     left: 50%;
