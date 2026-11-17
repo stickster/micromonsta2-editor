@@ -399,7 +399,7 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
 
         // Verify resetLatchAndNotes() clears global latch and note selections
         latchBtnEl.click();
-        kbd.noteOn(48);
+        kbd.noteOn(36);
         assert(latchBtnEl.classList.contains('active'), 'Latch activates before resetLatchAndNotes');
         assert(kbd.querySelector('[data-offset="0"]').classList.contains('pressed'), 'Note selection active before resetLatchAndNotes');
         kbd.resetLatchAndNotes();
@@ -417,7 +417,7 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
 
         const activateLatchAndNote = () => {
             if (!appLatchBtn.classList.contains('active')) appLatchBtn.click();
-            kbd.noteOn(48);
+            kbd.noteOn(36);
         };
 
         activateLatchAndNote();
@@ -452,49 +452,92 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
             assert(maxMatch && parseInt(maxMatch[1], 10) >= 1200, 'CSS :root --max-app-width is at least 1200px to avoid side gutters');
         }
 
-        kbd.setOctave(3); // Octave 3 base is (3+1)*12 = 48. Offsets 0..24 span notes 48..72
+        // Verify 3-octave keyboard renders 37 keys (22 white, 15 black) in same horizontal space
+        assertEqual(kbd.querySelectorAll('.key-white').length, 22, '3-octave keyboard renders 22 white keys');
+        assertEqual(kbd.querySelectorAll('.key-black').length, 15, '3-octave keyboard renders 15 black keys');
+        assertEqual(kbd.querySelectorAll('.key').length, 37, '3-octave keyboard renders 37 total keys (offsets 0..36)');
+
+        kbd.setOctave(3); // Displayed base is 3*12 = 36 (C2). Middle octave is (3+1)*12 = 48 (C3). Offsets 0..36 span notes 36..72
 
         const key0 = kbd.querySelector('[data-offset="0"]');
         const key12 = kbd.querySelector('[data-offset="12"]');
-        const key16 = kbd.querySelector('[data-offset="16"]');
-        const key19 = kbd.querySelector('[data-offset="19"]');
         const key24 = kbd.querySelector('[data-offset="24"]');
+        const key28 = kbd.querySelector('[data-offset="28"]');
+        const key31 = kbd.querySelector('[data-offset="31"]');
+        const key36 = kbd.querySelector('[data-offset="36"]');
 
-        // Test rightmost C key (note 72): offset = 72 - 48 = 24
+        // Test rightmost C key (note 72): offset = 72 - 36 = 36
         chorderProg.setValue('CHORD_TYPE1', 0); // No chord for single key test
         kbd.noteOn(72);
-        assert(key24.classList.contains('pressed'), 'Rightmost C key (offset 24) receives .pressed');
+        assert(key36.classList.contains('pressed'), 'Rightmost C key (offset 36) receives .pressed');
         assert(!key0.classList.contains('pressed'), 'Leftmost C key (offset 0) is NOT pressed when note 72 played');
         kbd.noteOff(72);
-        assert(!key24.classList.contains('pressed'), 'Key 24 unpressed on noteOff');
+        assert(!key36.classList.contains('pressed'), 'Key 36 unpressed on noteOff');
 
-        // Test even octave setting: Octave 4 base is 60. Note 60 is offset 0
+        // Test even octave setting: Octave 4 displayed base is 48 (C3), middle octave is 60 (C4)
         kbd.setOctave(4);
-        kbd.noteOn(60);
-        assert(key0.classList.contains('pressed'), 'Even octave (Oct 4) maps note 60 cleanly to offset 0');
-        kbd.noteOff(60);
+        kbd.noteOn(48);
+        assert(key0.classList.contains('pressed'), 'Even octave (Oct 4) maps lower octave C3 (48) to offset 0');
+        kbd.noteOff(48);
         assert(!key0.classList.contains('pressed'), 'Key 0 unpressed on noteOff in Oct 4');
+        kbd.noteOn(60);
+        assert(key12.classList.contains('pressed'), 'Even octave (Oct 4) maps middle octave C4 (60) to offset 12');
+        kbd.noteOff(60);
+        assert(!key12.classList.contains('pressed'), 'Key 12 unpressed on noteOff in Oct 4');
 
         // Test Chorder blue (pressed) and orange (chord-note) dual highlighting
         kbd.setOctave(3);
         chorderProg.setValue('CHORD_TYPE1', 1); // Triad on C
         mockMidi.sentNotes = [];
-        kbd.noteOn(60); // C4 (offset 12) + chord notes E4 (64, offset 16) & G4 (67, offset 19)
+        kbd.noteOn(60); // C4 (offset 24) + chord notes E4 (64, offset 28) & G4 (67, offset 31)
 
         assertEqual(mockMidi.sentNotes.length, 3, 'Transmitted 3 MIDI noteOn events for triad chord');
-        assert(key12.classList.contains('pressed'), 'Physically pressed key 12 has .pressed');
-        assert(!key12.classList.contains('chord-note'), 'Pressed key 12 does not have .chord-note (pressed takes precedence)');
-        assert(key16.classList.contains('chord-note'), 'Sounding chord note E4 has .chord-note');
-        assert(!key16.classList.contains('pressed'), 'Chord note E4 is not marked .pressed');
-        assert(key19.classList.contains('chord-note'), 'Sounding chord note G4 has .chord-note');
+        assert(key24.classList.contains('pressed'), 'Physically pressed key 24 has .pressed');
+        assert(!key24.classList.contains('chord-note'), 'Pressed key 24 does not have .chord-note (pressed takes precedence)');
+        assert(key28.classList.contains('chord-note'), 'Sounding chord note E4 has .chord-note');
+        assert(!key28.classList.contains('pressed'), 'Chord note E4 is not marked .pressed');
+        assert(key31.classList.contains('chord-note'), 'Sounding chord note G4 has .chord-note');
 
         // Release note 60
         mockMidi.sentNotes = [];
         kbd.noteOff(60);
         assertEqual(mockMidi.sentNotes.length, 3, 'Transmitted 3 MIDI noteOff events for triad chord');
-        assert(!key12.classList.contains('pressed'), 'Key 12 cleared on noteOff');
-        assert(!key16.classList.contains('chord-note'), 'Key 16 cleared on noteOff');
-        assert(!key19.classList.contains('chord-note'), 'Key 19 cleared on noteOff');
+        assert(!key24.classList.contains('pressed'), 'Key 24 cleared on noteOff');
+        assert(!key28.classList.contains('chord-note'), 'Key 28 cleared on noteOff');
+        assert(!key31.classList.contains('chord-note'), 'Key 31 cleared on noteOff');
+
+        // Regression test: QWERTY keys (e.g. A-K) play the middle octave of the 3-octave displayed range
+        {
+            const qwertyMidi = {
+                sentNotes: [],
+                sendNote(note, vel, on) { this.sentNotes.push({ note, vel, on }); },
+                outPort: null,
+                targetChannel: 14
+            };
+            const singleProg = new MM2Program();
+            const qKbd = createKeyboard(qwertyMidi, () => singleProg);
+            qKbd.setOctave(3); // Displayed: 36..72; Middle octave: 48..59
+
+            const sendKey = (type, code) => {
+                if (typeof KeyboardEvent !== 'undefined') {
+                    window.dispatchEvent(new KeyboardEvent(type, { code, cancelable: true }));
+                } else {
+                    window.dispatchEvent({ type, code, key: '', preventDefault: () => {} });
+                }
+            };
+
+            sendKey('keydown', 'KeyA');
+            assertEqual(qwertyMidi.sentNotes[0].note, 48, 'KeyA in Oct 3 plays C3 (MIDI 48, middle octave)');
+            assert(qKbd.querySelector('[data-offset="12"]').classList.contains('pressed'), 'KeyA highlights middle octave C (offset 12)');
+            assert(!qKbd.querySelector('[data-offset="0"]').classList.contains('pressed'), 'KeyA does not highlight lower octave C (offset 0)');
+            sendKey('keyup', 'KeyA');
+
+            qwertyMidi.sentNotes = [];
+            sendKey('keydown', 'KeyK');
+            assertEqual(qwertyMidi.sentNotes[0].note, 60, 'KeyK in Oct 3 plays C4 (MIDI 60, upper octave C)');
+            assert(qKbd.querySelector('[data-offset="24"]').classList.contains('pressed'), 'KeyK highlights upper octave C (offset 24)');
+            sendKey('keyup', 'KeyK');
+        }
 
         // Regression test: QWERTY keyboard handler must ignore modifier shortcuts (e.g. Cmd-L)
         {

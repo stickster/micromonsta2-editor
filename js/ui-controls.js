@@ -2532,8 +2532,8 @@ function createKeyboard(midiManager, getActiveProgram) {
     const kbdWrapper = document.createElement('div');
     kbdWrapper.className = 'keyboard-wrapper';
 
-    // 25 keys: 2 octaves from C to C (offsets 0 to 24)
-    const whiteKeys = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24];
+    // 37 keys: 3 octaves from C to C (offsets 0 to 36); middle octave is offsets 12..23
+    const whiteKeys = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35, 36];
     const blackKeys = [
         { note: 1, pos: 0 },
         { note: 3, pos: 1 },
@@ -2544,12 +2544,23 @@ function createKeyboard(midiManager, getActiveProgram) {
         { note: 15, pos: 8 },
         { note: 18, pos: 10 },
         { note: 20, pos: 11 },
-        { note: 22, pos: 12 }
+        { note: 22, pos: 12 },
+        { note: 25, pos: 14 },
+        { note: 27, pos: 15 },
+        { note: 30, pos: 17 },
+        { note: 32, pos: 18 },
+        { note: 34, pos: 19 }
     ];
+    const maxOffset = 36;
 
     const activePressedNotes = new Set();
     const activeSoundingChordNotes = new Map(); // pressedNote -> [chordNotes]
     const keyElements = new Map();
+
+    // Displayed range is centered on currentOctave (middle octave = (currentOctave + 1) * 12)
+    function getDisplayedBaseNote() {
+        return currentOctave * 12;
+    }
 
     function updateKeyboardHighlights() {
         keyElements.forEach(el => {
@@ -2557,11 +2568,13 @@ function createKeyboard(midiManager, getActiveProgram) {
             el.classList.remove('chord-note');
         });
 
+        const baseNote = getDisplayedBaseNote();
+
         // Highlight chord voicing notes in orange
         for (const cNotes of activeSoundingChordNotes.values()) {
             for (const cNote of cNotes) {
-                const offset = cNote - (currentOctave + 1) * 12;
-                if (offset >= 0 && offset <= 24) {
+                const offset = cNote - baseNote;
+                if (offset >= 0 && offset <= maxOffset) {
                     const el = keyElements.get(offset);
                     if (el) el.classList.add('chord-note');
                 }
@@ -2570,8 +2583,8 @@ function createKeyboard(midiManager, getActiveProgram) {
 
         // Highlight physically pressed notes in cyan/blue (takes precedence)
         for (const pNote of activePressedNotes) {
-            const offset = pNote - (currentOctave + 1) * 12;
-            if (offset >= 0 && offset <= 24) {
+            const offset = pNote - baseNote;
+            if (offset >= 0 && offset <= maxOffset) {
                 const el = keyElements.get(offset);
                 if (el) {
                     el.classList.remove('chord-note');
@@ -2644,13 +2657,13 @@ function createKeyboard(midiManager, getActiveProgram) {
 
         key.addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            const note = (currentOctave + 1) * 12 + offset;
+            const note = getDisplayedBaseNote() + offset;
             key.setAttribute('data-active-note', String(note));
             noteOn(note);
         });
         key.addEventListener('pointerup', () => {
             const noteAttr = key.getAttribute('data-active-note');
-            const note = noteAttr !== null ? parseInt(noteAttr, 10) : ((currentOctave + 1) * 12 + offset);
+            const note = noteAttr !== null ? parseInt(noteAttr, 10) : (getDisplayedBaseNote() + offset);
             key.removeAttribute('data-active-note');
             noteOff(note);
         });
@@ -2671,7 +2684,7 @@ function createKeyboard(midiManager, getActiveProgram) {
     blackKeys.forEach(({ note: offset, pos }) => {
         const key = document.createElement('div');
         key.className = 'key key-black';
-        key.style.left = `${(pos + 1) * (100 / 15) - (100 / 30)}%`;
+        key.style.left = `${(pos + 1) * (100 / whiteKeys.length)}%`;
         key.setAttribute('data-offset', offset);
         blackContainer.appendChild(key);
         keyElements.set(offset, key);
@@ -2679,13 +2692,13 @@ function createKeyboard(midiManager, getActiveProgram) {
         key.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            const note = (currentOctave + 1) * 12 + offset;
+            const note = getDisplayedBaseNote() + offset;
             key.setAttribute('data-active-note', String(note));
             noteOn(note);
         });
         key.addEventListener('pointerup', () => {
             const noteAttr = key.getAttribute('data-active-note');
-            const note = noteAttr !== null ? parseInt(noteAttr, 10) : ((currentOctave + 1) * 12 + offset);
+            const note = noteAttr !== null ? parseInt(noteAttr, 10) : (getDisplayedBaseNote() + offset);
             key.removeAttribute('data-active-note');
             noteOff(note);
         });
@@ -2706,7 +2719,7 @@ function createKeyboard(midiManager, getActiveProgram) {
     kbdArea.className = 'audition-keyboard-area';
     const hint = document.createElement('div');
     hint.className = 'audition-hint';
-    hint.title = 'Playable via computer keys A-K, Z/X for octave';
+    hint.title = 'Playable via computer keys A-K (middle octave), Z/X for octave';
     hint.textContent = '⌨️ Keys: A-K';
     kbdArea.appendChild(hint);
     kbdArea.appendChild(kbdWrapper);

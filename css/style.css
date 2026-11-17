@@ -2242,8 +2242,9 @@ footer.audition-footer {
 
 .key-black {
     position: absolute;
-    width: calc(100% / 22);
+    width: calc(100% / 33);
     height: 100%;
+    transform: translateX(-50%);
     background: #111;
     border: 1px solid #000;
     border-radius: 0 0 2px 2px;
