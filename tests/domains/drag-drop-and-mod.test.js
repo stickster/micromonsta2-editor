@@ -1058,6 +1058,24 @@ MM2TestRunner.register('Section Drag-and-Drop, Copy/Paste & Mod Matrix', async (
         } finally {
             Math.random = origRand;
         }
+
+        // 11. Part title input (#prog-name-input) is not a drop target
+        const nameInput = document.createElement('input');
+        nameInput.id = 'prog-name-input';
+        document.registerMockElement('prog-name-input', nameInput);
+        try {
+            tipApp.setupProgramBar();
+            const blockedEvt = makeEvt('dragover');
+            nameInput.dispatchEvent(blockedEvt);
+            assertEqual(blockedEvt.dataTransfer.dropEffect, 'none', '#prog-name-input sets dropEffect to none on dragover');
+            const dropBlockedEvt = makeEvt('drop');
+            let propStopped = false;
+            dropBlockedEvt.stopPropagation = () => { propStopped = true; };
+            nameInput.dispatchEvent(dropBlockedEvt);
+            assert(propStopped, '#prog-name-input stops drop propagation and blocks drops');
+        } finally {
+            document.registerMockElement('prog-name-input', null);
+        }
     });
 
 });

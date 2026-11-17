@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **UI:** Require double-click instead of single-click on a Librarian bank tab title to rename it inline.
 - **UI:** Support Librarian multi-select, cross-bank/bank-duplicate drag-and-drop, copy-on-drop, and undo/redo.
 - **UI:** Add consistent floating drop tips across all Editor drag-and-drop targets.
+- **UI:** Prevent `#prog-name-input` from acting as a drag-and-drop target.
 
 ---
 

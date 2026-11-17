@@ -3342,6 +3342,19 @@ class App {
                     });
                 }
             };
+            const blockDrop = (e) => {
+                if (e && e.preventDefault) e.preventDefault();
+                if (e && e.stopPropagation) e.stopPropagation();
+                if (e && e.dataTransfer) e.dataTransfer.dropEffect = 'none';
+                const appMain = typeof document !== 'undefined' ? document.querySelector('.app-main') : null;
+                if (appMain) {
+                    appMain.classList.remove('slot-drop-hover');
+                    this._clearDropTip(appMain);
+                }
+            };
+            nameInput.addEventListener('dragenter', blockDrop);
+            nameInput.addEventListener('dragover', blockDrop);
+            nameInput.addEventListener('drop', blockDrop);
         }
 
         const catSelect = document.getElementById('prog-category-select');
