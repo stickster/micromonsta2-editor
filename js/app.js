@@ -601,6 +601,9 @@ class App {
             this.selectPart(0);
         }
         this.updateTimbralModeUI();
+        if (this.auditionKeyboard && typeof this.auditionKeyboard.enforceVoiceLimit === 'function') {
+            this.auditionKeyboard.enforceVoiceLimit();
+        }
         if (this.tabSync) {
             this.tabSync.broadcast('TIMBRAL_MODE_CHANGED', { mode });
         }
@@ -741,7 +744,7 @@ class App {
             this.recordUndo(key, prevVal, val, meta.label);
         }
         this.activeTimbre.setValue(key, val);
-        if (key === 'ARP_OFF_ON' && val) {
+        if ((key === 'ARP_OFF_ON' && val) || key === 'VCE_UNISON' || key === 'VCE_MODE') {
             this.resetAuditionLatch();
         }
         this.refreshVisualizerFor(key);
@@ -5292,7 +5295,11 @@ class App {
         const container = document.getElementById('audition-toolbar-container');
         if (!container) return;
         container.innerHTML = '';
-        this.auditionKeyboard = createKeyboard(this.midi, () => this.activeTimbre);
+        this.auditionKeyboard = createKeyboard(
+            this.midi,
+            () => this.activeTimbre,
+            () => (this.synthTimbralMode === 'monotimbral' ? 12 : 6)
+        );
         container.appendChild(this.auditionKeyboard);
     }
 

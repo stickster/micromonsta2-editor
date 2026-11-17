@@ -539,6 +539,112 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
             sendKey('keyup', 'KeyK');
         }
 
+        // Regression test: App-piano tracks notes and enforces part limits (6/12V), unison (1/2/3/6), and assign mode
+        {
+            const vceMidi = {
+                sentNotes: [],
+                sendNote(note, vel, on) { this.sentNotes.push({ note, vel, on }); },
+                outPort: null,
+                targetChannel: 14
+            };
+            const vceProg = new MM2Program();
+            let partVoiceLimit = 12;
+            const vKbd = createKeyboard(vceMidi, () => vceProg, () => partVoiceLimit);
+            vKbd.setOctave(3);
+
+            // 1. Monotimbral (12V), Modern (0), Unison 1 (0) -> max 12 keys
+            vceProg.setValue('VCE_MODE', 0);
+            vceProg.setValue('VCE_UNISON', 0);
+            assertEqual(vKbd.getMaxActiveKeys(), 12, '12V Modern Unison 1 allows 12 active keys');
+            for (let n = 48; n < 60; n++) vKbd.noteOn(n);
+            assertEqual(vKbd.getActiveNotes().length, 12, '12 notes held simultaneously in 12V mode');
+            vceMidi.sentNotes = [];
+            vKbd.noteOn(60); // 13th note steals oldest (48)
+            assertEqual(vKbd.getActiveNotes().length, 12, '13th note keeps active count at 12');
+            assert(!vKbd.getActiveNotes().includes(48), 'Oldest note (48) stolen on 13th note');
+            assert(vKbd.getActiveNotes().includes(60), 'New note (60) is active');
+            assertEqual(vceMidi.sentNotes[0].note, 48, 'Modern steals oldest noteOff before new noteOn');
+            assertEqual(vceMidi.sentNotes[0].on, false, 'Stolen note sends noteOff');
+            assertEqual(vceMidi.sentNotes[1].note, 60, 'New note sends noteOn');
+            assertEqual(vceMidi.sentNotes[1].on, true, 'New note sends noteOn=true');
+            vKbd.resetLatchAndNotes();
+
+            // 2. Bitimbral (6V), Vintage (1), Unison 2 (1) -> max 3 keys (6 / 2 = 3)
+            partVoiceLimit = 6;
+            vceProg.setValue('VCE_MODE', 1);
+            vceProg.setValue('VCE_UNISON', 1);
+            assertEqual(vKbd.getMaxActiveKeys(), 3, '6V Vintage Unison 2 allows 3 active keys');
+            vKbd.noteOn(48);
+            vKbd.noteOn(50);
+            vKbd.noteOn(52);
+            vKbd.noteOn(53); // steals 48
+            assertEqual(vKbd.getActiveNotes().join(','), '50,52,53', '4th note steals oldest in 6V Unison 2');
+            vKbd.resetLatchAndNotes();
+
+            // 3. Bitimbral (6V), Unison 3 (2) -> max 2 keys; Unison 6 (3) -> max 1 key
+            vceProg.setValue('VCE_UNISON', 2);
+            assertEqual(vKbd.getMaxActiveKeys(), 2, '6V Unison 3 allows 2 active keys');
+            vceProg.setValue('VCE_UNISON', 3);
+            assertEqual(vKbd.getMaxActiveKeys(), 1, '6V Unison 6 allows 1 active key');
+
+            // 4. Mono (2) -> max 1 key, noteOff(old) before noteOn(new), even with Latch active
+            partVoiceLimit = 12;
+            vceProg.setValue('VCE_UNISON', 0);
+            vceProg.setValue('VCE_MODE', 2); // Mono
+            assertEqual(vKbd.getMaxActiveKeys(), 1, 'Mono mode enforces max 1 active key');
+            vKbd.querySelector('#kbd-latch').click(); // Enable Latch
+            vKbd.noteOn(48);
+            vceMidi.sentNotes = [];
+            vKbd.noteOn(52);
+            assertEqual(vKbd.getActiveNotes().join(','), '52', 'Mono replaces latched note 48 with 52');
+            assertEqual(vceMidi.sentNotes.length, 2, 'Mono emits noteOff then noteOn');
+            assertEqual(vceMidi.sentNotes[0].note, 48, 'Mono sends noteOff(48) first');
+            assertEqual(vceMidi.sentNotes[0].on, false, 'Mono noteOff has on=false');
+            assertEqual(vceMidi.sentNotes[1].note, 52, 'Mono sends noteOn(52) second');
+            assertEqual(vceMidi.sentNotes[1].on, true, 'Mono noteOn has on=true');
+
+            // 5. Legato (3) -> max 1 key, noteOn(new) before noteOff(old)
+            vceProg.setValue('VCE_MODE', 3); // Legato
+            assertEqual(vKbd.getMaxActiveKeys(), 1, 'Legato mode enforces max 1 active key');
+            vceMidi.sentNotes = [];
+            vKbd.noteOn(55);
+            assertEqual(vKbd.getActiveNotes().join(','), '55', 'Legato replaces 52 with 55');
+            assertEqual(vceMidi.sentNotes.length, 2, 'Legato emits noteOn then noteOff');
+            assertEqual(vceMidi.sentNotes[0].note, 55, 'Legato sends noteOn(55) first for overlap');
+            assertEqual(vceMidi.sentNotes[0].on, true, 'Legato noteOn has on=true');
+            assertEqual(vceMidi.sentNotes[1].note, 52, 'Legato sends noteOff(52) second');
+            assertEqual(vceMidi.sentNotes[1].on, false, 'Legato noteOff has on=false');
+            vKbd.resetLatchAndNotes();
+
+            // 6. App integration: switching timbral mode or VCE_UNISON/VCE_MODE trims active latched notes
+            const vceApp = new App();
+            vceApp.setTimbralMode('monotimbral');
+            vceApp.auditionKeyboard = createKeyboard(
+                vceMidi,
+                () => vceApp.activeTimbre,
+                () => (vceApp.synthTimbralMode === 'monotimbral' ? 12 : 6)
+            );
+            vceApp.activeTimbre.setValue('VCE_MODE', 0);
+            vceApp.activeTimbre.setValue('VCE_UNISON', 0);
+            vceApp.auditionKeyboard.querySelector('#kbd-latch').click();
+            for (let n = 48; n < 56; n++) vceApp.auditionKeyboard.noteOn(n);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 8, '8 notes latched in 12V mode');
+            vceApp.setTimbralMode('bitimbral'); // Drops limit from 12 to 6
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 6, 'Switching to bitimbral trims latched notes to 6');
+            vceApp.onParameterChanged('VCE_MODE', 2); // Assign mode change resets keyboard (latch + active notes)
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 0, 'Changing VCE_MODE resets active keyboard notes');
+            assert(!vceApp.auditionKeyboard.querySelector('#kbd-latch').classList.contains('active'), 'Changing VCE_MODE resets keyboard latch');
+            vceApp.onParameterChanged('VCE_MODE', 0); // Back to Modern
+            vceApp.auditionKeyboard.querySelector('#kbd-latch').click();
+            vceApp.auditionKeyboard.noteOn(48);
+            vceApp.auditionKeyboard.noteOn(50);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 2, '2 notes latched before VCE_UNISON change');
+            vceApp.onParameterChanged('VCE_UNISON', 2); // Unison change resets keyboard (latch + active notes)
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 0, 'Changing VCE_UNISON resets active keyboard notes');
+            assert(!vceApp.auditionKeyboard.querySelector('#kbd-latch').classList.contains('active'), 'Changing VCE_UNISON resets keyboard latch');
+            vceApp.auditionKeyboard.resetLatchAndNotes();
+        }
+
         // Regression test: QWERTY keyboard handler must ignore modifier shortcuts (e.g. Cmd-L)
         {
             const modMidi = {

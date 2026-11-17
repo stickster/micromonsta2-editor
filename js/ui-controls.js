@@ -2499,7 +2499,7 @@ function computeChorderNotes(noteNumber, program) {
 /**
  * Creates an interactive audition keyboard (Mouse, Touch, and Computer Keyboard QWERTY input)
  */
-function createKeyboard(midiManager, getActiveProgram) {
+function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12) {
     const container = document.createElement('div');
     container.className = 'audition-bar';
 
@@ -2594,10 +2594,56 @@ function createKeyboard(midiManager, getActiveProgram) {
         }
     }
 
+    function getVoiceSettings() {
+        const rawLimit = typeof getVoiceLimit === 'function' ? getVoiceLimit() : 12;
+        const voiceLimit = rawLimit === 6 ? 6 : 12;
+        const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
+        if (!prog) {
+            return { voiceLimit, modeIndex: 0, unisonVoices: 1, maxKeys: voiceLimit, isLegato: false };
+        }
+        const modeIndex = prog.getValue('VCE_MODE') || 0; // 0: Modern, 1: Vintage, 2: Mono, 3: Legato
+        const unisonIndex = prog.getValue('VCE_UNISON') || 0; // 0: 1, 1: 2, 2: 3, 3: 6
+        const unisonVoices = [1, 2, 3, 6][unisonIndex] || 1;
+        const isMonoMode = modeIndex === 2 || modeIndex === 3;
+        const maxKeys = isMonoMode ? 1 : Math.max(1, Math.floor(voiceLimit / unisonVoices));
+        return { voiceLimit, modeIndex, unisonVoices, maxKeys, isLegato: modeIndex === 3 };
+    }
+
+    function getMaxActiveKeys() {
+        return getVoiceSettings().maxKeys;
+    }
+
+    function releaseNote(noteNumber) {
+        if (!activePressedNotes.has(noteNumber)) return;
+
+        activePressedNotes.delete(noteNumber);
+        midiManager.sendNote(noteNumber, 0, false);
+
+        const chordNotes = activeSoundingChordNotes.get(noteNumber) || [];
+        for (const cNote of chordNotes) {
+            midiManager.sendNote(cNote, 0, false);
+        }
+        activeSoundingChordNotes.delete(noteNumber);
+
+        updateKeyboardHighlights();
+    }
+
+    function enforceVoiceLimit(targetMax = getMaxActiveKeys()) {
+        while (activePressedNotes.size > targetMax) {
+            const oldest = activePressedNotes.values().next().value;
+            releaseNote(oldest);
+        }
+    }
+
     function noteOn(noteNumber) {
         if (activePressedNotes.has(noteNumber)) return;
-        activePressedNotes.add(noteNumber);
 
+        const { maxKeys, isLegato } = getVoiceSettings();
+        if (!isLegato && activePressedNotes.size >= maxKeys) {
+            enforceVoiceLimit(maxKeys - 1);
+        }
+
+        activePressedNotes.add(noteNumber);
         midiManager.sendNote(noteNumber, velocity, true);
 
         const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
@@ -2611,23 +2657,16 @@ function createKeyboard(midiManager, getActiveProgram) {
             activeSoundingChordNotes.set(noteNumber, []);
         }
 
+        if (isLegato && activePressedNotes.size > maxKeys) {
+            enforceVoiceLimit(maxKeys);
+        }
+
         updateKeyboardHighlights();
     }
 
     function noteOff(noteNumber) {
-        if (!activePressedNotes.has(noteNumber)) return;
         if (latchActive) return;
-
-        activePressedNotes.delete(noteNumber);
-        midiManager.sendNote(noteNumber, 0, false);
-
-        const chordNotes = activeSoundingChordNotes.get(noteNumber) || [];
-        for (const cNote of chordNotes) {
-            midiManager.sendNote(cNote, 0, false);
-        }
-        activeSoundingChordNotes.delete(noteNumber);
-
-        updateKeyboardHighlights();
+        releaseNote(noteNumber);
     }
 
     function releaseAllNotes() {
@@ -2888,6 +2927,9 @@ function createKeyboard(midiManager, getActiveProgram) {
     };
     container.noteOn = noteOn;
     container.noteOff = noteOff;
+    container.getActiveNotes = () => Array.from(activePressedNotes);
+    container.getMaxActiveKeys = getMaxActiveKeys;
+    container.enforceVoiceLimit = () => enforceVoiceLimit();
     container.updateKeyboardHighlights = updateKeyboardHighlights;
     container.resetLatchAndNotes = resetLatchAndNotes;
 
