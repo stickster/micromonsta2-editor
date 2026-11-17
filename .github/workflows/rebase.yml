@@ -1,0 +1,128 @@
+name: Rebase PR
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: rebase-pr-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  rebase:
+    # Only run on PRs (not issues), from authorized maintainers, when /rebase is requested
+    if: >
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login != 'github-actions[bot]' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+      contains(github.event.comment.body, '/rebase')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate /rebase command
+        id: validate
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          if printf '%s\n' "$COMMENT_BODY" | grep -Eq '(^|[[:space:]])/rebase([[:space:]]|$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout repository
+        if: steps.validate.outputs.run == 'true'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # Optional REBASE_TOKEN (PAT or GitHub App token) allows force-pushes
+          # to trigger downstream pull_request workflows (e.g. CI / Gemini review).
+          # Falls back to GITHUB_TOKEN if not configured.
+          token: ${{ secrets.REBASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Rebase PR onto base branch
+        if: steps.validate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.REBASE_TOKEN || secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # React to the triggering comment to acknowledge receipt
+          gh api -X POST "repos/${REPO}/issues/comments/${COMMENT_ID}/reactions" -f content="eyes" >/dev/null || true
+
+          # Fetch PR metadata safely via GitHub API (never execute untrusted PR code)
+          PR_JSON=$(gh pr view "$PR_NUMBER" --json state,baseRefName,headRefName,isCrossRepository,maintainerCanModify,headRepositoryOwner,headRepository)
+          PR_STATE=$(jq -r '.state' <<< "$PR_JSON")
+          BASE_REF=$(jq -r '.baseRefName' <<< "$PR_JSON")
+          HEAD_REF=$(jq -r '.headRefName' <<< "$PR_JSON")
+          IS_FORK=$(jq -r '.isCrossRepository' <<< "$PR_JSON")
+          CAN_MODIFY=$(jq -r '.maintainerCanModify' <<< "$PR_JSON")
+          HEAD_OWNER=$(jq -r '.headRepositoryOwner.login' <<< "$PR_JSON")
+          HEAD_REPO=$(jq -r '.headRepository.name' <<< "$PR_JSON")
+
+          if [ "$PR_STATE" != "OPEN" ]; then
+            gh pr comment "$PR_NUMBER" --body "Cannot rebase: PR #${PR_NUMBER} is currently \`${PR_STATE}\`."
+            exit 0
+          fi
+
+          if [ "$IS_FORK" = "true" ] && [ "$CAN_MODIFY" != "true" ]; then
+            gh pr comment "$PR_NUMBER" --body "Cannot rebase: this PR is from a fork and **Allow edits from maintainers** is disabled."
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ "$IS_FORK" = "true" ]; then
+            HEAD_REMOTE="pr-fork"
+            git remote add "$HEAD_REMOTE" "https://x-access-token:${GH_TOKEN}@github.com/${HEAD_OWNER}/${HEAD_REPO}.git"
+          else
+            HEAD_REMOTE="origin"
+          fi
+
+          git fetch origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          git fetch "$HEAD_REMOTE" "+refs/heads/${HEAD_REF}:refs/remotes/${HEAD_REMOTE}/${HEAD_REF}"
+          OLD_HEAD_SHA=$(git rev-parse "refs/remotes/${HEAD_REMOTE}/${HEAD_REF}")
+          git checkout -B "rebase-pr-${PR_NUMBER}" "refs/remotes/${HEAD_REMOTE}/${HEAD_REF}"
+
+          if git merge-base --is-ancestor "origin/${BASE_REF}" HEAD; then
+            gh pr comment "$PR_NUMBER" --body "PR #${PR_NUMBER} is already up to date with \`${BASE_REF}\`."
+            gh api -X POST "repos/${REPO}/issues/comments/${COMMENT_ID}/reactions" -f content="rocket" >/dev/null || true
+            exit 0
+          fi
+
+          if ! git rebase "origin/${BASE_REF}"; then
+            CONFLICT_FILES=$(git diff --name-only --diff-filter=U || true)
+            git rebase --abort || true
+            gh pr comment "$PR_NUMBER" --body "$(cat <<EOF
+          Rebase onto \`${BASE_REF}\` failed due to merge conflicts. Please rebase locally and push:
+
+          \`\`\`bash
+          git fetch origin
+          git checkout ${HEAD_REF}
+          git rebase origin/${BASE_REF}
+          \`\`\`
+
+          Conflicting files:
+          \`\`\`
+          ${CONFLICT_FILES:-"(see workflow logs)"}
+          \`\`\`
+          EOF
+          )"
+            gh api -X POST "repos/${REPO}/issues/comments/${COMMENT_ID}/reactions" -f content="confused" >/dev/null || true
+            exit 1
+          fi
+
+          # Force-push safely with --force-with-lease against the fetched remote ref
+          git push --force-with-lease="refs/heads/${HEAD_REF}:${OLD_HEAD_SHA}" "$HEAD_REMOTE" "HEAD:refs/heads/${HEAD_REF}"
+
+          NEW_SHA=$(git rev-parse --short HEAD)
+          gh pr comment "$PR_NUMBER" --body "Rebased \`${HEAD_REF}\` onto \`${BASE_REF}\` (\`${NEW_SHA}\`)."
+          gh api -X POST "repos/${REPO}/issues/comments/${COMMENT_ID}/reactions" -f content="rocket" >/dev/null || true
