@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - **UI:** Set desktop `--min-app-width` (`1200px`) and `--max-app-width` (`1600px`) consistently across all display densities and update release screenshot.
+- **UI:** Support view-aware M1–M4 drag-and-drop (Editor load, Librarian add/replace with confirmation, and drop tips).
 
 ---
 

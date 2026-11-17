@@ -545,6 +545,121 @@ MM2TestRunner.register('Section Drag-and-Drop, Copy/Paste & Mod Matrix', async (
         assert(memApp.memories.every(m => m === null), 'Clicking Clear resets all M1-M4 memories to null');
         assertEqual(clearBtn.disabled, true, 'Memory Clear button disables after clearing all memories');
         document.registerMockElement('btn-mem-clear', null);
+
+        // View-aware Memory drop behavior: Editor vs Librarian vs Settings
+        const viewAppMain = document.createElement('main');
+        memApp.wireMemoryAndPartDragDrop({
+            memButtons: [],
+            partButtons: [],
+            appMain: viewAppMain,
+            editorGrid: null,
+            clearButton: null
+        });
+        const m1Patch = new MM2Program();
+        m1Patch.name = 'LIB_MEM1';
+        m1Patch.setValue('OSC1_SHAPE', 91);
+        memApp.memories[0] = m1Patch;
+        memApp.timbreA.name = 'KEEP_ED';
+        memApp.timbreA.setValue('OSC1_SHAPE', 12);
+        memApp.selectPart(0);
+
+        // Settings mode: appMain rejects Memory drop
+        memApp.currentView = 'settings';
+        const settingsStore = {};
+        memButtons[0].dispatchEvent(makeEvent('dragstart', { _store: settingsStore }));
+        viewAppMain.dispatchEvent(makeEvent('dragover', { _store: settingsStore }));
+        assert(!viewAppMain.classList.contains('slot-drop-hover'), 'Settings mode: appMain does not highlight on Memory dragover');
+        await viewAppMain.dispatchEvent(makeEvent('drop', { _store: settingsStore }));
+        assertEqual(memApp.timbreA.name, 'KEEP_ED', 'Settings mode: appMain drop does not replace active part');
+
+        // Librarian mode: appMain drop adds Memory to current bank without modifying Editor part
+        const libBank = new MM2Bank('TestBank');
+        const existingProg = new MM2Program();
+        existingProg.name = 'EXIST_01';
+        existingProg.setValue('OSC1_SHAPE', 22);
+        libBank.addProgram(existingProg);
+        memApp.librarian = {
+            banks: [libBank],
+            activeBankIndex: 0,
+            get activeBank() { return this.banks[this.activeBankIndex]; },
+            saveAllBanks: async () => {}
+        };
+        const prevCreateEl = document.createElement;
+        document.createElement = (tag) => {
+            const el = prevCreateEl.call(document, tag);
+            const origQS = el.querySelector ? el.querySelector.bind(el) : () => null;
+            el.querySelector = (sel) => origQS(sel) || { onclick: null };
+            return el;
+        };
+        try {
+            const bankTabsEl = document.createElement('div');
+            bankTabsEl.id = 'bank-tabs';
+            document.registerMockElement('bank-tabs', bankTabsEl);
+            const progListEl = document.createElement('div');
+            progListEl.id = 'librarian-prog-list';
+            document.registerMockElement('librarian-prog-list', progListEl);
+            memApp.currentView = 'librarian';
+
+            const libAppStore = {};
+            memButtons[0].dispatchEvent(makeEvent('dragstart', { _store: libAppStore }));
+            viewAppMain.dispatchEvent(makeEvent('dragover', { _store: libAppStore }));
+            assert(viewAppMain.classList.contains('slot-drop-hover'), 'Librarian mode: appMain highlights on Memory dragover');
+            assertEqual(viewAppMain.getAttribute('data-drop-tip'), 'Drop to add Memory M1 to "TestBank"', 'Librarian mode: appMain shows drop tip on Memory dragover');
+            await viewAppMain.dispatchEvent(makeEvent('drop', { _store: libAppStore }));
+            assertEqual(viewAppMain.getAttribute('data-drop-tip') || '', '', 'Librarian mode: appMain clears drop tip after drop');
+            assertEqual(memApp.timbreA.name, 'KEEP_ED', 'Librarian mode: appMain drop does not overwrite Editor active part');
+            assertEqual(libBank.length, 2, 'Librarian mode: appMain drop adds Memory patch to active bank');
+            assertEqual(libBank.getProgram(1).name, 'LIB_MEM1', 'Librarian mode: added bank patch matches Memory name');
+            assertEqual(libBank.getProgram(1).getValue('OSC1_SHAPE'), 91, 'Librarian mode: added bank patch matches Memory parameters');
+
+            // Librarian mode: drop onto individual bank program row warns via _confirmDialog
+            memApp.renderLibrarianBank();
+            const firstRow = progListEl.children[0];
+            assert(!!firstRow, 'Librarian mode: rendered program row exists');
+
+            let confirmCalls = 0;
+            let nextConfirmResult = false;
+            memApp._confirmDialog = async (opts) => {
+                confirmCalls++;
+                assert(opts && typeof opts.description === 'string' && opts.description.includes('EXIST_01'), 'Librarian row drop warning names target bank patch');
+                return nextConfirmResult;
+            };
+
+            // Cancel in dialog -> does not replace
+            const rowCancelStore = {};
+            memButtons[0].dispatchEvent(makeEvent('dragstart', { _store: rowCancelStore }));
+            firstRow.ondragover(makeEvent('dragover', { _store: rowCancelStore }));
+            assert(firstRow.classList.contains('slot-drop-hover'), 'Librarian row highlights on Memory dragover');
+            assertEqual(firstRow.getAttribute('data-drop-tip'), 'Drop to replace #01 "EXIST_01" with Memory M1', 'Librarian row shows replace drop tip on Memory dragover');
+            await firstRow.ondrop(makeEvent('drop', { _store: rowCancelStore }));
+            assertEqual(firstRow.getAttribute('data-drop-tip') || '', '', 'Librarian row clears drop tip after drop');
+            assertEqual(confirmCalls, 1, 'Librarian row drop prompts _confirmDialog before replacing');
+            assertEqual(libBank.getProgram(0).name, 'EXIST_01', 'Canceling confirmation keeps original bank patch');
+
+            // Confirm in dialog -> replaces bank program
+            nextConfirmResult = true;
+            const rowConfirmStore = {};
+            memButtons[0].dispatchEvent(makeEvent('dragstart', { _store: rowConfirmStore }));
+            await firstRow.ondrop(makeEvent('drop', { _store: rowConfirmStore }));
+            assertEqual(confirmCalls, 2, 'Confirmed librarian row drop prompts _confirmDialog');
+            assertEqual(libBank.getProgram(0).name, 'LIB_MEM1', 'Confirmed librarian row drop replaces target bank patch name');
+            assertEqual(libBank.getProgram(0).getValue('OSC1_SHAPE'), 91, 'Confirmed librarian row drop replaces target bank patch parameters');
+
+            // Editor mode: appMain drop replaces active part
+            memApp.currentView = 'editor';
+            const editorDropStore = {};
+            memButtons[0].dispatchEvent(makeEvent('dragstart', { _store: editorDropStore }));
+            viewAppMain.dispatchEvent(makeEvent('dragover', { _store: editorDropStore }));
+            assertEqual(viewAppMain.getAttribute('data-drop-tip'), 'Drop to load Memory M1 into Part A', 'Editor mode: appMain shows load drop tip on Memory dragover');
+            await viewAppMain.dispatchEvent(makeEvent('drop', { _store: editorDropStore }));
+            assertEqual(viewAppMain.getAttribute('data-drop-tip') || '', '', 'Editor mode: appMain clears drop tip after drop');
+            assertEqual(memApp.timbreA.name, 'LIB_MEM1', 'Editor mode: appMain drop replaces active part name');
+            assertEqual(memApp.timbreA.getValue('OSC1_SHAPE'), 91, 'Editor mode: appMain drop replaces active part parameters');
+        } finally {
+            document.createElement = prevCreateEl;
+            document.registerMockElement('bank-tabs', null);
+            document.registerMockElement('librarian-prog-list', null);
+        }
     });
 
     await runSection('\n--- [54] Mod Matrix Source & Destination Drag/Drop Tests ---', async () => {

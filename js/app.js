@@ -1074,10 +1074,32 @@ class App {
         return true;
     }
 
+    async addMemoryToCurrentBank(memIdx) {
+        if (memIdx < 0 || memIdx >= 4 || !this.memories[memIdx]) return false;
+        const bank = this.librarian && this.librarian.activeBank;
+        if (!bank) return false;
+        const mem = this.memories[memIdx];
+        bank.addProgram(new MM2Program(new Uint8Array(mem.rawData)));
+        await this.librarian.saveAllBanks();
+        this.renderLibrarianBank();
+        this.showNotification(`Added Memory M${memIdx + 1} ("${mem.name}") to "${bank.name}"`, 'success');
+        return true;
+    }
+
+    _clearDropTip(el) {
+        if (!el) return;
+        if (typeof el.removeAttribute === 'function') {
+            el.removeAttribute('data-drop-tip');
+        } else if (typeof el.setAttribute === 'function') {
+            el.setAttribute('data-drop-tip', '');
+        }
+    }
+
     _clearMemoryDragHover() {
         if (typeof document === 'undefined' || !document.querySelectorAll) return;
-        document.querySelectorAll('.memory-btn.slot-drop-hover, .part-btn.slot-drop-hover, .app-main.slot-drop-hover, #editor-grid.slot-drop-hover').forEach(el => {
+        document.querySelectorAll('.memory-btn.slot-drop-hover, .part-btn.slot-drop-hover, .app-main.slot-drop-hover, #editor-grid.slot-drop-hover, .prog-row.slot-drop-hover').forEach(el => {
             el.classList.remove('slot-drop-hover');
+            this._clearDropTip(el);
         });
     }
 
@@ -1112,6 +1134,7 @@ class App {
             this._clearMemoryDragHover();
             [...memButtons, ...partButtons, appMain, editorGrid].filter(Boolean).forEach(el => {
                 el.classList.remove('slot-drop-hover');
+                this._clearDropTip(el);
             });
         };
 
@@ -1273,27 +1296,48 @@ class App {
                 if (!active || active.kind !== 'memory' || !this.memories[active.index]) {
                     return;
                 }
+                if (this.currentView !== 'editor' && this.currentView !== 'librarian') {
+                    return;
+                }
                 e.preventDefault();
                 if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
                 appMain.classList.add('slot-drop-hover');
+                if (typeof appMain.setAttribute === 'function') {
+                    if (this.currentView === 'editor') {
+                        const partLabel = this.activeSlot === 1 ? 'B' : 'A';
+                        appMain.setAttribute('data-drop-tip', `Drop to load Memory M${active.index + 1} into Part ${partLabel}`);
+                    } else if (this.currentView === 'librarian') {
+                        const bankName = this.librarian && this.librarian.activeBank ? this.librarian.activeBank.name : 'current bank';
+                        appMain.setAttribute('data-drop-tip', `Drop to add Memory M${active.index + 1} to "${bankName}"`);
+                    }
+                }
             });
 
             appMain.addEventListener('dragleave', (e) => {
                 if (e.relatedTarget && typeof appMain.contains === 'function' && appMain.contains(e.relatedTarget)) return;
                 appMain.classList.remove('slot-drop-hover');
+                this._clearDropTip(appMain);
             });
 
-            appMain.addEventListener('drop', (e) => {
+            appMain.addEventListener('drop', async (e) => {
                 const data = this._parseDragPayload(e);
                 if (!data || data.kind !== 'memory' || !this.memories[data.index]) {
+                    return;
+                }
+                if (this.currentView !== 'editor' && this.currentView !== 'librarian') {
                     return;
                 }
                 e.preventDefault();
                 e.stopPropagation();
                 appMain.classList.remove('slot-drop-hover');
-                this.loadMemoryToActivePart(data.index);
+                this._clearDropTip(appMain);
                 this._activeMemoryDrag = null;
                 clearHover();
+                if (this.currentView === 'editor') {
+                    this.loadMemoryToActivePart(data.index);
+                } else if (this.currentView === 'librarian') {
+                    await this.addMemoryToCurrentBank(data.index);
+                }
             });
         }
     }
@@ -4115,8 +4159,56 @@ class App {
                 row.classList.add('dragging');
             };
             row.ondragend = () => row.classList.remove('dragging');
-            row.ondragover = (e) => e.preventDefault();
-            row.ondrop = (e) => {
+            row.ondragover = (e) => {
+                const active = this._activeMemoryDrag;
+                if (active && active.kind === 'memory' && this.memories[active.index]) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                    const appMain = document.querySelector('.app-main');
+                    if (appMain) {
+                        appMain.classList.remove('slot-drop-hover');
+                        this._clearDropTip(appMain);
+                    }
+                    row.classList.add('slot-drop-hover');
+                    if (typeof row.setAttribute === 'function') {
+                        const slotLabel = `#${(originalIndex + 1).toString().padStart(2, '0')}`;
+                        row.setAttribute('data-drop-tip', `Drop to replace ${slotLabel} "${program.name}" with Memory M${active.index + 1}`);
+                    }
+                    return;
+                }
+                e.preventDefault();
+            };
+            row.ondragleave = (e) => {
+                if (e.relatedTarget && typeof row.contains === 'function' && row.contains(e.relatedTarget)) return;
+                row.classList.remove('slot-drop-hover');
+                this._clearDropTip(row);
+            };
+            row.ondrop = async (e) => {
+                row.classList.remove('slot-drop-hover');
+                this._clearDropTip(row);
+                const memData = this._parseDragPayload(e);
+                if (memData && memData.kind === 'memory' && this.memories[memData.index]) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this._activeMemoryDrag = null;
+                    this._clearMemoryDragHover();
+                    const mem = this.memories[memData.index];
+                    const slotLabel = `#${(originalIndex + 1).toString().padStart(2, '0')}`;
+                    const confirmed = await this._confirmDialog({
+                        title: 'Replace Bank Patch?',
+                        description: `Replace ${slotLabel} "${program.name}" in "${activeBank.name}" with Memory M${memData.index + 1} ("${mem.name}")?`,
+                        confirmLabel: 'Replace',
+                        confirmClass: 'btn-warning'
+                    });
+                    if (confirmed) {
+                        activeBank.setProgram(originalIndex, new MM2Program(new Uint8Array(mem.rawData)));
+                        await this.librarian.saveAllBanks();
+                        this.renderLibrarianBank();
+                        this.showNotification(`Replaced ${slotLabel} ("${program.name}") with Memory M${memData.index + 1} ("${mem.name}")`, 'success');
+                    }
+                    return;
+                }
                 e.preventDefault();
                 try {
                     const data = JSON.parse(e.dataTransfer.getData('text/plain'));
