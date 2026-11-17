@@ -1044,6 +1044,20 @@ MM2TestRunner.register('Section Drag-and-Drop, Copy/Paste & Mod Matrix', async (
         assertEqual(octUpOpt.textContent, '>+1', 'Octave up reverts to ">+1" after selection change');
         assertEqual(choOpt.textContent, 'Cho', 'Chord option reverts to "Cho" after selection change');
 
+        // 10. Sequencer Note randomizer includes < -1 (3) and > +1 (10) whether chords are on or off
+        const origRand = Math.random;
+        try {
+            const randValues = new Set();
+            for (let k = 0; k < 10; k++) {
+                Math.random = () => k / 10 + 0.01;
+                seqEl.querySelector('#seq-random-btn').click();
+                randValues.add(seqProg.getValue('ARP_PTN_STEP01'));
+            }
+            assert(randValues.has(3), 'Note randomizer includes < -1 (3)');
+            assert(randValues.has(10), 'Note randomizer includes > +1 (10)');
+        } finally {
+            Math.random = origRand;
+        }
     });
 
 });

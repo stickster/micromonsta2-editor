@@ -2158,7 +2158,7 @@ function createArpSequencer(program, onChangeCallback) {
     randBtn.title = 'Randomize Note steps';
     randBtn.innerHTML = ICON_RANDOM_SVG;
     randBtn.addEventListener('click', () => {
-        const basePool = [0, 0, 1, 2, 4, 5, 6, 11]; // Musical probability weights (11 = Chord)
+        const basePool = [0, 0, 1, 2, 3, 4, 5, 6, 10, 11]; // Musical probability weights (3 = < -1, 10 = > +1, 11 = Chord)
         const pool = includeChords ? basePool : basePool.filter(v => v !== 11);
         applyStepBatch('Randomize Arp Note Pattern', (numStr, setStepParam) => {
             setStepParam(`ARP_PTN_STEP${numStr}`, pool[Math.floor(Math.random() * pool.length)]);
