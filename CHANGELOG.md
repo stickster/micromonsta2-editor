@@ -7,11 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.6.0] - 2026-11-17
+
 - **UI:** Set desktop `--min-app-width` (`1200px`) and `--max-app-width` (`1600px`) consistently across all display densities and update release screenshot.
 - **UI:** Support view-aware M1–M4 drag-and-drop (Editor load, Librarian add/replace with confirmation, and drop tips).
 - **UI:** Require double-click instead of single-click on a Librarian bank tab title to rename it inline.
 - **UI:** Support Librarian multi-select, cross-bank/bank-duplicate drag-and-drop, copy-on-drop, and undo/redo.
 - **UI:** Add consistent floating drop tips across all Editor drag-and-drop targets.
+- **UI:** Display compact labels (`<-1`, `>+1`, `Cho`, `Rnd`) on closed sequencer step selectors and include `< -1`/`> +1` in Note randomization.
 - **UI:** Prevent `#prog-name-input` from acting as a drag-and-drop target.
 
 ---
