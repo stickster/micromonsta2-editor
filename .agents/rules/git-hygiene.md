@@ -47,6 +47,12 @@ All commit messages MUST follow the [Conventional Commits](https://www.conventio
 3. Do **not** end the subject line with a period.
 4. Never use vague subjects like `"First round of changes"`, `"Updates"`, `"WIP"`, or `"Fix bugs"`.
 
+### Body & Detail Rules
+1. **Omit body for simple changes:** A one-line subject (plus trailers) is preferred whenever the summary is self-explanatory.
+2. **Short bullets for complex changes:** When a body is needed, use concise single-line bullets capturing the main points rather than verbose paragraphs.
+3. **Name parameters, not choices:** Refer to affected parameters or concepts (e.g., "unison, and assign mode") without enumerating every option value.
+4. **Omit routine housekeeping:** Do not mention `README.md`, `CHANGELOG.md`, or test suite updates in the commit message unless explicitly requested.
+
 ## 3. Versioning and Pre-Push Policy
 - **Semantic Versioning**: The application follows Semantic Versioning (`MAJOR.MINOR.PATCH`).
 - **Single Source of Truth**: The canonical application version is specified in `js/version.js` (`APP_VERSION`).
