@@ -1014,6 +1014,36 @@ MM2TestRunner.register('Section Drag-and-Drop, Copy/Paste & Mod Matrix', async (
         assertEqual(steps[1].getAttribute('data-drop-tip'), 'Drop to copy Step 1 to Step 2', 'Sequencer step shows copy drop tip');
         copyAllBtn.dispatchEvent(makeEvt('dragover', { _store: seqStore }));
         assert((copyAllBtn.getAttribute('data-drop-tip') || '').includes('from Step 1 to all steps'), 'Sequencer copy-all button shows copy drop tip');
+
+        // 9. Sequencer step mod/note short closed labels ("Rnd" / "Cho") vs long open labels ("Random" / "Chord")
+        const modSel = steps[0].querySelector('.step-mod-btn');
+        const rndOpt = modSel ? modSel.children[3] : null;
+        assert(!!rndOpt, 'Sequencer step mod dropdown has Random option');
+        assertEqual(rndOpt.textContent, 'Rnd', 'Random option displays short label "Rnd" when closed');
+        modSel.dispatchEvent({ type: 'mousedown' });
+        assertEqual(rndOpt.textContent, 'Random', 'Random option displays full label "Random" when opening dropdown');
+        modSel.value = '3';
+        modSel.dispatchEvent({ type: 'change' });
+        assertEqual(rndOpt.textContent, 'Rnd', 'Random option reverts to "Rnd" after selection change');
+
+        const noteSel = steps[0].querySelector('.step-mode-btn');
+        const octDownOpt = noteSel ? noteSel.children[3] : null;
+        const octUpOpt = noteSel ? noteSel.children[10] : null;
+        const choOpt = noteSel ? noteSel.children[11] : null;
+        assert(!!choOpt, 'Sequencer step note dropdown has Chord option');
+        assertEqual(octDownOpt.textContent, '<-1', 'Octave down displays short label "<-1" when closed');
+        assertEqual(octUpOpt.textContent, '>+1', 'Octave up displays short label ">+1" when closed');
+        assertEqual(choOpt.textContent, 'Cho', 'Chord option displays short label "Cho" when closed');
+        noteSel.dispatchEvent({ type: 'mousedown' });
+        assertEqual(octDownOpt.textContent, '< -1', 'Octave down displays full label "< -1" when opening dropdown');
+        assertEqual(octUpOpt.textContent, '> +1', 'Octave up displays full label "> +1" when opening dropdown');
+        assertEqual(choOpt.textContent, 'Chord', 'Chord option displays full label "Chord" when opening dropdown');
+        noteSel.value = '11';
+        noteSel.dispatchEvent({ type: 'change' });
+        assertEqual(octDownOpt.textContent, '<-1', 'Octave down reverts to "<-1" after selection change');
+        assertEqual(octUpOpt.textContent, '>+1', 'Octave up reverts to ">+1" after selection change');
+        assertEqual(choOpt.textContent, 'Cho', 'Chord option reverts to "Cho" after selection change');
+
     });
 
 });

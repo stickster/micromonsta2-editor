@@ -2317,26 +2317,48 @@ function createArpSequencer(program, onChangeCallback) {
         stepNum.className = 'step-number';
         stepNum.textContent = i;
 
+        const wireShortClosedLabels = (selectEl, entries) => {
+            if (!selectEl || !entries || entries.length === 0) return;
+            const showLong = () => entries.forEach(({ opt, longLabel }) => { opt.textContent = longLabel; });
+            const showShort = () => entries.forEach(({ opt, shortLabel }) => { opt.textContent = shortLabel; });
+            showShort();
+            selectEl.addEventListener('mousedown', showLong);
+            selectEl.addEventListener('focus', showLong);
+            selectEl.addEventListener('blur', showShort);
+            selectEl.addEventListener('change', showShort);
+        };
+
         const modeBtn = document.createElement('select');
         modeBtn.className = 'step-mode-btn';
         modeBtn.title = `Step ${i} note mode`;
+        const SHORT_MODE_LABELS = { 3: '<-1', 10: '>+1', 11: 'Cho' };
+        const shortModeEntries = [];
         STEP_MODES.forEach((txt, idx) => {
             const opt = document.createElement('option');
             opt.value = idx;
             opt.textContent = txt;
+            if (SHORT_MODE_LABELS[idx]) {
+                shortModeEntries.push({ opt, shortLabel: SHORT_MODE_LABELS[idx], longLabel: txt });
+            }
             modeBtn.appendChild(opt);
         });
+        wireShortClosedLabels(modeBtn, shortModeEntries);
 
         const modBtn = document.createElement('select');
         modBtn.className = 'step-mod-btn';
         modBtn.setAttribute('data-fw-v3-only', 'true');
         modBtn.title = `Step ${i} modulation level`;
+        const shortModEntries = [];
         MOD_LEVELS.forEach((txt, idx) => {
             const opt = document.createElement('option');
             opt.value = idx;
             opt.textContent = txt;
+            if (idx === 3) {
+                shortModEntries.push({ opt, shortLabel: 'Rnd', longLabel: txt });
+            }
             modBtn.appendChild(opt);
         });
+        wireShortClosedLabels(modBtn, shortModEntries);
 
         col.appendChild(stepNum);
         col.appendChild(modeBtn);
