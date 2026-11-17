@@ -433,24 +433,29 @@ MM2TestRunner.register('Patch Librarian, Banks & Duplicates', async ({ assert, a
 
         app.renderLibrarianBank();
 
-        // Check rendered tab has single-click inline edit handler
+        // Check rendered tab has double-click inline edit handler
         const renderedTab = bankTabs.querySelector('.bank-tab');
         const renderedTitle = bankTabs.querySelector('.bank-tab-title');
         assert(renderedTitle !== null, 'Rendered bank tab title exists');
-        assertEqual(renderedTitle.title, 'Click to rename', 'Bank tab title has single-click rename tooltip');
-        assert(typeof renderedTitle.onclick === 'function', 'Bank tab title has onclick handler');
+        assertEqual(renderedTitle.title, 'Double-click to rename', 'Bank tab title has double-click rename tooltip');
+        assertEqual(renderedTitle.onclick || null, null, 'Bank tab title does not have onclick handler');
+        assert(typeof renderedTitle.ondblclick === 'function', 'Bank tab title has ondblclick handler');
 
-        // Single-clicking tab title enters inline edit mode
-        renderedTitle.onclick({ stopPropagation: () => { } });
+        // Clicking active tab does not re-render/destroy DOM before double-click
+        renderedTab.onclick();
+        assert(bankTabs.querySelector('.bank-tab-title') === renderedTitle, 'Clicking active tab preserves tab title element for dblclick');
+
+        // Double-clicking tab title enters inline edit mode
+        renderedTitle.ondblclick({ stopPropagation: () => { } });
         const inlineInput = renderedTitle.querySelector('input');
-        assert(inlineInput !== null, 'Single-clicking tab title replaces title with inline input');
+        assert(inlineInput !== null, 'Double-clicking tab title replaces title with inline input');
         assertEqual(inlineInput.className, 'bank-tab-title-input', 'Inline input has expected class');
         assertEqual(inlineInput.value, 'Studio Favorites', 'Inline input pre-filled with current bank name');
         assertEqual(renderedTab.getAttribute('draggable'), 'false', 'Parent tab dragging disabled during inline edit');
 
-        // Clicking again while editing does not create a second input
-        renderedTitle.onclick({ stopPropagation: () => { } });
-        assertEqual(renderedTitle.children.length, 1, 'Clicking again while editing does not duplicate input');
+        // Double-clicking again while editing does not create a second input
+        renderedTitle.ondblclick({ stopPropagation: () => { } });
+        assertEqual(renderedTitle.children.length, 1, 'Double-clicking again while editing does not duplicate input');
 
         // Pressing Escape cancels rename and exits entry mode
         notifType = null;
@@ -463,8 +468,8 @@ MM2TestRunner.register('Patch Librarian, Banks & Duplicates', async ({ assert, a
         assertEqual(renderedTitle.textContent, 'Studio Favorites', 'Escape restores original bank title text');
         assertEqual(renderedTab.getAttribute('draggable'), 'true', 'Parent tab dragging restored after Escape');
 
-        // Single-clicking and pressing Enter accepts trimmed rename and exits entry mode
-        renderedTitle.onclick({ stopPropagation: () => { } });
+        // Double-clicking and pressing Enter accepts trimmed rename and exits entry mode
+        renderedTitle.ondblclick({ stopPropagation: () => { } });
         const enterInput = renderedTitle.querySelector('input');
         enterInput.value = '  Live Set  ';
         enterInput.onkeydown({ key: 'Enter', preventDefault: () => { }, stopPropagation: () => { } });
@@ -476,7 +481,7 @@ MM2TestRunner.register('Patch Librarian, Banks & Duplicates', async ({ assert, a
 
         // Empty/whitespace name on blur warns and restores original name
         notifType = null;
-        updatedTitle.onclick({ stopPropagation: () => { } });
+        updatedTitle.ondblclick({ stopPropagation: () => { } });
         const emptyInput = updatedTitle.querySelector('input');
         emptyInput.value = '   ';
         emptyInput.onblur();
@@ -486,7 +491,7 @@ MM2TestRunner.register('Patch Librarian, Banks & Duplicates', async ({ assert, a
 
         // Valid name on blur commits rename
         notifType = null;
-        updatedTitle.onclick({ stopPropagation: () => { } });
+        updatedTitle.ondblclick({ stopPropagation: () => { } });
         const blurInput = updatedTitle.querySelector('input');
         blurInput.value = 'Ambient Pads';
         blurInput.onblur();

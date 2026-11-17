@@ -3875,6 +3875,7 @@ class App {
         };
 
         input.onclick = (e) => e.stopPropagation();
+        input.ondblclick = (e) => e.stopPropagation();
         input.onkeydown = (e) => {
             if (e.stopPropagation) e.stopPropagation();
             if (e.key === 'Enter') {
@@ -3974,14 +3975,15 @@ class App {
             `;
 
             tab.onclick = () => {
+                if (this.librarian.activeBankIndex === idx) return;
                 this.librarian.activeBankIndex = idx;
                 this.renderLibrarianBank();
             };
 
             const tabTitle = tab.querySelector('.bank-tab-title');
             if (tabTitle) {
-                tabTitle.title = 'Click to rename';
-                tabTitle.onclick = (e) => {
+                tabTitle.title = 'Double-click to rename';
+                tabTitle.ondblclick = (e) => {
                     e.stopPropagation();
                     this.startInlineBankRename(idx, tabTitle, tab);
                 };
