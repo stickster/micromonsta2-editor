@@ -744,7 +744,7 @@ class App {
             this.recordUndo(key, prevVal, val, meta.label);
         }
         this.activeTimbre.setValue(key, val);
-        if ((key === 'ARP_OFF_ON' && val) || key === 'VCE_UNISON' || key === 'VCE_MODE') {
+        if (key === 'ARP_OFF_ON' || (key === 'ARP_LATCH' && !val) || key === 'VCE_UNISON' || key === 'VCE_MODE') {
             this.resetAuditionLatch();
         }
         this.refreshVisualizerFor(key);

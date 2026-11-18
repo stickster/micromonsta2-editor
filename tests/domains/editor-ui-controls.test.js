@@ -643,6 +643,77 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
             assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 0, 'Changing VCE_UNISON resets active keyboard notes');
             assert(!vceApp.auditionKeyboard.querySelector('#kbd-latch').classList.contains('active'), 'Changing VCE_UNISON resets keyboard latch');
             vceApp.auditionKeyboard.resetLatchAndNotes();
+
+            // 7. Arpeggiator Latch (ARP_OFF_ON=1, ARP_LATCH=1):
+            //    When global latch is off, notes activated together stay latched; a new note/group replaces previous latched notes.
+            vceApp.onParameterChanged('VCE_UNISON', 0);
+            vceApp.onParameterChanged('ARP_OFF_ON', 1);
+            vceApp.onParameterChanged('ARP_LATCH', 1);
+            assert(!vceApp.auditionKeyboard.querySelector('#kbd-latch').classList.contains('active'), 'Global latch remains off when arp latch is enabled');
+            vceApp.auditionKeyboard.noteOn(48);
+            vceApp.auditionKeyboard.noteOn(52);
+            vceApp.auditionKeyboard.noteOff(48);
+            vceApp.auditionKeyboard.noteOff(52);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().join(','), '48,52', 'Notes activated together stay latched under arp latch without global latch');
+
+            // Pressing a new note/group after releasing replaces previous arp-latched notes
+            vceApp.auditionKeyboard.noteOn(55);
+            vceApp.auditionKeyboard.noteOn(59);
+            vceApp.auditionKeyboard.noteOff(55);
+            vceApp.auditionKeyboard.noteOff(59);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().join(','), '55,59', 'New note/group replaces previous arp-latched notes');
+
+            // Engaging global latch adopts currently arp-latched notes into globally latched set
+            vceApp.auditionKeyboard.querySelector('#kbd-latch').click();
+            vceApp.auditionKeyboard.noteOn(62);
+            vceApp.auditionKeyboard.noteOff(62);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().join(','), '55,59,62', 'With global latch engaged, new note adds to existing latched set');
+            vceApp.auditionKeyboard.noteOn(55);
+            vceApp.auditionKeyboard.noteOff(55);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().join(','), '59,62', 'With global latch engaged, re-pressing a note toggles only that note off');
+            vceApp.auditionKeyboard.resetLatchAndNotes();
+
+            // Disabling ARP_LATCH resets piano/voices (even if global latch was engaged)
+            vceApp.auditionKeyboard.noteOn(48);
+            vceApp.auditionKeyboard.noteOff(48);
+            vceApp.onParameterChanged('ARP_LATCH', 0);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 0, 'Disabling ARP_LATCH resets piano notes');
+            assert(!vceApp.auditionKeyboard.querySelector('#kbd-latch').classList.contains('active'), 'Disabling ARP_LATCH resets global latch');
+
+            // When ARP_OFF_ON=1 and all latches are off, active note count can still exceed part/unison voice limit
+            vceApp.onParameterChanged('VCE_UNISON', 3); // Unison 6 in 6V (normally max 1 key)
+            assertEqual(vceApp.auditionKeyboard.getMaxActiveKeys(), Infinity, 'Arp on with all latches off allows unlimited tracked notes on piano');
+            for (let n = 48; n < 56; n++) vceApp.auditionKeyboard.noteOn(n);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 8, '8 notes tracked simultaneously with Arp on and all latches off despite 6V Unison 6');
+            for (let n = 48; n < 56; n++) vceApp.auditionKeyboard.noteOff(n);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 0, 'Releasing all notes clears them when all latches are off');
+
+            // Disabling ARP_OFF_ON resets piano/voices
+            vceApp.auditionKeyboard.querySelector('#kbd-latch').click();
+            vceApp.onParameterChanged('ARP_OFF_ON', 0);
+            vceApp.onParameterChanged('VCE_UNISON', 0);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 0, 'Disabling ARP_OFF_ON resets piano notes');
+            assert(!vceApp.auditionKeyboard.querySelector('#kbd-latch').classList.contains('active'), 'Disabling ARP_OFF_ON resets global latch');
+
+            // Re-pressing one global-latched note stops only that note without affecting others
+            vceApp.onParameterChanged('ARP_OFF_ON', 0);
+            vceApp.auditionKeyboard.querySelector('#kbd-latch').click();
+            vceApp.auditionKeyboard.noteOn(48);
+            vceApp.auditionKeyboard.noteOff(48);
+            vceApp.auditionKeyboard.noteOn(52);
+            vceApp.auditionKeyboard.noteOff(52);
+            vceApp.auditionKeyboard.noteOn(48);
+            vceApp.auditionKeyboard.noteOff(48);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().join(','), '52', 'Re-pressing note 48 under global latch stops only note 48');
+            vceApp.auditionKeyboard.resetLatchAndNotes();
+
+            // When ARP_OFF_ON=0 and ARP_LATCH=1, notes do NOT persist without global latch
+            vceApp.onParameterChanged('ARP_OFF_ON', 0);
+            vceApp.onParameterChanged('ARP_LATCH', 1);
+            vceApp.auditionKeyboard.noteOn(48);
+            vceApp.auditionKeyboard.noteOff(48);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 0, 'Notes do not persist when ARP_OFF_ON=0 even if ARP_LATCH=1');
+            vceApp.auditionKeyboard.resetLatchAndNotes();
         }
 
         // Regression test: QWERTY keyboard handler must ignore modifier shortcuts (e.g. Cmd-L)

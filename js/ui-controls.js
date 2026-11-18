@@ -2554,6 +2554,7 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
     const maxOffset = 36;
 
     const activePressedNotes = new Set();
+    const physicallyHeldNotes = new Set();
     const activeSoundingChordNotes = new Map(); // pressedNote -> [chordNotes]
     const keyElements = new Map();
 
@@ -2601,6 +2602,10 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         if (!prog) {
             return { voiceLimit, modeIndex: 0, unisonVoices: 1, maxKeys: voiceLimit, isLegato: false };
         }
+        if (prog.getValue('ARP_OFF_ON')) {
+            // Arpeggiator steps through notes one voice at a time, so piano can track unlimited held notes
+            return { voiceLimit, modeIndex: 0, unisonVoices: 1, maxKeys: Infinity, isLegato: false };
+        }
         const modeIndex = prog.getValue('VCE_MODE') || 0; // 0: Modern, 1: Vintage, 2: Mono, 3: Legato
         const unisonIndex = prog.getValue('VCE_UNISON') || 0; // 0: 1, 1: 2, 2: 3, 3: 6
         const unisonVoices = [1, 2, 3, 6][unisonIndex] || 1;
@@ -2614,6 +2619,7 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
     }
 
     function releaseNote(noteNumber) {
+        physicallyHeldNotes.delete(noteNumber);
         if (!activePressedNotes.has(noteNumber)) return;
 
         activePressedNotes.delete(noteNumber);
@@ -2636,7 +2642,22 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
     }
 
     function noteOn(noteNumber) {
-        if (activePressedNotes.has(noteNumber)) return;
+        if (!latchActive && isArpLatchActive()) {
+            // In arp-latch mode without global latch, a new note/group replaces previously latched notes
+            if (physicallyHeldNotes.size === 0 && activePressedNotes.size > 0) {
+                releaseAllNotes();
+            }
+            physicallyHeldNotes.add(noteNumber);
+            if (activePressedNotes.has(noteNumber)) return;
+        } else {
+            physicallyHeldNotes.add(noteNumber);
+            if (activePressedNotes.has(noteNumber)) {
+                if (latchActive) {
+                    releaseNote(noteNumber);
+                }
+                return;
+            }
+        }
 
         const { maxKeys, isLegato } = getVoiceSettings();
         if (!isLegato && activePressedNotes.size >= maxKeys) {
@@ -2664,8 +2685,18 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         updateKeyboardHighlights();
     }
 
+    function isArpLatchActive() {
+        const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
+        return !!(prog && prog.getValue('ARP_OFF_ON') && prog.getValue('ARP_LATCH'));
+    }
+
+    function isAnyLatchActive() {
+        return latchActive || isArpLatchActive();
+    }
+
     function noteOff(noteNumber) {
-        if (latchActive) return;
+        physicallyHeldNotes.delete(noteNumber);
+        if (isAnyLatchActive()) return;
         releaseNote(noteNumber);
     }
 
@@ -2679,6 +2710,7 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
             }
         }
         activePressedNotes.clear();
+        physicallyHeldNotes.clear();
         activeSoundingChordNotes.clear();
         updateKeyboardHighlights();
     }
@@ -2796,7 +2828,7 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         latchBtn.addEventListener('click', () => {
             latchActive = !latchActive;
             latchBtn.classList.toggle('active', latchActive);
-            if (!latchActive) {
+            if (!isAnyLatchActive()) {
                 releaseAllNotes();
             }
         });
@@ -2930,6 +2962,9 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
     container.getActiveNotes = () => Array.from(activePressedNotes);
     container.getMaxActiveKeys = getMaxActiveKeys;
     container.enforceVoiceLimit = () => enforceVoiceLimit();
+    container.releaseIfUnlatched = () => {
+        if (!isAnyLatchActive()) releaseAllNotes();
+    };
     container.updateKeyboardHighlights = updateKeyboardHighlights;
     container.resetLatchAndNotes = resetLatchAndNotes;
 
