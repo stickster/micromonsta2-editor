@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.6.2] - 2026-11-17
+
 - **UI:** Add copyright and MIT License link in Settings dialog.
 - **UI:** Apply Part B orange theme to active controls and purple to knob assignment labels.
 - **MIDI:** Deduplicate identically named MIDI ports in port lists.

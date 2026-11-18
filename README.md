@@ -38,13 +38,13 @@ See [CHANGELOG.md](CHANGELOG.md) for a summary of changes.
 - **Drag-and-Drop Copy**: Drag Oscillators, LFOs, Envelopes, Math Multipliers, Mod Matrix (sources, destinations, or whole slots) to copy. Reorder Mod Matrix slots by dragging them around.
 - **Fast Parameter Editing**: Click any knob value to type an exact number (or hold `Shift`/`Ctrl` for fine control).
 - **Oscillator Listening**: Toggle oscillator Mute and Solo (including noise) to isolate and fine tune.
-- **Hardware Sync and Bitimbral Workflow**: Automatic MicroMonsta 2 port detection and timbral mode tracking.
+- **Hardware Sync and Bitimbral Workflow**: Automatic MicroMonsta 2 port detection, timbral mode tracking, and color-coded Part A/Part B editing.
 - **Patch Convenience:** `Part A ↔ Part B` copying built in. Two modes available:
    - Use **Fetch from MM2** / **Push to MM2** for quick transfers from/to current hardware state. Use the `Compare` toggle to hear differences quickly, OR:
    - Use **Live Sync** mode which streams changes directly to hardware over 7-bit/14-bit NRPN (great for testing modulations).
    - **Four (4) patch memories** for quick comparisons of entire patches.
 - **Full Multi-step Undo / Redo:** Uses`Cmd/Ctrl+Z`, `Cmd/Ctrl+Y` to make it easy to rewind or replay changes.
-- **Built-In Keyboard and Chorder Preview**: Always-available 3-octave bottom keyboard with QWERTY note input, octave controls, latch, pitch/mod wheels, MIDI Panic, and voice assignment tracking.
+- **Built-In Keyboard and Chorder Preview**: Always-available 3-octave bottom keyboard with QWERTY note input, octave controls, per-part latch and key/chorder highlighting, pitch/mod wheels, MIDI Panic, and voice assignment tracking.
 - **Patch Librarian and Duplicate Manager**: Organize and duplicate banks locally, drag-and-drop to reorder, copy, or move patches (including multi-select) across banks with Undo/Redo, search and filter by category, import/export `.syx` files, and detect or condense redundant duplicate patches.
 - **Privacy Respecting and Zero Setup**: Runs **100% LOCALLY** in your browser with zero dependencies, no account, and no data leaving your machine. 
 - **Multi-window coordination**: Supports multiple instances in case you want to see Parts A and B simultaneously. Extra browser windows don't collide over MIDI.
