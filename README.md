@@ -22,6 +22,10 @@ You can also download this app and run it locally if you prefer. This can be use
 
 If you want to connect the app to your hardware, whether from the website or from your hard disk, you will need to allow MIDI/SysEx access in your browser. On Chromium-based browsers, this is usually done by granting permission when the browser asks. On other browsers, you may need to enable it in the browser settings.
 
+## History
+
+See [CHANGELOG.md](CHANGELOG.md) for a summary of changes.
+
 ## Screenshots
 
 ![MicroMonsta 2 Editor & Patch Librarian](assets/screenshot.png)
