@@ -772,6 +772,7 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
                 assert(cssText.includes('body.part-b-active .step-mod-btn'), 'CSS defines Part B sequencer mod settings blue color');
                 assert(cssText.includes('body.part-b-active .synth-card-header'), 'CSS defines Part B edit panel titles orange color');
                 assert(/\.knobs-assign-grid\s+\.control-label\s*\{[^}]*color:\s*var\(--accent-purple\)/.test(cssText), 'CSS styles individual knob names (F, Q, M, E1-E4) in purple');
+                assert(/\.license-decl\s*\{[^}]*color:\s*var\(--text-secondary\)/.test(cssText), 'CSS styles .license-decl link for dark theme');
             }
             vceApp.auditionKeyboard.resetLatchAndNotes();
         }

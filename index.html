@@ -15,7 +15,9 @@
     <header class="app-header">
         <div class="brand-section">
             <div class="brand-title">MicroMonsta <span>2</span></div>
-            <a class="brand-badge app-version-badge" id="app-version-badge" href="https://github.com/stickster/micromonsta2-editor" target="_blank" rel="noopener noreferrer" title="Editor Version — View on GitHub">v0.1</a>
+            <a class="brand-badge app-version-badge" id="app-version-badge"
+                href="https://github.com/stickster/micromonsta2-editor" target="_blank" rel="noopener noreferrer"
+                title="Editor Version — View on GitHub">v0.1</a>
             <div class="undo-redo-group" title="Undo / Redo">
                 <button class="btn btn-sm btn-subtle" id="btn-prog-undo" title="Undo change (Ctrl+Z)"
                     disabled>↶</button>
@@ -31,8 +33,8 @@
                     title="Memory M3 (Empty)">M3</button>
                 <button class="btn btn-sm btn-subtle memory-btn" id="btn-mem-3" data-mem="3" draggable="true"
                     title="Memory M4 (Empty)">M4</button>
-                <button class="btn btn-sm btn-subtle" id="btn-mem-clear"
-                    title="Clear all patch memories (M1-M4)" disabled>Clear</button>
+                <button class="btn btn-sm btn-subtle" id="btn-mem-clear" title="Clear all patch memories (M1-M4)"
+                    disabled>Clear</button>
             </div>
         </div>
 
@@ -46,7 +48,8 @@
         </div>
 
         <div class="header-right">
-            <a id="fw-version-badge" class="fw-badge fw-v3" title="MicroMonsta 2 firmware compatibility mode (auto-detected from hardware SysEx)">FW v3.x</a>
+            <a id="fw-version-badge" class="fw-badge fw-v3"
+                title="MicroMonsta 2 firmware compatibility mode (auto-detected from hardware SysEx)">FW v3.x</a>
             <div class="midi-status-box" id="midi-status-box" onclick="window.app.handleMidiStatusClick()"
                 title="Click to connect or configure MIDI">
                 <div class="status-dot disconnected" id="midi-status-dot"></div>
@@ -63,10 +66,10 @@
             <div class="program-bar">
                 <div class="program-name-group">
                     <div class="part-selector">
-                        <button class="part-btn part-a-btn active" id="btn-part-a" data-slot="0" draggable="true" onclick="window.app.selectPart(0)"
-                            title="Edit Part A (Layer A)">Part A (12V)</button>
-                        <button class="part-btn part-b-btn" id="btn-part-b" data-slot="1" draggable="true" onclick="window.app.selectPart(1)"
-                            title="Edit Part B (Layer B)">Part B (6V)</button>
+                        <button class="part-btn part-a-btn active" id="btn-part-a" data-slot="0" draggable="true"
+                            onclick="window.app.selectPart(0)" title="Edit Part A (Layer A)">Part A (12V)</button>
+                        <button class="part-btn part-b-btn" id="btn-part-b" data-slot="1" draggable="true"
+                            onclick="window.app.selectPart(1)" title="Edit Part B (Layer B)">Part B (6V)</button>
                     </div>
                     <input type="text" id="prog-name-input" class="input-name" maxlength="8" placeholder="Patch"
                         title="Patch Name (up to 8 characters)">
@@ -75,12 +78,21 @@
                     </div>
                     <button class="btn btn-sm btn-subtle btn-compare" id="btn-prog-compare"
                         title="Compare with original loaded patch (A/B testing)">Compare: Off</button>
-                    <div id="editor-sync-badge" class="sync-badge offline" role="status" aria-label="Not Synced (Offline)" title="Not connected to MicroMonsta 2 hardware"><svg class="icon-line" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 10.5 5 12a2.5 2.5 0 0 1-3.5-3.5l1.5-1.5a2.5 2.5 0 0 1 3.5 0"></path><path d="M9.5 5.5 11 4a2.5 2.5 0 0 1 3.5 3.5L13 9a2.5 2.5 0 0 1-3.5 0"></path><path d="M5.5 3v1.5M3 5.5h1.5M10.5 13v-1.5M13 10.5h-1.5"></path></svg></div>
+                    <div id="editor-sync-badge" class="sync-badge offline" role="status"
+                        aria-label="Not Synced (Offline)" title="Not connected to MicroMonsta 2 hardware"><svg
+                            class="icon-line" viewBox="0 0 16 16" width="14" height="14" fill="none"
+                            stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                            aria-hidden="true">
+                            <path d="M6.5 10.5 5 12a2.5 2.5 0 0 1-3.5-3.5l1.5-1.5a2.5 2.5 0 0 1 3.5 0"></path>
+                            <path d="M9.5 5.5 11 4a2.5 2.5 0 0 1 3.5 3.5L13 9a2.5 2.5 0 0 1-3.5 0"></path>
+                            <path d="M5.5 3v1.5M3 5.5h1.5M10.5 13v-1.5M13 10.5h-1.5"></path>
+                        </svg></div>
                 </div>
 
                 <div class="program-actions">
-                    <button type="button" class="btn-param-toggle btn-live-sync" id="btn-prog-live-sync" aria-pressed="false"
-                        title="Real-time NRPN parameter streaming to MM2 hardware"><span class="toggle-label">Live Sync</span><span class="toggle-state-badge">OFF</span></button>
+                    <button type="button" class="btn-param-toggle btn-live-sync" id="btn-prog-live-sync"
+                        aria-pressed="false" title="Real-time NRPN parameter streaming to MM2 hardware"><span
+                            class="toggle-label">Live Sync</span><span class="toggle-state-badge">OFF</span></button>
 
                     <button class="btn btn-fetch" id="btn-prog-fetch"
                         title="Fetch current sound patch directly from MM2 hardware">Fetch from MM2</button>
@@ -155,7 +167,8 @@
                         <button class="btn btn-sm btn-primary" id="btn-reconnect-midi"
                             title="Scan and reconnect Web MIDI devices">🔄 Scan / Reconnect MIDI Devices</button>
                         <button class="btn btn-sm btn-secondary" id="btn-probe-hardware"
-                            title="Send SysEx query to verify MicroMonsta 2 is responsive on selected ports">⚡ Test MM2 Connection</button>
+                            title="Send SysEx query to verify MicroMonsta 2 is responsive on selected ports">⚡ Test MM2
+                            Connection</button>
                         <span id="midi-permission-text" class="setting-desc" style="margin: 0;"></span>
                     </div>
 
@@ -193,19 +206,23 @@
                     </div>
 
                     <div class="setting-item">
-                        <label class="setting-checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <label class="setting-checkbox-label"
+                            style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="settings-periodic-check">
                             <span>Check hardware connection periodically</span>
                         </label>
-                        <span class="setting-desc" style="margin-left: 24px;">Periodically pings MM2 when idle to detect disconnection behind MIDI routers or interfaces.</span>
+                        <span class="setting-desc" style="margin-left: 24px;">Periodically pings MM2 when idle to detect
+                            disconnection behind MIDI routers or interfaces.</span>
                     </div>
 
                     <div class="setting-item">
-                        <label class="setting-checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <label class="setting-checkbox-label"
+                            style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
                             <input type="checkbox" id="settings-tab-sync" checked>
                             <span>Keep browser tabs synchronized</span>
                         </label>
-                        <span class="setting-desc" style="margin-left: 24px;">Synchronize parameter edits, patch names, and librarian contents across open browser tabs in real-time (Default: On).</span>
+                        <span class="setting-desc" style="margin-left: 24px;">Synchronize parameter edits, patch names,
+                            and librarian contents across open browser tabs in real-time (Default: On).</span>
                     </div>
 
                     <div class="setting-item">
@@ -218,11 +235,19 @@
                         </div>
                     </div>
 
-                    <div class="setting-item" style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 12px;">
+                    <div class="setting-item"
+                        style="border-top: 1px solid var(--border-color); padding-top: 12px; margin-top: 12px;">
                         <label class="setting-label">Application Version</label>
                         <div style="display: flex; align-items: center; gap: 10px;">
-                            <a id="settings-app-version" class="brand-badge app-version-badge" href="https://github.com/stickster/micromonsta2-editor" target="_blank" rel="noopener noreferrer" title="View MicroMonsta 2 Editor on GitHub" style="font-size: 13px; padding: 4px 10px;">v0.1.0</a>
-                            <span class="setting-desc" style="margin: 0;">MicroMonsta 2 Web Editor & Patch Librarian</span>
+                            <a id="settings-app-version" class="brand-badge app-version-badge"
+                                href="https://github.com/stickster/micromonsta2-editor" target="_blank"
+                                rel="noopener noreferrer" title="View MicroMonsta 2 Editor on GitHub"
+                                style="font-size: 13px; padding: 4px 10px;">v0.1.0</a>
+                            <span class="setting-desc" style="margin: 0;">MicroMonsta 2 Editor & Librarian
+                                &copy; 2026 Paul W. Frields. Provided under <a class="license-decl"
+                                    href="https://raw.githubusercontent.com/stickster/micromonsta2-editor/refs/heads/main/LICENSE"
+                                    target="_blank" rel="noopener noreferrer" title="View license">MIT
+                                    License</a>.</span>
                         </div>
                     </div>
                 </div>
@@ -327,9 +352,12 @@
                 </div>
             </div>
             <form method="dialog" class="dialog-button-bar">
-                <button type="submit" value="ignore" id="sync-action-ignore-btn" class="btn btn-secondary" autofocus>Ignore</button>
-                <button type="submit" value="fetch" id="sync-action-fetch-btn" class="btn btn-primary">Fetch from MM2</button>
-                <button type="submit" value="push" id="sync-action-push-btn" class="btn btn-warning">Push to MM2</button>
+                <button type="submit" value="ignore" id="sync-action-ignore-btn" class="btn btn-secondary"
+                    autofocus>Ignore</button>
+                <button type="submit" value="fetch" id="sync-action-fetch-btn" class="btn btn-primary">Fetch from
+                    MM2</button>
+                <button type="submit" value="push" id="sync-action-push-btn" class="btn btn-warning">Push to
+                    MM2</button>
             </form>
         </div>
     </dialog>
