@@ -760,6 +760,13 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
                 assert(cssText.includes('.audition-bar.part-b .key.pressed'), 'CSS defines Part B pressed key color');
                 assert(cssText.includes('.audition-bar.part-b .key.chord-note'), 'CSS defines Part B darker chorder key color');
                 assert(cssText.includes('.audition-bar.part-b #kbd-latch.active'), 'CSS defines Part B latch button color');
+                assert(cssText.includes('body.part-b-active .btn-osc-tab.active'), 'CSS defines Part B Osc 1-3 active tab color');
+                assert(cssText.includes('body.part-b-active .btn-env-tab.active'), 'CSS defines Part B Env 1-3 active tab color');
+                assert(cssText.includes('body.part-b-active .lfo-badge'), 'CSS defines Part B LFO 1-3 badge color');
+                assert(cssText.includes('body.part-b-active .mult-badge'), 'CSS defines Part B Mult 1-2 badge color');
+                assert(cssText.includes('body.part-b-active .matrix-slot-badge'), 'CSS defines Part B Mod matrix slot # color');
+                assert(cssText.includes('body.part-b-active .btn-param-toggle.active'), 'CSS defines Part B active toggle color');
+                assert(cssText.includes('body.part-b-active .step-mode-btn.active'), 'CSS defines Part B sequencer note 1-16 active background');
             }
             vceApp.auditionKeyboard.resetLatchAndNotes();
         }

@@ -1447,4 +1447,35 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         document.registerMockElement('btn-prog-live-sync', null);
     });
 
+    await runSection('\n--- [49] MIDI Port Deduplication Tests ---', async () => {
+        const dedupeMidi = new MidiManager();
+        dedupeMidi.midiAccess = {
+            inputs: new Map([
+                ['euphonix-in-1', { id: 'euphonix-in-1', name: 'Euphonix MIDI', state: 'connected' }],
+                ['euphonix-in-2', { id: 'euphonix-in-2', name: 'Euphonix MIDI', state: 'connected' }],
+                ['mm2-in', { id: 'mm2-in', name: 'MicroMonsta 2', state: 'connected' }],
+                ['disc-in', { id: 'disc-in', name: 'Old Device', state: 'disconnected' }]
+            ]),
+            outputs: new Map([
+                ['euphonix-out-1', { id: 'euphonix-out-1', name: 'Euphonix MIDI', state: 'connected' }],
+                ['euphonix-out-2', { id: 'euphonix-out-2', name: 'Euphonix MIDI', state: 'connected' }],
+                ['mm2-out', { id: 'mm2-out', name: 'MicroMonsta 2', state: 'connected' }]
+            ])
+        };
+
+        const inputs = dedupeMidi.getInputs();
+        assertEqual(inputs.length, 2, 'getInputs deduplicates identically named connected ports');
+        assertEqual(inputs.filter(p => p.name === 'Euphonix MIDI').length, 1, 'Only one Euphonix MIDI input returned');
+        assertEqual(inputs.find(p => p.name === 'Euphonix MIDI').id, 'euphonix-in-2', 'Prefers latest connected port when none active');
+
+        // When an earlier port id is actively selected, keep that selected port
+        dedupeMidi.inPort = { id: 'euphonix-in-1', name: 'Euphonix MIDI' };
+        const inputsWithActive = dedupeMidi.getInputs();
+        assertEqual(inputsWithActive.find(p => p.name === 'Euphonix MIDI').id, 'euphonix-in-1', 'Preserves actively selected port when deduplicating');
+
+        const outputs = dedupeMidi.getOutputs();
+        assertEqual(outputs.length, 2, 'getOutputs deduplicates identically named connected ports');
+        assertEqual(outputs.filter(p => p.name === 'Euphonix MIDI').length, 1, 'Only one Euphonix MIDI output returned');
+    });
+
 });

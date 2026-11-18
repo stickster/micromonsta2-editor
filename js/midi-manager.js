@@ -106,14 +106,29 @@ class MidiManager {
         return await this.init();
     }
 
+    _dedupePorts(ports, activePort) {
+        const byKey = new Map();
+        const activeId = activePort ? activePort.id : null;
+        for (const p of ports) {
+            const key = p.name || p.id;
+            const existing = byKey.get(key);
+            if (!existing || (activeId && p.id === activeId) || (!activeId || existing.id !== activeId)) {
+                byKey.set(key, p);
+            }
+        }
+        return Array.from(byKey.values());
+    }
+
     getInputs() {
         if (!this.midiAccess) return [];
-        return Array.from(this.midiAccess.inputs.values()).filter(p => !p.state || p.state === 'connected');
+        const connected = Array.from(this.midiAccess.inputs.values()).filter(p => !p.state || p.state === 'connected');
+        return this._dedupePorts(connected, this.inPort);
     }
 
     getOutputs() {
         if (!this.midiAccess) return [];
-        return Array.from(this.midiAccess.outputs.values()).filter(p => !p.state || p.state === 'connected');
+        const connected = Array.from(this.midiAccess.outputs.values()).filter(p => !p.state || p.state === 'connected');
+        return this._dedupePorts(connected, this.outPort);
     }
 
     autoSelectPorts() {
@@ -229,9 +244,9 @@ class MidiManager {
         if (!port || !port.name) return false;
         const n = port.name.toLowerCase();
         return n.includes('midi through') ||
-               n.includes('iac driver') ||
-               n.includes('virtual') ||
-               n.includes('loopbe');
+            n.includes('iac driver') ||
+            n.includes('virtual') ||
+            n.includes('loopbe');
     }
 
     setPeriodicCheck(enabled) {
@@ -430,7 +445,7 @@ class MidiManager {
             if (port.type === 'input' && this.inPort && (this.inPort.id === port.id || this.inPort === port)) {
                 try {
                     this.inPort.removeEventListener('midimessage', this.onMidiMessage);
-                } catch (e) {}
+                } catch (e) { }
                 this.inPort = null;
                 this.hardwareResponsive = null;
                 this.setDetectedFirmware(null, null);
