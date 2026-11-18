@@ -148,6 +148,21 @@ MM2TestRunner.register('SysEx, Specs & Firmware Compatibility', async ({ assert,
                     assert(match[0].includes('rel="noopener noreferrer"'), `${badgeId} includes rel="noopener noreferrer"`);
                 }
             }
+
+            assert(
+                globalThis.INDEX_HTML.includes(`href="css/style.css?v=${App.VERSION}"`),
+                `index.html stylesheet includes ?v=${App.VERSION} cache-buster`
+            );
+            const expectedScripts = [
+                'js/version.js', 'js/mm2-specs.js', 'js/sysex-parser.js', 'js/patch-librarian.js',
+                'js/tab-sync.js', 'js/midi-manager.js', 'js/ui-controls.js', 'js/app.js'
+            ];
+            for (const scriptPath of expectedScripts) {
+                assert(
+                    globalThis.INDEX_HTML.includes(`src="${scriptPath}?v=${App.VERSION}"`),
+                    `index.html script ${scriptPath} includes ?v=${App.VERSION} cache-buster`
+                );
+            }
         }
     });
 

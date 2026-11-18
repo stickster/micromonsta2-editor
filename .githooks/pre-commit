@@ -27,6 +27,25 @@ if [ -n "$VERSION_IN_JS" ] && [ -f "package.json" ]; then
         "
         git add package.json
     fi
+
+    if [ -f "index.html" ]; then
+        INDEX_UPDATED=$(node -e "
+            const fs = require('fs');
+            const orig = fs.readFileSync('index.html', 'utf8');
+            const updated = orig.replace(
+                /((?:href|src)=\"(?:css\/style\.css|js\/[a-z0-9-]+\.js))(?:\?v=[^\"]*)?(\")/g,
+                '\$1?v=$VERSION_IN_JS\$2'
+            );
+            if (updated !== orig) {
+                fs.writeFileSync('index.html', updated);
+                console.log('1');
+            }
+        ")
+        if [ "$INDEX_UPDATED" = "1" ]; then
+            echo "[pre-commit] Synchronized index.html asset cache-busting (?v=$VERSION_IN_JS)."
+            git add index.html
+        fi
+    fi
 fi
 
 # 2. Run automated test suite
