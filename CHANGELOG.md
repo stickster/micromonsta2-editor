@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- **UI:** Persist audition piano notes when arpeggiator latch is active without global latch.
+---
+
+## [0.6.1] - 2026-11-17
+
+- **UI:** Persist audition piano notes under arpeggiator latch, allow unlimited notes while arpeggiator is enabled, and reset piano on arpeggiator/arp-latch disable.
 - **UI:** Enforce part voice limits (6/12V), unison, and assign mode on audition piano.
 - **UI:** Display 3-octave audition piano with QWERTY keys playing the middle octave.
 - **CI:** Add `/rebase` PR comment workflow with fork support, conflict reporting, and `--force-with-lease` safety.
