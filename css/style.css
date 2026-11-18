@@ -1108,7 +1108,7 @@ main.app-main {
 .knobs-assign-grid .control-label {
     font-size: 11px;
     font-weight: 800;
-    color: var(--accent-cyan);
+    color: var(--accent-purple);
     margin-bottom: 3px;
     text-align: center;
 }
@@ -3298,6 +3298,58 @@ body[data-drop-tip]:not([data-drop-tip=""])::after {
 
 .audition-bar.part-b .octave-label {
     color: var(--accent-orange);
+}
+
+/* Part B Active Editor Theme Overrides */
+body.part-b-active .synth-card-header,
+body.part-b-active .card-title-group:not(.static):hover .card-drag-handle {
+    color: var(--accent-orange);
+}
+
+body.part-b-active .btn-osc-tab,
+body.part-b-active .btn-env-tab {
+    color: rgba(255, 159, 67, 0.55);
+}
+
+body.part-b-active .btn-osc-tab:hover,
+body.part-b-active .btn-env-tab:hover {
+    color: var(--accent-orange);
+    background: rgba(255, 159, 67, 0.08);
+}
+
+body.part-b-active .btn-osc-tab.active,
+body.part-b-active .btn-env-tab.active {
+    color: var(--accent-orange);
+    background: rgba(255, 159, 67, 0.12);
+    border-color: rgba(255, 159, 67, 0.35);
+}
+
+body.part-b-active .lfo-badge,
+body.part-b-active .mult-badge,
+body.part-b-active .matrix-slot-badge {
+    color: var(--accent-orange);
+    background: rgba(255, 159, 67, 0.12);
+    border-color: rgba(255, 159, 67, 0.35);
+}
+
+body.part-b-active .btn-param-toggle.active {
+    background: rgba(255, 159, 67, 0.12);
+    border-color: var(--accent-orange);
+    box-shadow: 0 0 6px rgba(255, 159, 67, 0.35);
+}
+
+body.part-b-active .btn-param-toggle.active .toggle-state-badge {
+    background: var(--accent-orange);
+    color: #000;
+}
+
+body.part-b-active .step-mode-btn.active {
+    background: var(--accent-orange);
+    color: #000;
+}
+
+body.part-b-active .step-mod-btn {
+    color: var(--accent-cyan);
 }
 
 /* Web MIDI Diagnostic & Permission Banner */

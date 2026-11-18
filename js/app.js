@@ -674,6 +674,9 @@ class App {
             this.auditionKeyboard.setActivePart(slot);
         }
         if (typeof document !== 'undefined') {
+            if (document.body && document.body.classList) {
+                document.body.classList.toggle('part-b-active', slot === 1);
+            }
             document.querySelectorAll('.part-btn').forEach(btn => {
                 btn.classList.toggle('active', parseInt(btn.dataset.slot, 10) === slot);
             });

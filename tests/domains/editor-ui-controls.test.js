@@ -767,6 +767,11 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
                 assert(cssText.includes('body.part-b-active .matrix-slot-badge'), 'CSS defines Part B Mod matrix slot # color');
                 assert(cssText.includes('body.part-b-active .btn-param-toggle.active'), 'CSS defines Part B active toggle color');
                 assert(cssText.includes('body.part-b-active .step-mode-btn.active'), 'CSS defines Part B sequencer note 1-16 active background');
+                assert(cssText.includes('body.part-b-active .btn-osc-tab'), 'CSS defines Part B non-active Osc 1-3 tab color');
+                assert(cssText.includes('body.part-b-active .btn-env-tab'), 'CSS defines Part B non-active Env 1-3 tab color');
+                assert(cssText.includes('body.part-b-active .step-mod-btn'), 'CSS defines Part B sequencer mod settings blue color');
+                assert(cssText.includes('body.part-b-active .synth-card-header'), 'CSS defines Part B edit panel titles orange color');
+                assert(/\.knobs-assign-grid\s+\.control-label\s*\{[^}]*color:\s*var\(--accent-purple\)/.test(cssText), 'CSS styles individual knob names (F, Q, M, E1-E4) in purple');
             }
             vceApp.auditionKeyboard.resetLatchAndNotes();
         }
