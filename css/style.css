@@ -3266,9 +3266,21 @@ body[data-drop-tip]:not([data-drop-tip=""])::after {
 }
 
 .key.chord-note {
+    background: #007a99 !important;
+    color: #fff !important;
+    box-shadow: 0 0 8px rgba(0, 122, 153, 0.5) !important;
+}
+
+.audition-bar.part-b .key.pressed {
     background: var(--accent-orange) !important;
     color: #000 !important;
     box-shadow: 0 0 10px rgba(255, 159, 67, 0.45) !important;
+}
+
+.audition-bar.part-b .key.chord-note {
+    background: #a8560d !important;
+    color: #fff !important;
+    box-shadow: 0 0 8px rgba(168, 86, 13, 0.5) !important;
 }
 
 #kbd-latch.active {
@@ -3277,6 +3289,15 @@ body[data-drop-tip]:not([data-drop-tip=""])::after {
     border-color: transparent;
     font-weight: 700;
     box-shadow: 0 0 8px var(--accent-cyan-glow);
+}
+
+.audition-bar.part-b #kbd-latch.active {
+    background: var(--accent-orange);
+    box-shadow: 0 0 8px rgba(255, 159, 67, 0.4);
+}
+
+.audition-bar.part-b .octave-label {
+    color: var(--accent-orange);
 }
 
 /* Web MIDI Diagnostic & Permission Banner */

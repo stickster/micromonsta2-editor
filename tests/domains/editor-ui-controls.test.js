@@ -713,6 +713,54 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
             vceApp.auditionKeyboard.noteOn(48);
             vceApp.auditionKeyboard.noteOff(48);
             assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 0, 'Notes do not persist when ARP_OFF_ON=0 even if ARP_LATCH=1');
+            vceApp.auditionKeyboard.resetAllLatchAndNotes();
+
+            // 8. Separate Part A / Part B global latch, arp/seq, and piano note states + part colors
+            vceApp.setTimbralMode('bitimbral');
+            vceApp.selectPart(0);
+            vceApp.onParameterChanged('ARP_OFF_ON', 0);
+            vceApp.onParameterChanged('ARP_LATCH', 0);
+            vceApp.auditionKeyboard.querySelector('#kbd-latch').click(); // Enable Part A global latch
+            vceApp.auditionKeyboard.noteOn(48);
+            vceApp.auditionKeyboard.noteOff(48);
+            assert(!vceApp.auditionKeyboard.classList.contains('part-b'), 'Part A keyboard does not have .part-b class');
+            assert(vceApp.auditionKeyboard.querySelector('#kbd-latch').classList.contains('active'), 'Part A global latch is active');
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().join(','), '48', 'Part A has latched note 48');
+
+            // Switch to Part B: should have separate latch (off), separate notes (empty), and .part-b class
+            vceApp.selectPart(1);
+            assert(vceApp.auditionKeyboard.classList.contains('part-b'), 'Part B keyboard has .part-b class for orange highlight');
+            assert(!vceApp.auditionKeyboard.querySelector('#kbd-latch').classList.contains('active'), 'Part B global latch starts off independently of Part A');
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().length, 0, 'Part B starts with no active notes');
+            vceApp.onParameterChanged('ARP_OFF_ON', 1);
+            vceApp.onParameterChanged('ARP_LATCH', 1);
+            vceApp.auditionKeyboard.noteOn(60);
+            vceApp.auditionKeyboard.noteOff(60);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().join(','), '60', 'Part B holds arp-latched note 60');
+
+            // Switch back to Part A: Part A latch & note 48 preserved, Part B preserved independently
+            vceApp.selectPart(0);
+            assert(!vceApp.auditionKeyboard.classList.contains('part-b'), 'Switching back to Part A removes .part-b class');
+            assert(vceApp.auditionKeyboard.querySelector('#kbd-latch').classList.contains('active'), 'Part A global latch preserved');
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().join(','), '48', 'Part A latched note 48 preserved');
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes(1).join(','), '60', 'Part B latched note 60 preserved in background');
+
+            // Resetting Part B arp does not clear Part A latched notes
+            vceApp.selectPart(1);
+            vceApp.onParameterChanged('ARP_OFF_ON', 0);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes(1).length, 0, 'Part B notes reset when Part B arp disabled');
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes(0).join(','), '48', 'Part A notes remain intact when Part B resets');
+            vceApp.auditionKeyboard.resetAllLatchAndNotes();
+
+            // Verify CSS defines part-matched pressed colors and darker chorder colors
+            if (typeof require !== 'undefined') {
+                const fs = require('fs');
+                const path = require('path');
+                const cssText = fs.readFileSync(path.join(__dirname, '../../css/style.css'), 'utf8');
+                assert(cssText.includes('.audition-bar.part-b .key.pressed'), 'CSS defines Part B pressed key color');
+                assert(cssText.includes('.audition-bar.part-b .key.chord-note'), 'CSS defines Part B darker chorder key color');
+                assert(cssText.includes('.audition-bar.part-b #kbd-latch.active'), 'CSS defines Part B latch button color');
+            }
             vceApp.auditionKeyboard.resetLatchAndNotes();
         }
 

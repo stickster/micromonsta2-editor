@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- **UI:** Separate Part A/B latch and arpeggiator/sequencer piano state with part-matched note and chorder highlight colors.
 - **CI:** Add versioned cache-busting query strings to CSS and JS assets in `index.html`.
 
 ---

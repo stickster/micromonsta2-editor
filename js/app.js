@@ -670,6 +670,9 @@ class App {
         }
         this.activeSlot = slot;
         this.midi.activeSlot = slot;
+        if (this.auditionKeyboard && typeof this.auditionKeyboard.setActivePart === 'function') {
+            this.auditionKeyboard.setActivePart(slot);
+        }
         if (typeof document !== 'undefined') {
             document.querySelectorAll('.part-btn').forEach(btn => {
                 btn.classList.toggle('active', parseInt(btn.dataset.slot, 10) === slot);
@@ -745,7 +748,7 @@ class App {
         }
         this.activeTimbre.setValue(key, val);
         if (key === 'ARP_OFF_ON' || (key === 'ARP_LATCH' && !val) || key === 'VCE_UNISON' || key === 'VCE_MODE') {
-            this.resetAuditionLatch();
+            this.resetAuditionLatch(this.activeSlot);
         }
         this.refreshVisualizerFor(key);
         if (this.tabSync) {
@@ -5285,8 +5288,13 @@ class App {
         });
     }
 
-    resetAuditionLatch() {
-        if (this.auditionKeyboard && typeof this.auditionKeyboard.resetLatchAndNotes === 'function') {
+    resetAuditionLatch(slot = null) {
+        if (!this.auditionKeyboard) return;
+        if ((slot === 0 || slot === 1) && typeof this.auditionKeyboard.resetLatchAndNotes === 'function') {
+            this.auditionKeyboard.resetLatchAndNotes(slot);
+        } else if (typeof this.auditionKeyboard.resetAllLatchAndNotes === 'function') {
+            this.auditionKeyboard.resetAllLatchAndNotes();
+        } else if (typeof this.auditionKeyboard.resetLatchAndNotes === 'function') {
             this.auditionKeyboard.resetLatchAndNotes();
         }
     }
@@ -5300,6 +5308,9 @@ class App {
             () => this.activeTimbre,
             () => (this.synthTimbralMode === 'monotimbral' ? 12 : 6)
         );
+        if (typeof this.auditionKeyboard.setActivePart === 'function') {
+            this.auditionKeyboard.setActivePart(this.activeSlot);
+        }
         container.appendChild(this.auditionKeyboard);
     }
 

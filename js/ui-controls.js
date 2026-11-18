@@ -2505,7 +2505,16 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
 
     let currentOctave = 3;
     let velocity = 100;
-    let latchActive = false;
+    let activeSlot = 0;
+
+    const createPartState = () => ({
+        latchActive: false,
+        activePressedNotes: new Set(),
+        physicallyHeldNotes: new Set(),
+        activeSoundingChordNotes: new Map() // pressedNote -> [chordNotes]
+    });
+    const partStates = [createPartState(), createPartState()];
+    const getState = (slot = activeSlot) => partStates[slot === 1 ? 1 : 0];
 
     const controls = document.createElement('div');
     controls.className = 'audition-controls';
@@ -2553,9 +2562,6 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
     ];
     const maxOffset = 36;
 
-    const activePressedNotes = new Set();
-    const physicallyHeldNotes = new Set();
-    const activeSoundingChordNotes = new Map(); // pressedNote -> [chordNotes]
     const keyElements = new Map();
 
     // Displayed range is centered on currentOctave (middle octave = (currentOctave + 1) * 12)
@@ -2570,9 +2576,10 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         });
 
         const baseNote = getDisplayedBaseNote();
+        const state = getState();
 
-        // Highlight chord voicing notes in orange
-        for (const cNotes of activeSoundingChordNotes.values()) {
+        // Highlight chord voicing notes in darker part color
+        for (const cNotes of state.activeSoundingChordNotes.values()) {
             for (const cNote of cNotes) {
                 const offset = cNote - baseNote;
                 if (offset >= 0 && offset <= maxOffset) {
@@ -2582,8 +2589,8 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
             }
         }
 
-        // Highlight physically pressed notes in cyan/blue (takes precedence)
-        for (const pNote of activePressedNotes) {
+        // Highlight physically pressed/latched notes in part color (takes precedence)
+        for (const pNote of state.activePressedNotes) {
             const offset = pNote - baseNote;
             if (offset >= 0 && offset <= maxOffset) {
                 const el = keyElements.get(offset);
@@ -2618,41 +2625,60 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         return getVoiceSettings().maxKeys;
     }
 
-    function releaseNote(noteNumber) {
-        physicallyHeldNotes.delete(noteNumber);
-        if (!activePressedNotes.has(noteNumber)) return;
-
-        activePressedNotes.delete(noteNumber);
-        midiManager.sendNote(noteNumber, 0, false);
-
-        const chordNotes = activeSoundingChordNotes.get(noteNumber) || [];
-        for (const cNote of chordNotes) {
-            midiManager.sendNote(cNote, 0, false);
+    function sendNoteForSlot(slot, noteNumber, vel, on) {
+        if (slot === activeSlot || typeof midiManager.activeSlot !== 'number') {
+            midiManager.sendNote(noteNumber, vel, on);
+            return;
         }
-        activeSoundingChordNotes.delete(noteNumber);
-
-        updateKeyboardHighlights();
+        const prevSlot = midiManager.activeSlot;
+        midiManager.activeSlot = slot;
+        try {
+            midiManager.sendNote(noteNumber, vel, on);
+        } finally {
+            midiManager.activeSlot = prevSlot;
+        }
     }
 
-    function enforceVoiceLimit(targetMax = getMaxActiveKeys()) {
-        while (activePressedNotes.size > targetMax) {
-            const oldest = activePressedNotes.values().next().value;
-            releaseNote(oldest);
+    function releaseNote(noteNumber, slot = activeSlot) {
+        const state = getState(slot);
+        state.physicallyHeldNotes.delete(noteNumber);
+        if (!state.activePressedNotes.has(noteNumber)) return;
+
+        state.activePressedNotes.delete(noteNumber);
+        sendNoteForSlot(slot, noteNumber, 0, false);
+
+        const chordNotes = state.activeSoundingChordNotes.get(noteNumber) || [];
+        for (const cNote of chordNotes) {
+            sendNoteForSlot(slot, cNote, 0, false);
+        }
+        state.activeSoundingChordNotes.delete(noteNumber);
+
+        if (slot === activeSlot) {
+            updateKeyboardHighlights();
+        }
+    }
+
+    function enforceVoiceLimit(targetMax = getMaxActiveKeys(), slot = activeSlot) {
+        const state = getState(slot);
+        while (state.activePressedNotes.size > targetMax) {
+            const oldest = state.activePressedNotes.values().next().value;
+            releaseNote(oldest, slot);
         }
     }
 
     function noteOn(noteNumber) {
-        if (!latchActive && isArpLatchActive()) {
+        const state = getState();
+        if (!state.latchActive && isArpLatchActive()) {
             // In arp-latch mode without global latch, a new note/group replaces previously latched notes
-            if (physicallyHeldNotes.size === 0 && activePressedNotes.size > 0) {
+            if (state.physicallyHeldNotes.size === 0 && state.activePressedNotes.size > 0) {
                 releaseAllNotes();
             }
-            physicallyHeldNotes.add(noteNumber);
-            if (activePressedNotes.has(noteNumber)) return;
+            state.physicallyHeldNotes.add(noteNumber);
+            if (state.activePressedNotes.has(noteNumber)) return;
         } else {
-            physicallyHeldNotes.add(noteNumber);
-            if (activePressedNotes.has(noteNumber)) {
-                if (latchActive) {
+            state.physicallyHeldNotes.add(noteNumber);
+            if (state.activePressedNotes.has(noteNumber)) {
+                if (state.latchActive) {
                     releaseNote(noteNumber);
                 }
                 return;
@@ -2660,25 +2686,25 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         }
 
         const { maxKeys, isLegato } = getVoiceSettings();
-        if (!isLegato && activePressedNotes.size >= maxKeys) {
+        if (!isLegato && state.activePressedNotes.size >= maxKeys) {
             enforceVoiceLimit(maxKeys - 1);
         }
 
-        activePressedNotes.add(noteNumber);
+        state.activePressedNotes.add(noteNumber);
         midiManager.sendNote(noteNumber, velocity, true);
 
         const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
         if (prog) {
             const { chordNotes } = computeChorderNotes(noteNumber, prog);
-            activeSoundingChordNotes.set(noteNumber, chordNotes);
+            state.activeSoundingChordNotes.set(noteNumber, chordNotes);
             for (const cNote of chordNotes) {
                 midiManager.sendNote(cNote, velocity, true);
             }
         } else {
-            activeSoundingChordNotes.set(noteNumber, []);
+            state.activeSoundingChordNotes.set(noteNumber, []);
         }
 
-        if (isLegato && activePressedNotes.size > maxKeys) {
+        if (isLegato && state.activePressedNotes.size > maxKeys) {
             enforceVoiceLimit(maxKeys);
         }
 
@@ -2690,29 +2716,34 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         return !!(prog && prog.getValue('ARP_OFF_ON') && prog.getValue('ARP_LATCH'));
     }
 
-    function isAnyLatchActive() {
-        return latchActive || isArpLatchActive();
+    function isAnyLatchActive(slot = activeSlot) {
+        const state = getState(slot);
+        return state.latchActive || (slot === activeSlot && isArpLatchActive());
     }
 
-    function noteOff(noteNumber) {
-        physicallyHeldNotes.delete(noteNumber);
-        if (isAnyLatchActive()) return;
-        releaseNote(noteNumber);
+    function noteOff(noteNumber, slot = activeSlot) {
+        const state = getState(slot);
+        state.physicallyHeldNotes.delete(noteNumber);
+        if (isAnyLatchActive(slot)) return;
+        releaseNote(noteNumber, slot);
     }
 
-    function releaseAllNotes() {
-        for (const note of Array.from(activePressedNotes)) {
-            midiManager.sendNote(note, 0, false);
+    function releaseAllNotes(slot = activeSlot) {
+        const state = getState(slot);
+        for (const note of Array.from(state.activePressedNotes)) {
+            sendNoteForSlot(slot, note, 0, false);
         }
-        for (const cNotes of activeSoundingChordNotes.values()) {
+        for (const cNotes of state.activeSoundingChordNotes.values()) {
             for (const cNote of cNotes) {
-                midiManager.sendNote(cNote, 0, false);
+                sendNoteForSlot(slot, cNote, 0, false);
             }
         }
-        activePressedNotes.clear();
-        physicallyHeldNotes.clear();
-        activeSoundingChordNotes.clear();
-        updateKeyboardHighlights();
+        state.activePressedNotes.clear();
+        state.physicallyHeldNotes.clear();
+        state.activeSoundingChordNotes.clear();
+        if (slot === activeSlot) {
+            updateKeyboardHighlights();
+        }
     }
 
     // Render white keys
@@ -2822,29 +2853,38 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         });
     }
 
-    // Latch toggle
+    // Latch toggle (per active part)
     const latchBtn = controls.querySelector('#kbd-latch');
     if (latchBtn) {
         latchBtn.addEventListener('click', () => {
-            latchActive = !latchActive;
-            latchBtn.classList.toggle('active', latchActive);
+            const state = getState();
+            state.latchActive = !state.latchActive;
+            latchBtn.classList.toggle('active', state.latchActive);
             if (!isAnyLatchActive()) {
                 releaseAllNotes();
             }
         });
     }
 
-    function resetLatchAndNotes() {
-        latchActive = false;
-        if (latchBtn) latchBtn.classList.remove('active');
-        releaseAllNotes();
+    function resetLatchAndNotes(slot = activeSlot) {
+        const state = getState(slot);
+        state.latchActive = false;
+        if (slot === activeSlot && latchBtn) {
+            latchBtn.classList.remove('active');
+        }
+        releaseAllNotes(slot);
+    }
+
+    function resetAllLatchAndNotes() {
+        resetLatchAndNotes(0);
+        resetLatchAndNotes(1);
     }
 
     // MIDI Panic (All Notes Off)
     const panicBtn = controls.querySelector('#kbd-panic');
     if (panicBtn) {
         panicBtn.addEventListener('click', () => {
-            resetLatchAndNotes();
+            resetAllLatchAndNotes();
             if (typeof midiManager.sendAllNotesOff === 'function') {
                 midiManager.sendAllNotesOff();
             } else if (midiManager.outPort) {
@@ -2933,7 +2973,7 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
             } else if (KEY_NOTE_MAP[e.code] !== undefined && !activeQwertyNotes.has(e.code)) {
                 e.preventDefault();
                 const note = (currentOctave + 1) * 12 + KEY_NOTE_MAP[e.code];
-                activeQwertyNotes.set(e.code, note);
+                activeQwertyNotes.set(e.code, { note, slot: activeSlot });
                 noteOn(note);
             }
         });
@@ -2944,9 +2984,9 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
 
             if (activeQwertyNotes.has(e.code)) {
                 e.preventDefault();
-                const note = activeQwertyNotes.get(e.code);
+                const entry = activeQwertyNotes.get(e.code);
                 activeQwertyNotes.delete(e.code);
-                noteOff(note);
+                noteOff(entry.note, entry.slot);
             }
         });
     }
@@ -2957,9 +2997,22 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         if (octDisplay) octDisplay.textContent = `Oct ${currentOctave}`;
         updateKeyboardHighlights();
     };
+    container.setActivePart = (slot) => {
+        const nextSlot = slot === 1 ? 1 : 0;
+        if (nextSlot !== activeSlot) {
+            getState().physicallyHeldNotes.clear();
+            activeSlot = nextSlot;
+        }
+        container.classList.toggle('part-b', activeSlot === 1);
+        if (latchBtn) {
+            latchBtn.classList.toggle('active', getState().latchActive);
+        }
+        updateKeyboardHighlights();
+    };
+    container.getActivePart = () => activeSlot;
     container.noteOn = noteOn;
     container.noteOff = noteOff;
-    container.getActiveNotes = () => Array.from(activePressedNotes);
+    container.getActiveNotes = (slot = activeSlot) => Array.from(getState(slot).activePressedNotes);
     container.getMaxActiveKeys = getMaxActiveKeys;
     container.enforceVoiceLimit = () => enforceVoiceLimit();
     container.releaseIfUnlatched = () => {
@@ -2967,6 +3020,7 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
     };
     container.updateKeyboardHighlights = updateKeyboardHighlights;
     container.resetLatchAndNotes = resetLatchAndNotes;
+    container.resetAllLatchAndNotes = resetAllLatchAndNotes;
 
     return container;
 }
