@@ -305,7 +305,6 @@ function createToggleButtonElement({ label, title, className = 'btn-param-toggle
 // Section definitions for modular copying, clipboard, and smart randomization
 const SECTION_DEFINITIONS = {
     osc: {
-        title: 'Oscillator',
         count: 3,
         getParams: (idx) => ({
             algo: `OSC${idx}_ALGO`,
@@ -326,7 +325,6 @@ const SECTION_DEFINITIONS = {
         }
     },
     env: {
-        title: 'Envelope',
         count: 3,
         getParams: (idx) => {
             const p = {
@@ -354,7 +352,6 @@ const SECTION_DEFINITIONS = {
         }
     },
     lfo: {
-        title: 'LFO',
         count: 3,
         getParams: (idx) => ({
             wave: `LFO${idx}_WAVE`,
@@ -368,7 +365,6 @@ const SECTION_DEFINITIONS = {
         })
     },
     flt: {
-        title: 'Filter',
         count: 1,
         getParams: () => ({
             algo: 'FILTER_ALGO',
@@ -389,7 +385,6 @@ const SECTION_DEFINITIONS = {
         })
     },
     mtx: {
-        title: 'Mod Matrix Slot',
         count: 12,
         getParams: (idx) => ({
             src: `MTX${idx}_SRC`,
@@ -403,7 +398,6 @@ const SECTION_DEFINITIONS = {
         })
     },
     mult: {
-        title: 'Multiplier',
         count: 2,
         getParams: (idx) => ({
             a: `MULT_A${idx}`,
@@ -415,7 +409,6 @@ const SECTION_DEFINITIONS = {
         })
     },
     arp_step: {
-        title: 'Sequencer Step',
         count: 16,
         getParams: (idx) => {
             const numStr = idx.toString().padStart(2, '0');
@@ -426,7 +419,6 @@ const SECTION_DEFINITIONS = {
         }
     },
     fx: {
-        title: 'Effects & EQ',
         count: 1,
         getParams: () => ({
             dlyType: 'DLY_TYPE',
@@ -453,7 +445,6 @@ const SECTION_DEFINITIONS = {
         })
     },
     lfo_group: {
-        title: 'Low Frequency Oscillators (1–3)',
         count: 1,
         getParams: () => ({
             wave1: 'LFO1_WAVE', speed1: 'LFO1_SPEED', mode1: 'LFO1_MODE',
@@ -471,7 +462,6 @@ const SECTION_DEFINITIONS = {
         }
     },
     mtx_group: {
-        title: 'Modulation Matrix (12 Slots)',
         count: 1,
         getParams: () => {
             const p = {};
@@ -1714,10 +1704,8 @@ function clearAppDropTip(el) {
     }
 }
 
-let _activeCardSectionDrag = null;
-
 /**
- * Creates a synthesizer card with Drag-and-Drop section copying and Action Menu (Copy, Paste, Reset, Randomize)
+ * Creates a synthesizer card with Action Menu (Copy, Paste, Reset, Randomize)
  */
 function createSectionCard(title, sectionType, sectionIndex, program, onChangeCallback, opts = {}) {
     const card = document.createElement('div');
@@ -1728,55 +1716,14 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
     const head = document.createElement('div');
     head.className = 'synth-card-header';
 
-    const isSingleton = (SECTION_DEFINITIONS[sectionType] && SECTION_DEFINITIONS[sectionType].count === 1) || opts.isSingleton;
-
     const titleGroup = document.createElement('div');
-    titleGroup.className = isSingleton ? 'card-title-group static' : 'card-title-group';
-    if (!isSingleton) {
-        titleGroup.setAttribute('draggable', 'true');
-        titleGroup.title = 'Drag to copy settings to another section of the same type';
-
-        const dragHandle = document.createElement('span');
-        dragHandle.className = 'card-drag-handle';
-        dragHandle.textContent = '⋮⋮';
-        titleGroup.appendChild(dragHandle);
-    }
+    titleGroup.className = 'card-title-group static';
 
     const titleText = document.createElement('span');
     titleText.className = 'card-title-text';
     titleText.textContent = title;
     titleGroup.appendChild(titleText);
     head.appendChild(titleGroup);
-
-    // Optional Solo / Mute toolbar (for Oscillators, Noise, etc.)
-    if (opts.hasSoloMute) {
-        const soloMuteGroup = document.createElement('div');
-        soloMuteGroup.className = 'solo-mute-group';
-
-        const muteBtn = document.createElement('button');
-        muteBtn.className = 'btn-sm-badge btn-mute';
-        muteBtn.textContent = 'M';
-        muteBtn.title = 'Mute this sound source';
-        muteBtn.onclick = (e) => {
-            e.stopPropagation();
-            const isMuted = muteBtn.classList.toggle('active');
-            if (opts.onMute) opts.onMute(isMuted);
-        };
-
-        const soloBtn = document.createElement('button');
-        soloBtn.className = 'btn-sm-badge btn-solo';
-        soloBtn.textContent = 'S';
-        soloBtn.title = 'Solo this sound source';
-        soloBtn.onclick = (e) => {
-            e.stopPropagation();
-            const isSolo = soloBtn.classList.toggle('active');
-            if (opts.onSolo) opts.onSolo(isSolo);
-        };
-
-        soloMuteGroup.appendChild(muteBtn);
-        soloMuteGroup.appendChild(soloBtn);
-        head.appendChild(soloMuteGroup);
-    }
 
     // Section Menu Button (Copy, Paste, Reset, Randomize)
     const menuWrap = document.createElement('div');
@@ -1789,6 +1736,11 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
 
     const dropdown = document.createElement('div');
     dropdown.className = 'card-dropdown-menu';
+
+    function closeMenu() {
+        dropdown.classList.remove('open');
+        window.removeEventListener('click', closeMenu);
+    }
 
     function updateMenuState() {
         const clip = getSectionClipboard();
@@ -1843,11 +1795,6 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
         };
     }
 
-    function closeMenu() {
-        dropdown.classList.remove('open');
-        window.removeEventListener('click', closeMenu);
-    }
-
     menuBtn.onclick = (e) => {
         e.stopPropagation();
         const isOpen = dropdown.classList.contains('open');
@@ -1862,67 +1809,6 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
     menuWrap.appendChild(menuBtn);
     menuWrap.appendChild(dropdown);
     head.appendChild(menuWrap);
-
-    // Section Drag-and-Drop Setup (multi-instance sections only)
-    if (!isSingleton) {
-        titleGroup.addEventListener('dragstart', (e) => {
-            _activeCardSectionDrag = { kind: 'section', sectionType, sectionIndex };
-            if (e.dataTransfer) {
-                e.dataTransfer.effectAllowed = 'copy';
-                e.dataTransfer.setData('text/plain', JSON.stringify(_activeCardSectionDrag));
-            }
-            card.classList.add('is-dragging');
-            document.querySelectorAll(`.synth-card[data-section-type="${sectionType}"]`).forEach(c => {
-                if (c !== card) c.classList.add('valid-drop-target');
-            });
-        });
-
-        titleGroup.addEventListener('dragend', () => {
-            _activeCardSectionDrag = null;
-            card.classList.remove('is-dragging');
-            document.querySelectorAll('.valid-drop-target').forEach(c => c.classList.remove('valid-drop-target'));
-            document.querySelectorAll('.drop-hover').forEach(c => {
-                c.classList.remove('drop-hover');
-                clearAppDropTip(c);
-            });
-            clearAppDropTip(null);
-        });
-
-        card.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            if (card.classList.contains('valid-drop-target')) {
-                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-                card.classList.add('drop-hover');
-                const secLabel = sectionType.toUpperCase();
-                if (_activeCardSectionDrag && _activeCardSectionDrag.sectionType === sectionType) {
-                    setAppDropTip(card, `Drop to copy ${secLabel} ${_activeCardSectionDrag.sectionIndex} to ${secLabel} ${sectionIndex}`);
-                }
-            }
-        });
-
-        card.addEventListener('dragleave', () => {
-            card.classList.remove('drop-hover');
-            clearAppDropTip(card);
-        });
-
-        card.addEventListener('drop', (e) => {
-            e.preventDefault();
-            card.classList.remove('drop-hover');
-            clearAppDropTip(card);
-            _activeCardSectionDrag = null;
-            try {
-                const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-                if (data.kind === 'section' && data.sectionType === sectionType && data.sectionIndex !== sectionIndex) {
-                    copySection(data.sectionType, data.sectionIndex, sectionType, sectionIndex, program, onChangeCallback);
-                    card.refresh();
-                    if (window.app && window.app.showNotification) {
-                        window.app.showNotification(`Copied Section ${data.sectionIndex} to ${sectionIndex}`, 'success');
-                    }
-                }
-            } catch (err) { }
-        });
-    }
-
     card.appendChild(head);
 
     const body = document.createElement('div');
@@ -1941,15 +1827,30 @@ function createSectionCard(title, sectionType, sectionIndex, program, onChangeCa
     return { card, body };
 }
 
-/**
- * Creates a 16-step Arpeggiator pattern sequencer control
- */
-function createArpSequencer(program, onChangeCallback) {
-    const container = document.createElement('div');
-    container.className = 'arp-sequencer-card';
+function parseArpStepDrop(e, activeStepDrag) {
+    try {
+        const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
+        const data = raw ? JSON.parse(raw) : (activeStepDrag !== null ? { kind: 'arp_step', stepIndex: activeStepDrag } : null);
+        const srcIdx = data && data.kind === 'arp_step' ? data.stepIndex : null;
+        return srcIdx >= 1 && srcIdx <= 16 ? srcIdx : null;
+    } catch (err) {
+        return null;
+    }
+}
 
-    const getProg = () => resolveProgram(program);
+function createSeqToolButton({ id, className, title, text, html, onClick }) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = className;
+    btn.id = id;
+    btn.title = title;
+    if (html !== undefined) btn.innerHTML = html;
+    else btn.textContent = text;
+    if (onClick) btn.addEventListener('click', onClick);
+    return btn;
+}
 
+function createArpToolbar({ container, getProg, onChangeCallback, getActiveStepDrag, clearActiveStepDrag, applyStepBatch }) {
     const header = document.createElement('div');
     header.className = 'sequencer-header';
 
@@ -1961,9 +1862,7 @@ function createArpSequencer(program, onChangeCallback) {
     const toolsDiv = document.createElement('div');
     toolsDiv.className = 'sequencer-tools';
 
-    let activeStepDrag = null;
     const dropTargetBtns = [];
-
     const copyLabel = document.createElement('span');
     copyLabel.className = 'seq-copy-label';
     copyLabel.id = 'seq-copy-label';
@@ -1979,20 +1878,16 @@ function createArpSequencer(program, onChangeCallback) {
     };
 
     const createCopyDropTarget = ({ id, label, title, mode }) => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'btn btn-sm seq-copy-all-btn';
-        btn.id = id;
-        btn.title = title;
-        btn.textContent = label;
+        const btn = createSeqToolButton({ id, className: 'btn btn-sm seq-copy-all-btn', title, text: label });
 
         btn.addEventListener('dragover', (e) => {
-            if (activeStepDrag === null) return;
+            const dragIdx = getActiveStepDrag();
+            if (dragIdx === null) return;
             e.preventDefault();
             e.stopPropagation();
             if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
             btn.classList.add('slot-drop-hover');
-            setAppDropTip(btn, `Drop to copy ${label.toLowerCase()} from Step ${activeStepDrag} to all steps`);
+            setAppDropTip(btn, `Drop to copy ${label.toLowerCase()} from Step ${dragIdx} to all steps`);
         });
         btn.addEventListener('dragleave', (e) => {
             e.stopPropagation();
@@ -2004,89 +1899,42 @@ function createArpSequencer(program, onChangeCallback) {
             e.stopPropagation();
             clearAppDropTip(btn);
             setDropTargetsVisible(false);
-            try {
-                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-                const data = raw ? JSON.parse(raw) : (activeStepDrag !== null ? { kind: 'arp_step', stepIndex: activeStepDrag } : null);
-                const srcIdx = data && data.kind === 'arp_step' ? data.stepIndex : null;
-                const prog = getProg();
-                if (prog && srcIdx >= 1 && srcIdx <= 16) {
-                    const srcPad = srcIdx.toString().padStart(2, '0');
-                    const srcNote = prog.getValue(`ARP_PTN_STEP${srcPad}`);
-                    const srcMod = prog.getValue(`ARP_PTN_STEP_MOD${srcPad}`);
-                    if (onChangeCallback && onChangeCallback.beginGroup) {
-                        onChangeCallback.beginGroup(`${label} from Step ${srcIdx}`);
-                    }
+            const srcIdx = parseArpStepDrop(e, getActiveStepDrag());
+            const prog = getProg();
+            if (prog && srcIdx !== null) {
+                const srcPad = srcIdx.toString().padStart(2, '0');
+                const srcNote = prog.getValue(`ARP_PTN_STEP${srcPad}`);
+                const srcMod = prog.getValue(`ARP_PTN_STEP_MOD${srcPad}`);
+                withChangeGroup(onChangeCallback, `${label} from Step ${srcIdx}`, () => {
                     for (let dst = 1; dst <= 16; dst++) {
-                        if (dst !== srcIdx) {
-                            if (mode === 'both') {
-                                copySection('arp_step', srcIdx, 'arp_step', dst, prog, onChangeCallback);
-                            } else {
-                                const dstPad = dst.toString().padStart(2, '0');
-                                const key = mode === 'note' ? `ARP_PTN_STEP${dstPad}` : `ARP_PTN_STEP_MOD${dstPad}`;
-                                const val = mode === 'note' ? srcNote : srcMod;
-                                const prevVal = prog.getValue(key);
-                                prog.setValue(key, val);
-                                if (onChangeCallback) onChangeCallback(key, val, { isFinal: true, prevVal });
-                            }
+                        if (dst === srcIdx) continue;
+                        if (mode === 'both') {
+                            copySection('arp_step', srcIdx, 'arp_step', dst, prog, onChangeCallback);
+                        } else {
+                            const dstPad = dst.toString().padStart(2, '0');
+                            const key = mode === 'note' ? `ARP_PTN_STEP${dstPad}` : `ARP_PTN_STEP_MOD${dstPad}`;
+                            const val = mode === 'note' ? srcNote : srcMod;
+                            const prevVal = prog.getValue(key);
+                            prog.setValue(key, val);
+                            if (onChangeCallback) onChangeCallback(key, val, { isFinal: true, prevVal });
                         }
                     }
-                    if (onChangeCallback && onChangeCallback.endGroup) {
-                        onChangeCallback.endGroup();
-                    }
-                    container.refresh();
-                    if (window.app && window.app.showNotification) {
-                        window.app.showNotification(`${label}: Step ${srcIdx} applied to all steps`, 'success');
-                    }
+                });
+                container.refresh();
+                if (window.app && window.app.showNotification) {
+                    window.app.showNotification(`${label}: Step ${srcIdx} applied to all steps`, 'success');
                 }
-            } catch (err) { }
-            activeStepDrag = null;
+            }
+            clearActiveStepDrag();
         });
 
         dropTargetBtns.push(btn);
         toolsDiv.appendChild(btn);
-        return btn;
     };
 
-    createCopyDropTarget({
-        id: 'seq-copy-all-btn',
-        label: 'All',
-        title: 'Drop a step here to copy Note and Mod to all 16 steps',
-        mode: 'both'
-    });
-    createCopyDropTarget({
-        id: 'seq-copy-note-btn',
-        label: 'Note',
-        title: 'Drop a step here to copy Note to all 16 steps',
-        mode: 'note'
-    });
-    createCopyDropTarget({
-        id: 'seq-copy-mod-btn',
-        label: 'Mod',
-        title: 'Drop a step here to copy Mod to all 16 steps',
-        mode: 'mod'
-    });
-
-    const applyStepBatch = (groupLabel, applyFn) => {
-        const prog = getProg();
-        if (prog) {
-            if (onChangeCallback && onChangeCallback.beginGroup) {
-                onChangeCallback.beginGroup(groupLabel);
-            }
-            const setStepParam = (key, val) => {
-                const prev = prog.getValue(key);
-                prog.setValue(key, val);
-                if (onChangeCallback) onChangeCallback(key, val, { isFinal: true, prevVal: prev });
-            };
-            for (let i = 1; i <= 16; i++) {
-                const numStr = i.toString().padStart(2, '0');
-                applyFn(numStr, setStepParam);
-            }
-            if (onChangeCallback && onChangeCallback.endGroup) {
-                onChangeCallback.endGroup();
-            }
-        }
-        container.refresh();
-    };
+    createCopyDropTarget({ id: 'seq-copy-all-btn', label: 'All', title: 'Drop a step here to copy Note and Mod to all 16 steps', mode: 'both' });
+    createCopyDropTarget({ id: 'seq-copy-note-btn', label: 'Note', title: 'Drop a step here to copy Note to all 16 steps', mode: 'note' });
+    createCopyDropTarget({ id: 'seq-copy-mod-btn', label: 'Mod', title: 'Drop a step here to copy Mod to all 16 steps', mode: 'mod' });
 
     // Note section
     const noteGroup = document.createElement('div');
@@ -2099,29 +1947,18 @@ function createArpSequencer(program, onChangeCallback) {
     noteGroup.appendChild(noteGroupLabel);
 
     let includeChords = true;
-    const chordsBtn = document.createElement('button');
-    chordsBtn.type = 'button';
-    chordsBtn.className = 'btn-param-toggle seq-chords-btn active';
-    chordsBtn.id = 'seq-chords-btn';
-    chordsBtn.title = 'Include Chord steps when randomizing pattern (Click to toggle)';
-    chordsBtn.setAttribute('aria-pressed', 'true');
-
-    const chordsLabel = document.createElement('span');
-    chordsLabel.className = 'toggle-label';
-    chordsLabel.textContent = 'Chords';
-    chordsBtn.appendChild(chordsLabel);
-
-    const chordsStateBadge = document.createElement('span');
-    chordsStateBadge.className = 'toggle-state-badge';
-    chordsStateBadge.textContent = 'ON';
-    chordsBtn.appendChild(chordsStateBadge);
-
+    const { button: chordsBtn, setOn: setChordsOn } = createToggleButtonElement({
+        id: 'seq-chords-btn',
+        className: 'btn-param-toggle seq-chords-btn',
+        label: 'Chords',
+        title: 'Include Chord steps when randomizing pattern (Click to toggle)',
+        showStateBadge: true,
+        initialOn: true
+    });
     chordsBtn.addEventListener('click', (e) => {
         e.preventDefault();
         includeChords = !includeChords;
-        chordsBtn.setAttribute('aria-pressed', includeChords ? 'true' : 'false');
-        chordsBtn.classList.toggle('active', includeChords);
-        chordsStateBadge.textContent = includeChords ? 'ON' : 'OFF';
+        setChordsOn(includeChords);
     });
     noteGroup.appendChild(chordsBtn);
 
@@ -2131,46 +1968,43 @@ function createArpSequencer(program, onChangeCallback) {
     chordsArrow.textContent = '←';
     noteGroup.appendChild(chordsArrow);
 
-    const randBtn = document.createElement('button');
-    randBtn.type = 'button';
-    randBtn.className = 'btn-slot-icon';
-    randBtn.id = 'seq-random-btn';
-    randBtn.title = 'Randomize Note steps';
-    randBtn.innerHTML = ICON_RANDOM_SVG;
-    randBtn.addEventListener('click', () => {
-        const basePool = [0, 0, 1, 2, 3, 4, 5, 6, 10, 11]; // Musical probability weights (3 = < -1, 10 = > +1, 11 = Chord)
-        const pool = includeChords ? basePool : basePool.filter(v => v !== 11);
-        applyStepBatch('Randomize Arp Note Pattern', (numStr, setStepParam) => {
-            setStepParam(`ARP_PTN_STEP${numStr}`, pool[Math.floor(Math.random() * pool.length)]);
-        });
-    });
-    noteGroup.appendChild(randBtn);
+    noteGroup.appendChild(createSeqToolButton({
+        id: 'seq-random-btn',
+        className: 'btn-slot-icon',
+        title: 'Randomize Note steps',
+        html: ICON_RANDOM_SVG,
+        onClick: () => {
+            const basePool = [0, 0, 1, 2, 3, 4, 5, 6, 10, 11]; // Musical probability weights (3 = < -1, 10 = > +1, 11 = Chord)
+            const pool = includeChords ? basePool : basePool.filter(v => v !== 11);
+            applyStepBatch('Randomize Arp Note Pattern', (numStr, setStepParam) => {
+                setStepParam(`ARP_PTN_STEP${numStr}`, pool[Math.floor(Math.random() * pool.length)]);
+            });
+        }
+    }));
 
-    const clearBtn = document.createElement('button');
-    clearBtn.type = 'button';
-    clearBtn.className = 'btn-slot-icon btn-slot-clear';
-    clearBtn.id = 'seq-clear-btn';
-    clearBtn.title = 'Clear all Note steps to Off';
-    clearBtn.textContent = '✕';
-    clearBtn.addEventListener('click', () => {
-        applyStepBatch('Clear Arp Note Pattern', (numStr, setStepParam) => {
-            setStepParam(`ARP_PTN_STEP${numStr}`, 1); // Off
-        });
-    });
-    noteGroup.appendChild(clearBtn);
+    noteGroup.appendChild(createSeqToolButton({
+        id: 'seq-clear-btn',
+        className: 'btn-slot-icon btn-slot-clear',
+        title: 'Clear all Note steps to Off',
+        text: '✕',
+        onClick: () => {
+            applyStepBatch('Clear Arp Note Pattern', (numStr, setStepParam) => {
+                setStepParam(`ARP_PTN_STEP${numStr}`, 1); // Off
+            });
+        }
+    }));
 
-    const autoBtn = document.createElement('button');
-    autoBtn.type = 'button';
-    autoBtn.className = 'btn-slot-icon seq-btn-auto';
-    autoBtn.id = 'seq-note-auto-btn';
-    autoBtn.title = 'Fill all Note steps with Auto';
-    autoBtn.textContent = 'A';
-    autoBtn.addEventListener('click', () => {
-        applyStepBatch('Fill Arp Note Pattern with Auto', (numStr, setStepParam) => {
-            setStepParam(`ARP_PTN_STEP${numStr}`, 0); // Auto
-        });
-    });
-    noteGroup.appendChild(autoBtn);
+    noteGroup.appendChild(createSeqToolButton({
+        id: 'seq-note-auto-btn',
+        className: 'btn-slot-icon seq-btn-auto',
+        title: 'Fill all Note steps with Auto',
+        text: 'A',
+        onClick: () => {
+            applyStepBatch('Fill Arp Note Pattern with Auto', (numStr, setStepParam) => {
+                setStepParam(`ARP_PTN_STEP${numStr}`, 0); // Auto
+            });
+        }
+    }));
 
     toolsDiv.appendChild(noteGroup);
 
@@ -2184,216 +2018,258 @@ function createArpSequencer(program, onChangeCallback) {
     modGroupLabel.textContent = 'Mod';
     modGroup.appendChild(modGroupLabel);
 
-    const modRandBtn = document.createElement('button');
-    modRandBtn.type = 'button';
-    modRandBtn.className = 'btn-slot-icon';
-    modRandBtn.id = 'seq-mod-random-btn';
-    modRandBtn.title = 'Randomize Mod levels';
-    modRandBtn.innerHTML = ICON_RANDOM_SVG;
-    modRandBtn.addEventListener('click', () => {
-        applyStepBatch('Randomize Arp Mod Pattern', (numStr, setStepParam) => {
-            setStepParam(`ARP_PTN_STEP_MOD${numStr}`, Math.floor(Math.random() * 4));
-        });
-    });
-    modGroup.appendChild(modRandBtn);
+    modGroup.appendChild(createSeqToolButton({
+        id: 'seq-mod-random-btn',
+        className: 'btn-slot-icon',
+        title: 'Randomize Mod levels',
+        html: ICON_RANDOM_SVG,
+        onClick: () => {
+            applyStepBatch('Randomize Arp Mod Pattern', (numStr, setStepParam) => {
+                setStepParam(`ARP_PTN_STEP_MOD${numStr}`, Math.floor(Math.random() * 4));
+            });
+        }
+    }));
 
-    const modClearBtn = document.createElement('button');
-    modClearBtn.type = 'button';
-    modClearBtn.className = 'btn-slot-icon btn-slot-clear';
-    modClearBtn.id = 'seq-mod-clear-btn';
-    modClearBtn.title = 'Reset all Mod levels to Mid';
-    modClearBtn.textContent = '✕';
-    modClearBtn.addEventListener('click', () => {
-        applyStepBatch('Clear Arp Mod Pattern to Mid', (numStr, setStepParam) => {
-            setStepParam(`ARP_PTN_STEP_MOD${numStr}`, 1); // Mid
-        });
-    });
-    modGroup.appendChild(modClearBtn);
+    modGroup.appendChild(createSeqToolButton({
+        id: 'seq-mod-clear-btn',
+        className: 'btn-slot-icon btn-slot-clear',
+        title: 'Reset all Mod levels to Mid',
+        text: '✕',
+        onClick: () => {
+            applyStepBatch('Clear Arp Mod Pattern to Mid', (numStr, setStepParam) => {
+                setStepParam(`ARP_PTN_STEP_MOD${numStr}`, 1); // Mid
+            });
+        }
+    }));
 
     toolsDiv.appendChild(modGroup);
-
     header.appendChild(toolsDiv);
+
+    return { header, setDropTargetsVisible };
+}
+
+function createStepSelect({ className, title, options, shortLabels, extraAttrs, onChange }) {
+    const selectEl = document.createElement('select');
+    selectEl.className = className;
+    selectEl.title = title;
+    if (extraAttrs) {
+        for (const [k, v] of Object.entries(extraAttrs)) {
+            selectEl.setAttribute(k, v);
+        }
+    }
+
+    const shortEntries = [];
+    options.forEach((txt, idx) => {
+        const opt = document.createElement('option');
+        opt.value = idx;
+        opt.textContent = txt;
+        if (shortLabels && shortLabels[idx]) {
+            shortEntries.push({ opt, shortLabel: shortLabels[idx], longLabel: txt });
+        }
+        selectEl.appendChild(opt);
+    });
+
+    if (shortEntries.length > 0) {
+        const showLong = () => shortEntries.forEach(({ opt, longLabel }) => { opt.textContent = longLabel; });
+        const showShort = () => shortEntries.forEach(({ opt, shortLabel }) => { opt.textContent = shortLabel; });
+        showShort();
+        selectEl.addEventListener('mousedown', showLong);
+        selectEl.addEventListener('focus', showLong);
+        selectEl.addEventListener('blur', showShort);
+        selectEl.addEventListener('change', showShort);
+    }
+
+    selectEl.addEventListener('change', () => onChange(parseInt(selectEl.value, 10)));
+    return selectEl;
+}
+
+function createArpStepColumn({
+    stepIndex,
+    getProg,
+    onChangeCallback,
+    stepsGrid,
+    getActiveStepDrag,
+    setActiveStepDrag,
+    setDropTargetsVisible,
+    refreshContainer
+}) {
+    const numStr = stepIndex.toString().padStart(2, '0');
+    const stepKey = `ARP_PTN_STEP${numStr}`;
+    const modKey = `ARP_PTN_STEP_MOD${numStr}`;
+
+    const col = document.createElement('div');
+    col.className = 'step-col';
+    col.setAttribute('data-step', stepIndex);
+    col.setAttribute('draggable', 'true');
+    col.title = `Step ${stepIndex} • Drag to copy to another step or "Copy to all"`;
+
+    col.addEventListener('dragstart', (e) => {
+        setActiveStepDrag(stepIndex);
+        if (e.dataTransfer) {
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('text/plain', JSON.stringify({ kind: 'arp_step', stepIndex }));
+        }
+        col.classList.add('is-dragging');
+        setDropTargetsVisible(true);
+    });
+    col.addEventListener('dragend', () => {
+        setActiveStepDrag(null);
+        col.classList.remove('is-dragging');
+        setDropTargetsVisible(false);
+        stepsGrid.querySelectorAll('.step-col.slot-drop-hover').forEach(el => {
+            el.classList.remove('slot-drop-hover');
+            clearAppDropTip(el);
+        });
+        clearAppDropTip(null);
+    });
+    col.addEventListener('dragover', (e) => {
+        const dragIdx = getActiveStepDrag();
+        if (dragIdx === null || dragIdx === stepIndex) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        col.classList.add('slot-drop-hover');
+        setAppDropTip(col, `Drop to copy Step ${dragIdx} to Step ${stepIndex}`);
+    });
+    col.addEventListener('dragleave', (e) => {
+        e.stopPropagation();
+        if (e.relatedTarget && typeof col.contains === 'function' && col.contains(e.relatedTarget)) {
+            return;
+        }
+        col.classList.remove('slot-drop-hover');
+        clearAppDropTip(col);
+    });
+    col.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        col.classList.remove('slot-drop-hover');
+        clearAppDropTip(col);
+        setDropTargetsVisible(false);
+        const srcIdx = parseArpStepDrop(e, getActiveStepDrag());
+        if (srcIdx !== null && srcIdx !== stepIndex) {
+            copySection('arp_step', srcIdx, 'arp_step', stepIndex, getProg(), onChangeCallback);
+            refreshContainer();
+            if (window.app && window.app.showNotification) {
+                window.app.showNotification(`Copied Step ${srcIdx} to Step ${stepIndex}`, 'success');
+            }
+        }
+        setActiveStepDrag(null);
+    });
+
+    const stepNum = document.createElement('div');
+    stepNum.className = 'step-number';
+    stepNum.textContent = stepIndex;
+
+    let modeBtn = null;
+    let modBtn = null;
+
+    function updateStep() {
+        const prog = getProg();
+        if (!prog) return;
+
+        const stepCount = prog.getValue('ARP_PTN_LENGTH') + 1; // stored 0..15 = 1..16 steps
+        col.classList.toggle('step-disabled', stepIndex > stepCount);
+
+        const modeVal = prog.getValue(stepKey);
+        modeBtn.value = modeVal;
+        modeBtn.setAttribute('data-mode', modeVal);
+        modeBtn.classList.toggle('active', modeVal !== 1); // 1 is Off
+
+        const modVal = prog.getValue(modKey);
+        modBtn.value = modVal;
+        modBtn.setAttribute('data-mod', modVal);
+    }
+
+    modeBtn = createStepSelect({
+        className: 'step-mode-btn',
+        title: `Step ${stepIndex} note mode`,
+        options: LOOKUPS.arpStepModes,
+        shortLabels: { 3: '<-1', 10: '>+1', 11: 'Cho' },
+        onChange: (next) => {
+            commitParamValue(getProg, stepKey, next, onChangeCallback);
+            updateStep();
+        }
+    });
+
+    modBtn = createStepSelect({
+        className: 'step-mod-btn',
+        title: `Step ${stepIndex} modulation level`,
+        options: LOOKUPS.arpGates,
+        shortLabels: { 3: 'Rnd' },
+        extraAttrs: { 'data-fw-v3-only': 'true' },
+        onChange: (next) => {
+            commitParamValue(getProg, modKey, next, onChangeCallback);
+            updateStep();
+        }
+    });
+
+    col.appendChild(stepNum);
+    col.appendChild(modeBtn);
+    col.appendChild(modBtn);
+
+    return { col, updateStep, stepKey, modKey };
+}
+
+/**
+ * Creates a 16-step Arpeggiator pattern sequencer control
+ */
+function createArpSequencer(program, onChangeCallback) {
+    const container = document.createElement('div');
+    container.className = 'arp-sequencer-card';
+    const getProg = () => resolveProgram(program);
+
+    let activeStepDrag = null;
+
+    const applyStepBatch = (groupLabel, applyFn) => {
+        const prog = getProg();
+        if (prog) {
+            withChangeGroup(onChangeCallback, groupLabel, () => {
+                const setStepParam = (key, val) => {
+                    const prev = prog.getValue(key);
+                    prog.setValue(key, val);
+                    if (onChangeCallback) onChangeCallback(key, val, { isFinal: true, prevVal: prev });
+                };
+                for (let i = 1; i <= 16; i++) {
+                    applyFn(i.toString().padStart(2, '0'), setStepParam);
+                }
+            });
+        }
+        container.refresh();
+    };
+
+    const { header, setDropTargetsVisible } = createArpToolbar({
+        container,
+        getProg,
+        onChangeCallback,
+        getActiveStepDrag: () => activeStepDrag,
+        clearActiveStepDrag: () => { activeStepDrag = null; },
+        applyStepBatch
+    });
     container.appendChild(header);
 
     const stepsGrid = document.createElement('div');
     stepsGrid.className = 'steps-grid';
-
-    const STEP_MODES = [
-        'Auto', 'Off', 'Tie', '< -1', '1st', '2nd', '3rd', '4th', '5th', '6th', '> +1', 'Chord'
-    ];
-    const MOD_LEVELS = ['Low', 'Mid', 'High', 'Random'];
-
     const stepElements = [];
 
     for (let i = 1; i <= 16; i++) {
-        const numStr = i.toString().padStart(2, '0');
-        const stepKey = `ARP_PTN_STEP${numStr}`;
-        const modKey = `ARP_PTN_STEP_MOD${numStr}`;
-
-        const col = document.createElement('div');
-        col.className = 'step-col';
-        col.setAttribute('data-step', i);
-        col.setAttribute('draggable', 'true');
-        col.title = `Step ${i} • Drag to copy to another step or "Copy to all"`;
-
-        col.addEventListener('dragstart', (e) => {
-            activeStepDrag = i;
-            const payload = { kind: 'arp_step', stepIndex: i };
-            if (e.dataTransfer) {
-                e.dataTransfer.effectAllowed = 'copy';
-                e.dataTransfer.setData('text/plain', JSON.stringify(payload));
-            }
-            col.classList.add('is-dragging');
-            setDropTargetsVisible(true);
+        const step = createArpStepColumn({
+            stepIndex: i,
+            getProg,
+            onChangeCallback,
+            stepsGrid,
+            getActiveStepDrag: () => activeStepDrag,
+            setActiveStepDrag: (val) => { activeStepDrag = val; },
+            setDropTargetsVisible,
+            refreshContainer: () => container.refresh()
         });
-        col.addEventListener('dragend', () => {
-            activeStepDrag = null;
-            col.classList.remove('is-dragging');
-            setDropTargetsVisible(false);
-            stepsGrid.querySelectorAll('.step-col.slot-drop-hover').forEach(el => {
-                el.classList.remove('slot-drop-hover');
-                clearAppDropTip(el);
-            });
-            clearAppDropTip(null);
-        });
-        col.addEventListener('dragover', (e) => {
-            if (activeStepDrag === null || activeStepDrag === i) return;
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-            col.classList.add('slot-drop-hover');
-            setAppDropTip(col, `Drop to copy Step ${activeStepDrag} to Step ${i}`);
-        });
-        col.addEventListener('dragleave', (e) => {
-            e.stopPropagation();
-            if (e.relatedTarget && typeof col.contains === 'function' && col.contains(e.relatedTarget)) {
-                return;
-            }
-            col.classList.remove('slot-drop-hover');
-            clearAppDropTip(col);
-        });
-        col.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            col.classList.remove('slot-drop-hover');
-            clearAppDropTip(col);
-            setDropTargetsVisible(false);
-            try {
-                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-                const data = raw ? JSON.parse(raw) : (activeStepDrag !== null ? { kind: 'arp_step', stepIndex: activeStepDrag } : null);
-                const srcIdx = data && data.kind === 'arp_step' ? data.stepIndex : null;
-                if (srcIdx && srcIdx !== i) {
-                    copySection('arp_step', srcIdx, 'arp_step', i, getProg(), onChangeCallback);
-                    container.refresh();
-                    if (window.app && window.app.showNotification) {
-                        window.app.showNotification(`Copied Step ${srcIdx} to Step ${i}`, 'success');
-                    }
-                }
-            } catch (err) { }
-            activeStepDrag = null;
-        });
-
-        const stepNum = document.createElement('div');
-        stepNum.className = 'step-number';
-        stepNum.textContent = i;
-
-        const wireShortClosedLabels = (selectEl, entries) => {
-            if (!selectEl || !entries || entries.length === 0) return;
-            const showLong = () => entries.forEach(({ opt, longLabel }) => { opt.textContent = longLabel; });
-            const showShort = () => entries.forEach(({ opt, shortLabel }) => { opt.textContent = shortLabel; });
-            showShort();
-            selectEl.addEventListener('mousedown', showLong);
-            selectEl.addEventListener('focus', showLong);
-            selectEl.addEventListener('blur', showShort);
-            selectEl.addEventListener('change', showShort);
-        };
-
-        const modeBtn = document.createElement('select');
-        modeBtn.className = 'step-mode-btn';
-        modeBtn.title = `Step ${i} note mode`;
-        const SHORT_MODE_LABELS = { 3: '<-1', 10: '>+1', 11: 'Cho' };
-        const shortModeEntries = [];
-        STEP_MODES.forEach((txt, idx) => {
-            const opt = document.createElement('option');
-            opt.value = idx;
-            opt.textContent = txt;
-            if (SHORT_MODE_LABELS[idx]) {
-                shortModeEntries.push({ opt, shortLabel: SHORT_MODE_LABELS[idx], longLabel: txt });
-            }
-            modeBtn.appendChild(opt);
-        });
-        wireShortClosedLabels(modeBtn, shortModeEntries);
-
-        const modBtn = document.createElement('select');
-        modBtn.className = 'step-mod-btn';
-        modBtn.setAttribute('data-fw-v3-only', 'true');
-        modBtn.title = `Step ${i} modulation level`;
-        const shortModEntries = [];
-        MOD_LEVELS.forEach((txt, idx) => {
-            const opt = document.createElement('option');
-            opt.value = idx;
-            opt.textContent = txt;
-            if (idx === 3) {
-                shortModEntries.push({ opt, shortLabel: 'Rnd', longLabel: txt });
-            }
-            modBtn.appendChild(opt);
-        });
-        wireShortClosedLabels(modBtn, shortModEntries);
-
-        col.appendChild(stepNum);
-        col.appendChild(modeBtn);
-        col.appendChild(modBtn);
-        stepsGrid.appendChild(col);
-
-        function updateStep() {
-            const prog = getProg();
-            if (!prog) return;
-
-            const stepCount = prog.getValue('ARP_PTN_LENGTH') + 1; // stored 0..15 = 1..16 steps
-            col.classList.toggle('step-disabled', i > stepCount);
-
-            const modeVal = prog.getValue(stepKey);
-            modeBtn.value = modeVal;
-            modeBtn.setAttribute('data-mode', modeVal);
-            modeBtn.classList.toggle('active', modeVal !== 1); // 1 is Off
-
-            const modVal = prog.getValue(modKey);
-            modBtn.value = modVal;
-            modBtn.setAttribute('data-mod', modVal);
-        }
-
-        modeBtn.addEventListener('change', () => {
-            const prog = getProg();
-            if (prog) {
-                const prev = prog.getValue(stepKey);
-                const next = parseInt(modeBtn.value, 10);
-                prog.setValue(stepKey, next);
-                updateStep();
-                if (onChangeCallback) onChangeCallback(stepKey, next, { isFinal: true, prevVal: prev });
-            }
-        });
-
-        modBtn.addEventListener('change', () => {
-            const prog = getProg();
-            if (prog) {
-                const prev = prog.getValue(modKey);
-                const next = parseInt(modBtn.value, 10);
-                prog.setValue(modKey, next);
-                updateStep();
-                if (onChangeCallback) onChangeCallback(modKey, next, { isFinal: true, prevVal: prev });
-            }
-        });
-
-        stepElements.push({ col, updateStep, stepKey, modKey });
+        stepsGrid.appendChild(step.col);
+        stepElements.push(step);
     }
 
     container.appendChild(stepsGrid);
-
-    container.refresh = () => {
-        stepElements.forEach(s => s.updateStep());
-    };
-
+    container.refresh = () => stepElements.forEach(s => s.updateStep());
     container.refresh();
+
     return container;
 }
 
@@ -2476,6 +2352,324 @@ function computeChorderNotes(noteNumber, program) {
     return { pressed: noteNumber, chordNotes };
 }
 
+const DEFAULT_AUDITION_VELOCITY = 100;
+const AUDITION_WHITE_KEYS = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35, 36];
+const AUDITION_BLACK_KEYS = [
+    { note: 1, pos: 0 }, { note: 3, pos: 1 }, { note: 6, pos: 3 }, { note: 8, pos: 4 }, { note: 10, pos: 5 },
+    { note: 13, pos: 7 }, { note: 15, pos: 8 }, { note: 18, pos: 10 }, { note: 20, pos: 11 }, { note: 22, pos: 12 },
+    { note: 25, pos: 14 }, { note: 27, pos: 15 }, { note: 30, pos: 17 }, { note: 32, pos: 18 }, { note: 34, pos: 19 }
+];
+const AUDITION_MAX_OFFSET = 36;
+const QWERTY_NOTE_MAP = {
+    KeyA: 0, KeyW: 1, KeyS: 2, KeyE: 3, KeyD: 4,
+    KeyF: 5, KeyT: 6, KeyG: 7, KeyY: 8, KeyH: 9,
+    KeyU: 10, KeyJ: 11, KeyK: 12, KeyO: 13, KeyL: 14
+};
+
+function createKeyboardVoiceController({ midiManager, getActiveProgram, getVoiceLimit, updateKeyboardHighlights }) {
+    let activeSlot = 0;
+    const createPartState = () => ({
+        latchActive: false,
+        activePressedNotes: new Set(),
+        physicallyHeldNotes: new Set(),
+        activeSoundingChordNotes: new Map()
+    });
+    const partStates = [createPartState(), createPartState()];
+    const getState = (slot = activeSlot) => partStates[slot === 1 ? 1 : 0];
+
+    const getVoiceSettings = () => {
+        const rawLimit = typeof getVoiceLimit === 'function' ? getVoiceLimit() : 12;
+        const voiceLimit = rawLimit === 6 ? 6 : 12;
+        const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
+        if (!prog) {
+            return { voiceLimit, modeIndex: 0, unisonVoices: 1, maxKeys: voiceLimit, isLegato: false };
+        }
+        if (prog.getValue('ARP_OFF_ON')) {
+            return { voiceLimit, modeIndex: 0, unisonVoices: 1, maxKeys: Infinity, isLegato: false };
+        }
+        const modeIndex = prog.getValue('VCE_MODE') || 0;
+        const unisonIndex = prog.getValue('VCE_UNISON') || 0;
+        const unisonVoices = Number(LOOKUPS.unisonVoices[unisonIndex]) || 1;
+        const isMonoMode = modeIndex === 2 || modeIndex === 3;
+        const maxKeys = isMonoMode ? 1 : Math.max(1, Math.floor(voiceLimit / unisonVoices));
+        return { voiceLimit, modeIndex, unisonVoices, maxKeys, isLegato: modeIndex === 3 };
+    };
+
+    const getMaxActiveKeys = () => getVoiceSettings().maxKeys;
+
+    const sendNoteForSlot = (slot, noteNumber, vel, on) => {
+        if (slot === activeSlot || typeof midiManager.activeSlot !== 'number') {
+            midiManager.sendNote(noteNumber, vel, on);
+            return;
+        }
+        const prevSlot = midiManager.activeSlot;
+        midiManager.activeSlot = slot;
+        try {
+            midiManager.sendNote(noteNumber, vel, on);
+        } finally {
+            midiManager.activeSlot = prevSlot;
+        }
+    };
+
+    const isArpLatchActive = () => {
+        const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
+        return !!(prog && prog.getValue('ARP_OFF_ON') && prog.getValue('ARP_LATCH'));
+    };
+
+    const isAnyLatchActive = (slot = activeSlot) => {
+        return getState(slot).latchActive || (slot === activeSlot && isArpLatchActive());
+    };
+
+    const releaseNote = (noteNumber, slot = activeSlot) => {
+        const state = getState(slot);
+        state.physicallyHeldNotes.delete(noteNumber);
+        if (!state.activePressedNotes.has(noteNumber)) return;
+
+        state.activePressedNotes.delete(noteNumber);
+        sendNoteForSlot(slot, noteNumber, 0, false);
+
+        const chordNotes = state.activeSoundingChordNotes.get(noteNumber) || [];
+        for (const cNote of chordNotes) {
+            sendNoteForSlot(slot, cNote, 0, false);
+        }
+        state.activeSoundingChordNotes.delete(noteNumber);
+
+        if (slot === activeSlot) {
+            updateKeyboardHighlights();
+        }
+    };
+
+    const releaseAllNotes = (slot = activeSlot) => {
+        const state = getState(slot);
+        for (const note of Array.from(state.activePressedNotes)) {
+            sendNoteForSlot(slot, note, 0, false);
+        }
+        for (const cNotes of state.activeSoundingChordNotes.values()) {
+            for (const cNote of cNotes) {
+                sendNoteForSlot(slot, cNote, 0, false);
+            }
+        }
+        state.activePressedNotes.clear();
+        state.physicallyHeldNotes.clear();
+        state.activeSoundingChordNotes.clear();
+        if (slot === activeSlot) {
+            updateKeyboardHighlights();
+        }
+    };
+
+    const enforceVoiceLimit = (targetMax = getMaxActiveKeys(), slot = activeSlot) => {
+        const state = getState(slot);
+        while (state.activePressedNotes.size > targetMax) {
+            const oldest = state.activePressedNotes.values().next().value;
+            releaseNote(oldest, slot);
+        }
+    };
+
+    const noteOn = (noteNumber) => {
+        const state = getState();
+        if (!state.latchActive && isArpLatchActive()) {
+            if (state.physicallyHeldNotes.size === 0 && state.activePressedNotes.size > 0) {
+                releaseAllNotes();
+            }
+            state.physicallyHeldNotes.add(noteNumber);
+            if (state.activePressedNotes.has(noteNumber)) return;
+        } else {
+            state.physicallyHeldNotes.add(noteNumber);
+            if (state.activePressedNotes.has(noteNumber)) {
+                if (state.latchActive) releaseNote(noteNumber);
+                return;
+            }
+        }
+
+        const { maxKeys, isLegato } = getVoiceSettings();
+        if (!isLegato && state.activePressedNotes.size >= maxKeys) {
+            enforceVoiceLimit(maxKeys - 1);
+        }
+
+        state.activePressedNotes.add(noteNumber);
+        midiManager.sendNote(noteNumber, DEFAULT_AUDITION_VELOCITY, true);
+
+        const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
+        if (prog) {
+            const { chordNotes } = computeChorderNotes(noteNumber, prog);
+            state.activeSoundingChordNotes.set(noteNumber, chordNotes);
+            for (const cNote of chordNotes) {
+                midiManager.sendNote(cNote, DEFAULT_AUDITION_VELOCITY, true);
+            }
+        } else {
+            state.activeSoundingChordNotes.set(noteNumber, []);
+        }
+
+        if (isLegato && state.activePressedNotes.size > maxKeys) {
+            enforceVoiceLimit(maxKeys);
+        }
+
+        updateKeyboardHighlights();
+    };
+
+    const noteOff = (noteNumber, slot = activeSlot) => {
+        const state = getState(slot);
+        state.physicallyHeldNotes.delete(noteNumber);
+        if (isAnyLatchActive(slot)) return;
+        releaseNote(noteNumber, slot);
+    };
+
+    return {
+        getState,
+        getActiveSlot: () => activeSlot,
+        setActiveSlot: (slot) => {
+            const nextSlot = slot === 1 ? 1 : 0;
+            if (nextSlot !== activeSlot) {
+                getState().physicallyHeldNotes.clear();
+                activeSlot = nextSlot;
+            }
+            return activeSlot;
+        },
+        getMaxActiveKeys,
+        enforceVoiceLimit,
+        isAnyLatchActive,
+        noteOn,
+        noteOff,
+        releaseAllNotes,
+        releaseNote
+    };
+}
+
+function createPianoKey({ offset, isBlack, leftPct, getDisplayedBaseNote, noteOn, noteOff }) {
+    const key = document.createElement('div');
+    key.className = isBlack ? 'key key-black' : 'key key-white';
+    if (isBlack) key.style.left = `${leftPct}%`;
+    key.setAttribute('data-offset', offset);
+
+    key.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        if (isBlack) e.stopPropagation();
+        const note = getDisplayedBaseNote() + offset;
+        key.setAttribute('data-active-note', String(note));
+        noteOn(note);
+    });
+    key.addEventListener('pointerup', () => {
+        const noteAttr = key.getAttribute('data-active-note');
+        const note = noteAttr !== null ? parseInt(noteAttr, 10) : (getDisplayedBaseNote() + offset);
+        key.removeAttribute('data-active-note');
+        noteOff(note);
+    });
+    key.addEventListener('pointerleave', () => {
+        const noteAttr = key.getAttribute('data-active-note');
+        if (noteAttr !== null) {
+            const note = parseInt(noteAttr, 10);
+            key.removeAttribute('data-active-note');
+            noteOff(note);
+        }
+    });
+
+    return key;
+}
+
+function wireKeyboardControls({ controls, container, voiceCtrl, midiManager, getCurrentOctave, resetAllLatchAndNotes }) {
+    const octDown = controls.querySelector('#oct-down');
+    if (octDown) octDown.addEventListener('click', () => container.setOctave(getCurrentOctave() - 1));
+
+    const octUp = controls.querySelector('#oct-up');
+    if (octUp) octUp.addEventListener('click', () => container.setOctave(getCurrentOctave() + 1));
+
+    const latchBtn = controls.querySelector('#kbd-latch');
+    if (latchBtn) {
+        latchBtn.addEventListener('click', () => {
+            const state = voiceCtrl.getState();
+            state.latchActive = !state.latchActive;
+            latchBtn.classList.toggle('active', state.latchActive);
+            if (!voiceCtrl.isAnyLatchActive()) {
+                voiceCtrl.releaseAllNotes();
+            }
+        });
+    }
+
+    const panicBtn = controls.querySelector('#kbd-panic');
+    if (panicBtn) {
+        panicBtn.addEventListener('click', () => {
+            resetAllLatchAndNotes();
+            if (typeof midiManager.sendAllNotesOff === 'function') {
+                midiManager.sendAllNotesOff();
+            } else if (midiManager.outPort) {
+                const ch = midiManager.targetChannel;
+                midiManager.outPort.send(new Uint8Array([0xB0 | ch, 123, 0]));
+            }
+        });
+    }
+
+    const pitchSlider = controls.querySelector('#pitch-wheel');
+    if (pitchSlider) {
+        pitchSlider.addEventListener('input', () => {
+            const val = parseInt(pitchSlider.value, 10);
+            if (midiManager.outPort) {
+                const ch = midiManager.targetChannel;
+                midiManager.outPort.send(new Uint8Array([0xE0 | ch, val & 127, (val >> 7) & 127]));
+            }
+        });
+        pitchSlider.addEventListener('pointerup', () => {
+            pitchSlider.value = 8192;
+            if (midiManager.outPort) {
+                const ch = midiManager.targetChannel;
+                midiManager.outPort.send(new Uint8Array([0xE0 | ch, 0, 64]));
+            }
+        });
+    }
+
+    const modSlider = controls.querySelector('#mod-wheel');
+    if (modSlider) {
+        modSlider.addEventListener('input', () => {
+            const val = parseInt(modSlider.value, 10);
+            if (midiManager.outPort) {
+                const ch = midiManager.targetChannel;
+                midiManager.outPort.send(new Uint8Array([0xB0 | ch, 1, val & 127]));
+            }
+        });
+    }
+
+    return { latchBtn, panicBtn };
+}
+
+function wireQwertyPlayback({ container, voiceCtrl, latchBtn, panicBtn, getCurrentOctave }) {
+    if (typeof window === 'undefined') return;
+    const activeQwertyNotes = new Map();
+
+    window.addEventListener('keydown', (e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
+
+        if (e.code === 'KeyZ') {
+            container.setOctave(getCurrentOctave() - 1);
+        } else if (e.code === 'KeyX') {
+            container.setOctave(getCurrentOctave() + 1);
+        } else if (e.code === 'Space') {
+            e.preventDefault();
+            if (latchBtn) latchBtn.click();
+        } else if (e.key === '!') {
+            e.preventDefault();
+            if (panicBtn) panicBtn.click();
+        } else if (QWERTY_NOTE_MAP[e.code] !== undefined && !activeQwertyNotes.has(e.code)) {
+            e.preventDefault();
+            const note = (getCurrentOctave() + 1) * 12 + QWERTY_NOTE_MAP[e.code];
+            activeQwertyNotes.set(e.code, { note, slot: voiceCtrl.getActiveSlot() });
+            voiceCtrl.noteOn(note);
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
+
+        if (activeQwertyNotes.has(e.code)) {
+            e.preventDefault();
+            const entry = activeQwertyNotes.get(e.code);
+            activeQwertyNotes.delete(e.code);
+            voiceCtrl.noteOff(entry.note, entry.slot);
+        }
+    });
+}
+
 /**
  * Creates an interactive audition keyboard (Mouse, Touch, and Computer Keyboard QWERTY input)
  */
@@ -2484,18 +2678,6 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
     container.className = 'audition-bar';
 
     let currentOctave = 3;
-    let velocity = 100;
-    let activeSlot = 0;
-
-    const createPartState = () => ({
-        latchActive: false,
-        activePressedNotes: new Set(),
-        physicallyHeldNotes: new Set(),
-        activeSoundingChordNotes: new Map() // pressedNote -> [chordNotes]
-    });
-    const partStates = [createPartState(), createPartState()];
-    const getState = (slot = activeSlot) => partStates[slot === 1 ? 1 : 0];
-
     const controls = document.createElement('div');
     controls.className = 'audition-controls';
     controls.innerHTML = `
@@ -2520,34 +2702,10 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
 
     const kbdWrapper = document.createElement('div');
     kbdWrapper.className = 'keyboard-wrapper';
-
-    // 37 keys: 3 octaves from C to C (offsets 0 to 36); middle octave is offsets 12..23
-    const whiteKeys = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21, 23, 24, 26, 28, 29, 31, 33, 35, 36];
-    const blackKeys = [
-        { note: 1, pos: 0 },
-        { note: 3, pos: 1 },
-        { note: 6, pos: 3 },
-        { note: 8, pos: 4 },
-        { note: 10, pos: 5 },
-        { note: 13, pos: 7 },
-        { note: 15, pos: 8 },
-        { note: 18, pos: 10 },
-        { note: 20, pos: 11 },
-        { note: 22, pos: 12 },
-        { note: 25, pos: 14 },
-        { note: 27, pos: 15 },
-        { note: 30, pos: 17 },
-        { note: 32, pos: 18 },
-        { note: 34, pos: 19 }
-    ];
-    const maxOffset = 36;
-
     const keyElements = new Map();
+    const getDisplayedBaseNote = () => currentOctave * 12;
 
-    // Displayed range is centered on currentOctave (middle octave = (currentOctave + 1) * 12)
-    function getDisplayedBaseNote() {
-        return currentOctave * 12;
-    }
+    let voiceCtrl = null;
 
     function updateKeyboardHighlights() {
         keyElements.forEach(el => {
@@ -2556,23 +2714,21 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         });
 
         const baseNote = getDisplayedBaseNote();
-        const state = getState();
+        const state = voiceCtrl.getState();
 
-        // Highlight chord voicing notes in darker part color
         for (const cNotes of state.activeSoundingChordNotes.values()) {
             for (const cNote of cNotes) {
                 const offset = cNote - baseNote;
-                if (offset >= 0 && offset <= maxOffset) {
+                if (offset >= 0 && offset <= AUDITION_MAX_OFFSET) {
                     const el = keyElements.get(offset);
                     if (el) el.classList.add('chord-note');
                 }
             }
         }
 
-        // Highlight physically pressed/latched notes in part color (takes precedence)
         for (const pNote of state.activePressedNotes) {
             const offset = pNote - baseNote;
-            if (offset >= 0 && offset <= maxOffset) {
+            if (offset >= 0 && offset <= AUDITION_MAX_OFFSET) {
                 const el = keyElements.get(offset);
                 if (el) {
                     el.classList.remove('chord-note');
@@ -2582,216 +2738,40 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         }
     }
 
-    function getVoiceSettings() {
-        const rawLimit = typeof getVoiceLimit === 'function' ? getVoiceLimit() : 12;
-        const voiceLimit = rawLimit === 6 ? 6 : 12;
-        const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
-        if (!prog) {
-            return { voiceLimit, modeIndex: 0, unisonVoices: 1, maxKeys: voiceLimit, isLegato: false };
-        }
-        if (prog.getValue('ARP_OFF_ON')) {
-            // Arpeggiator steps through notes one voice at a time, so piano can track unlimited held notes
-            return { voiceLimit, modeIndex: 0, unisonVoices: 1, maxKeys: Infinity, isLegato: false };
-        }
-        const modeIndex = prog.getValue('VCE_MODE') || 0; // 0: Modern, 1: Vintage, 2: Mono, 3: Legato
-        const unisonIndex = prog.getValue('VCE_UNISON') || 0; // 0: 1, 1: 2, 2: 3, 3: 6
-        const unisonVoices = [1, 2, 3, 6][unisonIndex] || 1;
-        const isMonoMode = modeIndex === 2 || modeIndex === 3;
-        const maxKeys = isMonoMode ? 1 : Math.max(1, Math.floor(voiceLimit / unisonVoices));
-        return { voiceLimit, modeIndex, unisonVoices, maxKeys, isLegato: modeIndex === 3 };
-    }
-
-    function getMaxActiveKeys() {
-        return getVoiceSettings().maxKeys;
-    }
-
-    function sendNoteForSlot(slot, noteNumber, vel, on) {
-        if (slot === activeSlot || typeof midiManager.activeSlot !== 'number') {
-            midiManager.sendNote(noteNumber, vel, on);
-            return;
-        }
-        const prevSlot = midiManager.activeSlot;
-        midiManager.activeSlot = slot;
-        try {
-            midiManager.sendNote(noteNumber, vel, on);
-        } finally {
-            midiManager.activeSlot = prevSlot;
-        }
-    }
-
-    function releaseNote(noteNumber, slot = activeSlot) {
-        const state = getState(slot);
-        state.physicallyHeldNotes.delete(noteNumber);
-        if (!state.activePressedNotes.has(noteNumber)) return;
-
-        state.activePressedNotes.delete(noteNumber);
-        sendNoteForSlot(slot, noteNumber, 0, false);
-
-        const chordNotes = state.activeSoundingChordNotes.get(noteNumber) || [];
-        for (const cNote of chordNotes) {
-            sendNoteForSlot(slot, cNote, 0, false);
-        }
-        state.activeSoundingChordNotes.delete(noteNumber);
-
-        if (slot === activeSlot) {
-            updateKeyboardHighlights();
-        }
-    }
-
-    function enforceVoiceLimit(targetMax = getMaxActiveKeys(), slot = activeSlot) {
-        const state = getState(slot);
-        while (state.activePressedNotes.size > targetMax) {
-            const oldest = state.activePressedNotes.values().next().value;
-            releaseNote(oldest, slot);
-        }
-    }
-
-    function noteOn(noteNumber) {
-        const state = getState();
-        if (!state.latchActive && isArpLatchActive()) {
-            // In arp-latch mode without global latch, a new note/group replaces previously latched notes
-            if (state.physicallyHeldNotes.size === 0 && state.activePressedNotes.size > 0) {
-                releaseAllNotes();
-            }
-            state.physicallyHeldNotes.add(noteNumber);
-            if (state.activePressedNotes.has(noteNumber)) return;
-        } else {
-            state.physicallyHeldNotes.add(noteNumber);
-            if (state.activePressedNotes.has(noteNumber)) {
-                if (state.latchActive) {
-                    releaseNote(noteNumber);
-                }
-                return;
-            }
-        }
-
-        const { maxKeys, isLegato } = getVoiceSettings();
-        if (!isLegato && state.activePressedNotes.size >= maxKeys) {
-            enforceVoiceLimit(maxKeys - 1);
-        }
-
-        state.activePressedNotes.add(noteNumber);
-        midiManager.sendNote(noteNumber, velocity, true);
-
-        const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
-        if (prog) {
-            const { chordNotes } = computeChorderNotes(noteNumber, prog);
-            state.activeSoundingChordNotes.set(noteNumber, chordNotes);
-            for (const cNote of chordNotes) {
-                midiManager.sendNote(cNote, velocity, true);
-            }
-        } else {
-            state.activeSoundingChordNotes.set(noteNumber, []);
-        }
-
-        if (isLegato && state.activePressedNotes.size > maxKeys) {
-            enforceVoiceLimit(maxKeys);
-        }
-
-        updateKeyboardHighlights();
-    }
-
-    function isArpLatchActive() {
-        const prog = getActiveProgram ? resolveProgram(getActiveProgram) : null;
-        return !!(prog && prog.getValue('ARP_OFF_ON') && prog.getValue('ARP_LATCH'));
-    }
-
-    function isAnyLatchActive(slot = activeSlot) {
-        const state = getState(slot);
-        return state.latchActive || (slot === activeSlot && isArpLatchActive());
-    }
-
-    function noteOff(noteNumber, slot = activeSlot) {
-        const state = getState(slot);
-        state.physicallyHeldNotes.delete(noteNumber);
-        if (isAnyLatchActive(slot)) return;
-        releaseNote(noteNumber, slot);
-    }
-
-    function releaseAllNotes(slot = activeSlot) {
-        const state = getState(slot);
-        for (const note of Array.from(state.activePressedNotes)) {
-            sendNoteForSlot(slot, note, 0, false);
-        }
-        for (const cNotes of state.activeSoundingChordNotes.values()) {
-            for (const cNote of cNotes) {
-                sendNoteForSlot(slot, cNote, 0, false);
-            }
-        }
-        state.activePressedNotes.clear();
-        state.physicallyHeldNotes.clear();
-        state.activeSoundingChordNotes.clear();
-        if (slot === activeSlot) {
-            updateKeyboardHighlights();
-        }
-    }
-
-    // Render white keys
-    const whiteContainer = document.createElement('div');
-    whiteContainer.className = 'keys-white-row';
-
-    whiteKeys.forEach((offset) => {
-        const key = document.createElement('div');
-        key.className = 'key key-white';
-        key.setAttribute('data-offset', offset);
-        whiteContainer.appendChild(key);
-        keyElements.set(offset, key);
-
-        key.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            const note = getDisplayedBaseNote() + offset;
-            key.setAttribute('data-active-note', String(note));
-            noteOn(note);
-        });
-        key.addEventListener('pointerup', () => {
-            const noteAttr = key.getAttribute('data-active-note');
-            const note = noteAttr !== null ? parseInt(noteAttr, 10) : (getDisplayedBaseNote() + offset);
-            key.removeAttribute('data-active-note');
-            noteOff(note);
-        });
-        key.addEventListener('pointerleave', () => {
-            const noteAttr = key.getAttribute('data-active-note');
-            if (noteAttr !== null) {
-                const note = parseInt(noteAttr, 10);
-                key.removeAttribute('data-active-note');
-                noteOff(note);
-            }
-        });
+    voiceCtrl = createKeyboardVoiceController({
+        midiManager,
+        getActiveProgram,
+        getVoiceLimit,
+        updateKeyboardHighlights
     });
 
-    // Render black keys
+    const whiteContainer = document.createElement('div');
+    whiteContainer.className = 'keys-white-row';
+    AUDITION_WHITE_KEYS.forEach((offset) => {
+        const key = createPianoKey({
+            offset,
+            isBlack: false,
+            getDisplayedBaseNote,
+            noteOn: voiceCtrl.noteOn,
+            noteOff: voiceCtrl.noteOff
+        });
+        whiteContainer.appendChild(key);
+        keyElements.set(offset, key);
+    });
+
     const blackContainer = document.createElement('div');
     blackContainer.className = 'keys-black-row';
-
-    blackKeys.forEach(({ note: offset, pos }) => {
-        const key = document.createElement('div');
-        key.className = 'key key-black';
-        key.style.left = `${(pos + 1) * (100 / whiteKeys.length)}%`;
-        key.setAttribute('data-offset', offset);
+    AUDITION_BLACK_KEYS.forEach(({ note: offset, pos }) => {
+        const key = createPianoKey({
+            offset,
+            isBlack: true,
+            leftPct: (pos + 1) * (100 / AUDITION_WHITE_KEYS.length),
+            getDisplayedBaseNote,
+            noteOn: voiceCtrl.noteOn,
+            noteOff: voiceCtrl.noteOff
+        });
         blackContainer.appendChild(key);
         keyElements.set(offset, key);
-
-        key.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const note = getDisplayedBaseNote() + offset;
-            key.setAttribute('data-active-note', String(note));
-            noteOn(note);
-        });
-        key.addEventListener('pointerup', () => {
-            const noteAttr = key.getAttribute('data-active-note');
-            const note = noteAttr !== null ? parseInt(noteAttr, 10) : (getDisplayedBaseNote() + offset);
-            key.removeAttribute('data-active-note');
-            noteOff(note);
-        });
-        key.addEventListener('pointerleave', () => {
-            const noteAttr = key.getAttribute('data-active-note');
-            if (noteAttr !== null) {
-                const note = parseInt(noteAttr, 10);
-                key.removeAttribute('data-active-note');
-                noteOff(note);
-            }
-        });
     });
 
     kbdWrapper.appendChild(whiteContainer);
@@ -2809,50 +2789,16 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
     container.appendChild(controls);
     container.appendChild(kbdArea);
 
-    // Octave controls
     const octDisplay = controls.querySelector('#oct-display');
-    const octDown = controls.querySelector('#oct-down');
-    if (octDown) {
-        octDown.addEventListener('click', () => {
-            if (currentOctave > 0) {
-                currentOctave--;
-                if (octDisplay) octDisplay.textContent = `Oct ${currentOctave}`;
-                updateKeyboardHighlights();
-            }
-        });
-    }
+    let latchBtnRef = null;
 
-    const octUp = controls.querySelector('#oct-up');
-    if (octUp) {
-        octUp.addEventListener('click', () => {
-            if (currentOctave < 7) {
-                currentOctave++;
-                if (octDisplay) octDisplay.textContent = `Oct ${currentOctave}`;
-                updateKeyboardHighlights();
-            }
-        });
-    }
-
-    // Latch toggle (per active part)
-    const latchBtn = controls.querySelector('#kbd-latch');
-    if (latchBtn) {
-        latchBtn.addEventListener('click', () => {
-            const state = getState();
-            state.latchActive = !state.latchActive;
-            latchBtn.classList.toggle('active', state.latchActive);
-            if (!isAnyLatchActive()) {
-                releaseAllNotes();
-            }
-        });
-    }
-
-    function resetLatchAndNotes(slot = activeSlot) {
-        const state = getState(slot);
+    function resetLatchAndNotes(slot = voiceCtrl.getActiveSlot()) {
+        const state = voiceCtrl.getState(slot);
         state.latchActive = false;
-        if (slot === activeSlot && latchBtn) {
-            latchBtn.classList.remove('active');
+        if (slot === voiceCtrl.getActiveSlot() && latchBtnRef) {
+            latchBtnRef.classList.remove('active');
         }
-        releaseAllNotes(slot);
+        voiceCtrl.releaseAllNotes(slot);
     }
 
     function resetAllLatchAndNotes() {
@@ -2860,116 +2806,23 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         resetLatchAndNotes(1);
     }
 
-    // MIDI Panic (All Notes Off)
-    const panicBtn = controls.querySelector('#kbd-panic');
-    if (panicBtn) {
-        panicBtn.addEventListener('click', () => {
-            resetAllLatchAndNotes();
-            if (typeof midiManager.sendAllNotesOff === 'function') {
-                midiManager.sendAllNotesOff();
-            } else if (midiManager.outPort) {
-                const ch = midiManager.targetChannel;
-                midiManager.outPort.send(new Uint8Array([0xB0 | ch, 123, 0]));
-            }
-        });
-    }
+    const { latchBtn, panicBtn } = wireKeyboardControls({
+        controls,
+        container,
+        voiceCtrl,
+        midiManager,
+        getCurrentOctave: () => currentOctave,
+        resetAllLatchAndNotes
+    });
+    latchBtnRef = latchBtn;
 
-    // Pitch wheel (snaps to center on release)
-    const pitchSlider = controls.querySelector('#pitch-wheel');
-    if (pitchSlider) {
-        pitchSlider.addEventListener('input', () => {
-            const val = parseInt(pitchSlider.value, 10);
-            if (midiManager.outPort) {
-                const ch = midiManager.targetChannel;
-                midiManager.outPort.send(new Uint8Array([0xE0 | ch, val & 127, (val >> 7) & 127]));
-            }
-        });
-        pitchSlider.addEventListener('pointerup', () => {
-            pitchSlider.value = 8192;
-            if (midiManager.outPort) {
-                const ch = midiManager.targetChannel;
-                midiManager.outPort.send(new Uint8Array([0xE0 | ch, 0, 64]));
-            }
-        });
-    }
-
-    // Modulation wheel
-    const modSlider = controls.querySelector('#mod-wheel');
-    if (modSlider) {
-        modSlider.addEventListener('input', () => {
-            const val = parseInt(modSlider.value, 10);
-            if (midiManager.outPort) {
-                const ch = midiManager.targetChannel;
-                midiManager.outPort.send(new Uint8Array([0xB0 | ch, 1, val & 127]));
-            }
-        });
-    }
-
-    // QWERTY Keyboard Note Mapping
-    const KEY_NOTE_MAP = {
-        'KeyA': 0,  // C
-        'KeyW': 1,  // C#
-        'KeyS': 2,  // D
-        'KeyE': 3,  // D#
-        'KeyD': 4,  // E
-        'KeyF': 5,  // F
-        'KeyT': 6,  // F#
-        'KeyG': 7,  // G
-        'KeyY': 8,  // G#
-        'KeyH': 9,  // A
-        'KeyU': 10, // A#
-        'KeyJ': 11, // B
-        'KeyK': 12, // C (+1)
-        'KeyO': 13, // C# (+1)
-        'KeyL': 14  // D (+1)
-    };
-
-    const activeQwertyNotes = new Map(); // e.code -> noteNumber
-
-    if (typeof window !== 'undefined') {
-        window.addEventListener('keydown', (e) => {
-            if (e.metaKey || e.ctrlKey || e.altKey) return;
-            const activeTag = document.activeElement ? document.activeElement.tagName : '';
-            if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
-
-            if (e.code === 'KeyZ') {
-                if (currentOctave > 0) {
-                    currentOctave--;
-                    octDisplay.textContent = `Oct ${currentOctave}`;
-                    updateKeyboardHighlights();
-                }
-            } else if (e.code === 'KeyX') {
-                if (currentOctave < 7) {
-                    currentOctave++;
-                    octDisplay.textContent = `Oct ${currentOctave}`;
-                    updateKeyboardHighlights();
-                }
-            } else if (e.code === 'Space') {
-                e.preventDefault();
-                latchBtn.click();
-            } else if (e.key === '!') {
-                e.preventDefault();
-                if (panicBtn) panicBtn.click();
-            } else if (KEY_NOTE_MAP[e.code] !== undefined && !activeQwertyNotes.has(e.code)) {
-                e.preventDefault();
-                const note = (currentOctave + 1) * 12 + KEY_NOTE_MAP[e.code];
-                activeQwertyNotes.set(e.code, { note, slot: activeSlot });
-                noteOn(note);
-            }
-        });
-
-        window.addEventListener('keyup', (e) => {
-            const activeTag = document.activeElement ? document.activeElement.tagName : '';
-            if (activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT') return;
-
-            if (activeQwertyNotes.has(e.code)) {
-                e.preventDefault();
-                const entry = activeQwertyNotes.get(e.code);
-                activeQwertyNotes.delete(e.code);
-                noteOff(entry.note, entry.slot);
-            }
-        });
-    }
+    wireQwertyPlayback({
+        container,
+        voiceCtrl,
+        latchBtn,
+        panicBtn,
+        getCurrentOctave: () => currentOctave
+    });
 
     container.getCurrentOctave = () => currentOctave;
     container.setOctave = (oct) => {
@@ -2978,25 +2831,21 @@ function createKeyboard(midiManager, getActiveProgram, getVoiceLimit = () => 12)
         updateKeyboardHighlights();
     };
     container.setActivePart = (slot) => {
-        const nextSlot = slot === 1 ? 1 : 0;
-        if (nextSlot !== activeSlot) {
-            getState().physicallyHeldNotes.clear();
-            activeSlot = nextSlot;
-        }
-        container.classList.toggle('part-b', activeSlot === 1);
+        const nextSlot = voiceCtrl.setActiveSlot(slot);
+        container.classList.toggle('part-b', nextSlot === 1);
         if (latchBtn) {
-            latchBtn.classList.toggle('active', getState().latchActive);
+            latchBtn.classList.toggle('active', voiceCtrl.getState().latchActive);
         }
         updateKeyboardHighlights();
     };
-    container.getActivePart = () => activeSlot;
-    container.noteOn = noteOn;
-    container.noteOff = noteOff;
-    container.getActiveNotes = (slot = activeSlot) => Array.from(getState(slot).activePressedNotes);
-    container.getMaxActiveKeys = getMaxActiveKeys;
-    container.enforceVoiceLimit = () => enforceVoiceLimit();
+    container.getActivePart = () => voiceCtrl.getActiveSlot();
+    container.noteOn = voiceCtrl.noteOn;
+    container.noteOff = voiceCtrl.noteOff;
+    container.getActiveNotes = (slot = voiceCtrl.getActiveSlot()) => Array.from(voiceCtrl.getState(slot).activePressedNotes);
+    container.getMaxActiveKeys = voiceCtrl.getMaxActiveKeys;
+    container.enforceVoiceLimit = () => voiceCtrl.enforceVoiceLimit();
     container.releaseIfUnlatched = () => {
-        if (!isAnyLatchActive()) releaseAllNotes();
+        if (!voiceCtrl.isAnyLatchActive()) voiceCtrl.releaseAllNotes();
     };
     container.updateKeyboardHighlights = updateKeyboardHighlights;
     container.resetLatchAndNotes = resetLatchAndNotes;
@@ -3011,6 +2860,5 @@ if (typeof globalThis !== 'undefined') {
     globalThis.ICON_RANDOM_SVG = ICON_RANDOM_SVG;
     globalThis.ICON_RESET_SVG = ICON_RESET_SVG;
     globalThis.computeChorderNotes = computeChorderNotes;
-    globalThis.SCALE_INTERVALS = SCALE_INTERVALS;
 }
 
