@@ -19,27 +19,18 @@ class App {
         this.currentView = 'editor'; // 'editor' | 'librarian' | 'settings'
         this.activeCategoryFilter = 'all';
         this.searchQuery = '';
-        this.synthTimbralMode = 'monotimbral';
-        if (typeof window !== 'undefined') {
-            try {
-                this.synthTimbralMode = window.localStorage.getItem('mm2_timbral_mode') || 'monotimbral';
-            } catch (e) { }
-        }
+        this.synthTimbralMode = this._readStorage('mm2_timbral_mode') || 'monotimbral';
 
         // Live Editing, History & Compare State
         this.undoStack = [];
         this.redoStack = [];
         let savedUndoLevels = 20;
-        if (typeof window !== 'undefined' && window.localStorage) {
-            try {
-                const stored = window.localStorage.getItem('mm2_undo_levels');
-                if (stored !== null) {
-                    const parsed = parseInt(stored, 10);
-                    if (!isNaN(parsed) && parsed >= 1 && parsed <= 100) {
-                        savedUndoLevels = parsed;
-                    }
-                }
-            } catch (e) { }
+        const storedUndo = this._readStorage('mm2_undo_levels');
+        if (storedUndo !== null) {
+            const parsed = parseInt(storedUndo, 10);
+            if (!isNaN(parsed) && parsed >= 1 && parsed <= 100) {
+                savedUndoLevels = parsed;
+            }
         }
         this.maxHistory = savedUndoLevels;
         this._activeUndoGroup = null;
@@ -59,6 +50,7 @@ class App {
         this.selectedOsc = 1; // Active oscillator tab (1, 2, or 3)
         this.selectedEnv = 1; // Active envelope tab (1, 2, or 3)
         this._activeDragSection = null;
+        this._activeDragMtxField = null;
         this.soloState = { osc1: false, osc2: false, osc3: false, noise: false };
         this.muteState = { osc1: false, osc2: false, osc3: false, noise: false };
         this.savedMixerLevels = null;
@@ -66,18 +58,75 @@ class App {
         this.modeProbeTimeoutMs = 1500; // How long to wait for a Part B reply before assuming monotimbral
         this._modeProbe = null;
         this._pendingProbe = null;
+        this._fetchTimeout = null;
+        this._modeProbeTimeout = null;
+        this._syncStreamTimeout = null;
+        this._toastTimeout = null;
         this._hasDetectedMM2Once = false;
         this._hadBothPortsConnected = false;
         this._isPromptingSync = false;
         this._enableLiveSyncOnFetch = false;
+        this._syncActionRequireVerified = false;
+        this._checkingLiveSync = false;
         this._pendingPortTest = null;
         this._paramControlMap = new Map();
 
         this.bindEvents();
     }
 
+    getTimbre(slot) {
+        return slot === 1 ? this.timbreB : this.timbreA;
+    }
+
+    _setOriginalSnapshot(slot, timbre = this.getTimbre(slot)) {
+        const snapshot = timbre.clone();
+        if (slot === 1) {
+            this.originalSnapshotB = snapshot;
+        } else {
+            this.originalSnapshotA = snapshot;
+        }
+    }
+
+    get isFollowerTab() {
+        return !!(this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower));
+    }
+
+    _readStorage(key) {
+        if (typeof window === 'undefined' || !window.localStorage) return null;
+        try {
+            return window.localStorage.getItem(key);
+        } catch (e) {
+            return null;
+        }
+    }
+
+    _writeStorage(key, val) {
+        if (typeof window === 'undefined' || !window.localStorage) return false;
+        try {
+            window.localStorage.setItem(key, val);
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    _refreshSectionNode(container) {
+        if (!container || typeof container.querySelectorAll !== 'function') return;
+        container.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+    }
+
+    getLeaderStateSnapshot() {
+        return {
+            mode: this.synthTimbralMode,
+            timbreA: this.timbreA ? Array.from(this.timbreA.rawData) : null,
+            timbreB: this.timbreB ? Array.from(this.timbreB.rawData) : null,
+            hardwareResponsive: this.midi ? this.midi.hardwareResponsive : null,
+            liveSync: this.midi ? this.midi.liveSync : false
+        };
+    }
+
     get activeTimbre() {
-        return this.activeSlot === 0 ? this.timbreA : this.timbreB;
+        return this.getTimbre(this.activeSlot);
     }
 
     get isConnectionGood() {
@@ -101,7 +150,6 @@ class App {
         this.updateConnectionStatus();
         this.updateMidiPermissionUI();
         this.updateTimbralModeUI();
-        this.updateActivePartIndicator();
         this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
         this.updateUndoRedoUI();
         this.updateLiveSyncUI();
@@ -117,9 +165,8 @@ class App {
     }
 
     _probeIfNeeded(timeoutMs = 2500, options = {}) {
-        const isFollowerTab = this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower);
         if (
-            !isFollowerTab &&
+            !this.isFollowerTab &&
             this.midi &&
             this.midi.inPort &&
             this.midi.outPort &&
@@ -194,7 +241,7 @@ class App {
         this.midi.on('mm2-detected', ({ inPort }) => {
             // When an additional window opens, it acts as a follower.
             // Do not run a hardware fetch; sync from leader window instead.
-            if (this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower)) {
+            if (this.isFollowerTab) {
                 this._hasDetectedMM2Once = true;
                 this.updateConnectionStatus();
                 this.tabSync.requestLeaderState();
@@ -207,12 +254,10 @@ class App {
         });
 
         // Firmware Detection Listener
-        this.midi.on('firmware-detected', ({ version, detectedVersion }) => {
+        this.midi.on('firmware-detected', ({ detectedVersion }) => {
             this.updateFirmwareUI();
             if (detectedVersion === 2) {
                 this.showNotification('Firmware v2.x detected: adapted UI, SysEx (176-byte), and v2 NRPNs.', 'info');
-            } else if (detectedVersion === 3 && version === 3) {
-                this.updateFirmwareUI();
             }
         });
 
@@ -228,8 +273,7 @@ class App {
 
             // In follower windows, do not process unprompted hardware dumps (e.g. from leader polls or leader fetches).
             // State is synchronized from the leader window via TabSync.
-            const isFollowerTab = this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower);
-            if (isFollowerTab && this.syncStatus !== 'fetching' && !this._modeProbe) {
+            if (this.isFollowerTab && this.syncStatus !== 'fetching' && !this._modeProbe) {
                 return;
             }
 
@@ -259,17 +303,12 @@ class App {
                 syncStatus: this.isConnectionGood ? 'synced' : 'offline',
                 source: 'hardware'
             });
-            if (slot === 1) {
-                this.originalSnapshotB = this.timbreB.clone();
-            } else {
-                this.originalSnapshotA = this.timbreA.clone();
-            }
+            this._setOriginalSnapshot(slot);
             // When loading Editor or working in Editor, do not add patch to Librarian!
             // Only capture while the Librarian view is open; dumps go to the currently selected bank
             if (this.currentView === 'librarian') {
                 this.librarian.handleIncomingProgram(program);
             }
-            this.updateActivePartIndicator();
             this.showNotification('Loaded MM2 hardware patch', 'success');
             if (this._enableLiveSyncOnFetch) {
                 this._enableLiveSyncOnFetch = false;
@@ -291,12 +330,11 @@ class App {
             this.updateMidiPermissionUI();
 
             const hasBothPorts = !!(this.midi.inPort && this.midi.outPort);
-            const isFollowerTab = this.tabSync && (this.tabSync.isLeader === false || this.tabSync.isFollower);
             if (hasBothPorts && !this._hadBothPortsConnected) {
                 this._hadBothPortsConnected = true;
                 this.resetAuditionLatch();
                 const isMM2Pair = this.midi.isMM2Port(this.midi.inPort) && this.midi.isMM2Port(this.midi.outPort);
-                if (!isMM2Pair && !isFollowerTab) {
+                if (!isMM2Pair && !this.isFollowerTab) {
                     const isReconnect = this._hasDetectedMM2Once;
                     this._hasDetectedMM2Once = true;
                     this.promptReconnectSync({
@@ -369,53 +407,10 @@ class App {
 
         // Real-Time Hardware Parameter Tweak Listener (from physical MM2 knobs via CC or NRPN)
         this.midi.on('parameter-received', ({ paramKey, value, slot }) => {
-            const targetTimbre = slot === 1 ? this.timbreB : this.timbreA;
-            targetTimbre.setValue(paramKey, value);
-
-            if (slot === this.activeSlot) {
-                if (paramKey === 'ARP_OFF_ON' && value) {
-                    this.resetAuditionLatch(slot);
-                }
-                // If it's an oscillator parameter, switch active oscillator tab if needed
-                const oscMatch = paramKey.match(/^OSC(\d)_/);
-                if (oscMatch) {
-                    const oscNum = parseInt(oscMatch[1], 10);
-                    if (this.selectedOsc !== oscNum) {
-                        this.selectedOsc = oscNum;
-                    }
-                }
-
-                // If it's an envelope parameter, switch active envelope tab if needed
-                const envMatch = paramKey.match(/^ENV(\d)_/);
-                let envNum = envMatch ? parseInt(envMatch[1], 10) : 0;
-                if (!envNum && (paramKey === 'ENV1_VCA_VEL_SENS' || paramKey === 'ENV1_RESET')) envNum = 1;
-                if (!envNum && (paramKey === 'ENV2_FLT_VEL_SENS' || paramKey === 'ENV2_RESET')) envNum = 2;
-                if (!envNum && paramKey === 'ENV3_RESET') envNum = 3;
-                if (envNum && this.selectedEnv !== envNum) {
-                    this.selectedEnv = envNum;
-                }
-
-                if (typeof document !== 'undefined') {
-                    if (oscMatch) {
-                        const oscCard = document.querySelector('.osc-unified-card');
-                        if (oscCard && oscCard.refresh) oscCard.refresh();
-                    }
-                    if (envNum) {
-                        const envCard = document.querySelector('.env-unified-card');
-                        if (envCard && envCard.refresh) envCard.refresh();
-                    }
-
-                    // Refresh the specific control in the UI via O(1) cache (with DOM fallback)
-                    const el = (this._paramControlMap && this._paramControlMap.get(paramKey)) ||
-                        document.querySelector(`.editor-grid [data-param="${paramKey}"], #prog-tempo-container [data-param="${paramKey}"]`);
-                    if (el && el.refresh) {
-                        el.refresh();
-                    }
-
-                    this.refreshVisualizerFor(paramKey);
-                    this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
-                }
-            }
+            this._applyIncomingParamToUI(paramKey, value, slot, {
+                autoSwitchTab: true,
+                updateSync: true
+            });
         });
 
         this.midi.on('connection-lost', ({ port, type }) => {
@@ -592,11 +587,7 @@ class App {
         const validModes = ['monotimbral', 'bitimbral', 'combi'];
         if (!validModes.includes(mode)) return;
         this.synthTimbralMode = mode;
-        if (typeof window !== 'undefined') {
-            try {
-                window.localStorage.setItem('mm2_timbral_mode', mode);
-            } catch (e) { }
-        }
+        this._writeStorage('mm2_timbral_mode', mode);
         if (mode === 'monotimbral' && this.activeSlot !== 0) {
             this.selectPart(0);
         }
@@ -645,24 +636,6 @@ class App {
         btnCopyOther.title = isPartA ? 'Copy Part A settings to Part B' : 'Copy Part B settings to Part A';
     }
 
-    updateActivePartIndicator() {
-        if (typeof document === 'undefined') return;
-        const badge = document.getElementById('active-part-indicator');
-        const isMono = this.synthTimbralMode === 'monotimbral';
-        const isPartA = this.activeSlot === 0;
-
-        if (badge) {
-            badge.className = `active-part-badge ${isPartA ? 'part-a' : 'part-b'}`;
-            if (isMono) {
-                badge.textContent = 'PART A [MONO 12V]';
-                badge.title = 'Monotimbral Mode: 12-voice polyphony active on Part A';
-            } else {
-                badge.textContent = isPartA ? 'PART A [6V]' : 'PART B [6V]';
-                badge.title = `Currently editing Part ${isPartA ? 'A' : 'B'} (${this.synthTimbralMode.toUpperCase()})`;
-            }
-        }
-    }
-
     selectPart(slot) {
         if (this.synthTimbralMode === 'monotimbral' && slot !== 0) {
             this.showNotification('MM2 is in Monotimbral Mode. Switch to Bitimbral or Combi mode on MM2 hardware to edit Part B.', 'info');
@@ -694,11 +667,7 @@ class App {
         if (this.undoStack.length > this.maxHistory) {
             this.undoStack.splice(0, this.undoStack.length - this.maxHistory);
         }
-        if (typeof window !== 'undefined' && window.localStorage) {
-            try {
-                window.localStorage.setItem('mm2_undo_levels', this.maxHistory.toString());
-            } catch (e) { }
-        }
+        this._writeStorage('mm2_undo_levels', this.maxHistory.toString());
         this.updateUndoRedoUI();
         const input = typeof document !== 'undefined' ? document.getElementById('settings-undo-levels') : null;
         if (input && typeof document !== 'undefined' && document.activeElement !== input) {
@@ -839,91 +808,61 @@ class App {
     }
 
     undo() {
-        if (this.undoStack.length === 0) return;
-        const action = this.undoStack.pop();
-        this.redoStack.push(action);
-
-        if (action.slot !== undefined && this.activeSlot !== action.slot) {
-            this.selectPart(action.slot);
-        }
-
-        if (action.type === 'part-snapshot') {
-            this._applyPartSnapshot(action.slot, action.prevRawData, 'undo', `Undo: ${action.label || 'Part Change'}`);
-            return;
-        }
-        if (action.type === 'bank-snapshot') {
-            this._applyBankSnapshot(action.bankIndex, action.prevPrograms, `Undo: ${action.label || 'Bank Change'}`);
-            return;
-        }
-
-        if (action.changes && Array.isArray(action.changes)) {
-            for (const ch of action.changes) {
-                this.activeTimbre.setValue(ch.key, ch.prevVal);
-                if (this.midi.liveSync) {
-                    this.midi.sendParameter(ch.key, ch.prevVal);
-                }
-                this.refreshVisualizerFor(ch.key);
-            }
-            if (action.changes.length > 0) {
-                this._autoSwitchTabFor(action.changes[0].key);
-            }
-        } else {
-            this.activeTimbre.setValue(action.key, action.prevVal);
-            if (this.midi.liveSync) {
-                this.midi.sendParameter(action.key, action.prevVal);
-            }
-            this.refreshVisualizerFor(action.key);
-            this._autoSwitchTabFor(action.key);
-        }
-
-        this.refreshEditorControls();
-        this.updateUndoRedoUI();
-        const label = action.label || (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get(action.key)?.label) || action.key;
-        this.showNotification(`Undo: ${label}`, 'info');
+        this._applyHistoryStep(false);
     }
 
     redo() {
-        if (this.redoStack.length === 0) return;
-        const action = this.redoStack.pop();
-        this.undoStack.push(action);
+        this._applyHistoryStep(true);
+    }
+
+    _applyHistoryStep(isRedo) {
+        const sourceStack = isRedo ? this.redoStack : this.undoStack;
+        const targetStack = isRedo ? this.undoStack : this.redoStack;
+        if (sourceStack.length === 0) return;
+
+        const action = sourceStack.pop();
+        targetStack.push(action);
 
         if (action.slot !== undefined && this.activeSlot !== action.slot) {
             this.selectPart(action.slot);
         }
 
+        const prefix = isRedo ? 'Redo' : 'Undo';
         if (action.type === 'part-snapshot') {
-            this._applyPartSnapshot(action.slot, action.newRawData, 'redo', `Redo: ${action.label || 'Part Change'}`);
+            const rawData = isRedo ? action.newRawData : action.prevRawData;
+            this._applyPartSnapshot(action.slot, rawData, isRedo ? 'redo' : 'undo', `${prefix}: ${action.label || 'Part Change'}`);
             return;
         }
         if (action.type === 'bank-snapshot') {
-            this._applyBankSnapshot(action.bankIndex, action.newPrograms, `Redo: ${action.label || 'Bank Change'}`);
+            const programs = isRedo ? action.newPrograms : action.prevPrograms;
+            this._applyBankSnapshot(action.bankIndex, programs, `${prefix}: ${action.label || 'Bank Change'}`);
             return;
         }
 
+        const applyChange = (key, val) => {
+            this.activeTimbre.setValue(key, val);
+            if (this.midi.liveSync) {
+                this.midi.sendParameter(key, val);
+            }
+            this.refreshVisualizerFor(key);
+        };
+
         if (action.changes && Array.isArray(action.changes)) {
             for (const ch of action.changes) {
-                this.activeTimbre.setValue(ch.key, ch.newVal);
-                if (this.midi.liveSync) {
-                    this.midi.sendParameter(ch.key, ch.newVal);
-                }
-                this.refreshVisualizerFor(ch.key);
+                applyChange(ch.key, isRedo ? ch.newVal : ch.prevVal);
             }
             if (action.changes.length > 0) {
                 this._autoSwitchTabFor(action.changes[0].key);
             }
         } else {
-            this.activeTimbre.setValue(action.key, action.newVal);
-            if (this.midi.liveSync) {
-                this.midi.sendParameter(action.key, action.newVal);
-            }
-            this.refreshVisualizerFor(action.key);
+            applyChange(action.key, isRedo ? action.newVal : action.prevVal);
             this._autoSwitchTabFor(action.key);
         }
 
         this.refreshEditorControls();
         this.updateUndoRedoUI();
         const label = action.label || (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get(action.key)?.label) || action.key;
-        this.showNotification(`Redo: ${label}`, 'info');
+        this.showNotification(`${prefix}: ${label}`, 'info');
     }
 
     _recordBankUndo(bankIndex, prevPrograms, newPrograms, label) {
@@ -968,7 +907,7 @@ class App {
      * Restores a 216-byte part snapshot for undo/redo and refreshes UI/sync state.
      */
     _applyPartSnapshot(slot, rawData, source, notificationText) {
-        const targetTimbre = slot === 1 ? this.timbreB : this.timbreA;
+        const targetTimbre = this.getTimbre(slot);
         targetTimbre.rawData = new Uint8Array(rawData);
         if (this.midi && this.midi.liveSync && this.midi.outPort) {
             this.midi.sendProgram(targetTimbre, slot);
@@ -1000,7 +939,7 @@ class App {
         if (this.isComparing) {
             this.toggleCompare(false);
         }
-        const targetTimbre = targetSlot === 1 ? this.timbreB : this.timbreA;
+        const targetTimbre = this.getTimbre(targetSlot);
         const prevRawData = new Uint8Array(targetTimbre.rawData);
         const nextRawData = new Uint8Array(rawData);
 
@@ -1033,10 +972,9 @@ class App {
     }
 
     loadMemories() {
-        if (typeof window === 'undefined' || !window.localStorage) return;
+        const raw = this._readStorage('mm2_memories');
+        if (!raw) return;
         try {
-            const raw = window.localStorage.getItem('mm2_memories');
-            if (!raw) return;
             const parsed = JSON.parse(raw);
             if (!Array.isArray(parsed)) return;
             for (let i = 0; i < 4; i++) {
@@ -1049,11 +987,8 @@ class App {
     }
 
     saveMemories() {
-        if (typeof window === 'undefined' || !window.localStorage) return;
-        try {
-            const payload = this.memories.map(m => (m ? Array.from(m.rawData) : null));
-            window.localStorage.setItem('mm2_memories', JSON.stringify(payload));
-        } catch (e) { }
+        const payload = this.memories.map(m => (m ? Array.from(m.rawData) : null));
+        this._writeStorage('mm2_memories', JSON.stringify(payload));
     }
 
     updateMemoryUI() {
@@ -1167,12 +1102,35 @@ class App {
         });
     }
 
-    _parseDragPayload(e) {
+    _parseDragPayload(e, fallback = this._activeMemoryDrag) {
         try {
             const raw = e && e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
             if (raw) return JSON.parse(raw);
         } catch (err) { }
-        return this._activeMemoryDrag;
+        return fallback;
+    }
+
+    _bindDragTarget(el, { hoverClass = 'slot-drop-hover', onDragOver, onDragLeave, onDrop, stopLeavePropagation = false } = {}) {
+        if (!el) return;
+        if (onDragOver) {
+            el.addEventListener('dragover', onDragOver);
+        }
+        el.addEventListener('dragleave', (e) => {
+            if (stopLeavePropagation) e.stopPropagation();
+            if (e.relatedTarget && typeof el.contains === 'function' && el.contains(e.relatedTarget)) {
+                return;
+            }
+            if (hoverClass) el.classList.remove(hoverClass);
+            this._clearDropTip(el);
+            if (onDragLeave) onDragLeave(e);
+        });
+        if (onDrop) {
+            el.addEventListener('drop', (e) => {
+                if (hoverClass) el.classList.remove(hoverClass);
+                this._clearDropTip(el);
+                onDrop(e);
+            });
+        }
     }
 
     wireMemoryAndPartDragDrop(els = {}) {
@@ -1243,7 +1201,7 @@ class App {
                 if (validMem) {
                     this._setDropTip(btn, `Drop to copy Memory M${active.index + 1} to M${memIdx + 1}`);
                 } else if (validPart) {
-                    const srcTimbre = active.slot === 1 ? this.timbreB : this.timbreA;
+                    const srcTimbre = this.getTimbre(active.slot);
                     const srcLabel = active.slot === 0 ? 'A' : 'B';
                     if (srcTimbre && typeof srcTimbre.isInit === 'function' && srcTimbre.isInit()) {
                         this._setDropTip(btn, `Drop to clear Memory M${memIdx + 1}`);
@@ -1325,7 +1283,7 @@ class App {
                 e.preventDefault();
                 e.stopPropagation();
                 btn.classList.remove('slot-drop-hover');
-                const srcTimbre = data.slot === 1 ? this.timbreB : this.timbreA;
+                const srcTimbre = this.getTimbre(data.slot);
                 const srcLabel = data.slot === 0 ? 'A' : 'B';
                 const dstLabel = slot === 0 ? 'A' : 'B';
                 this.replacePartWithRawData(slot, srcTimbre.rawData, `Copy Part ${srcLabel} → Part ${dstLabel}`);
@@ -1364,7 +1322,7 @@ class App {
                 e.preventDefault();
                 e.stopPropagation();
                 editorGrid.classList.remove('slot-drop-hover');
-                const srcTimbre = data.slot === 1 ? this.timbreB : this.timbreA;
+                const srcTimbre = this.getTimbre(data.slot);
                 const srcLabel = data.slot === 0 ? 'A' : 'B';
                 const dstLabel = this.activeSlot === 0 ? 'A' : 'B';
                 this.replacePartWithRawData(this.activeSlot, srcTimbre.rawData, `Copy Part ${srcLabel} → Part ${dstLabel}`);
@@ -1441,11 +1399,7 @@ class App {
             });
 
             appMain.addEventListener('drop', async (e) => {
-                const raw = e && e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-                let libData = null;
-                try {
-                    libData = raw ? JSON.parse(raw) : this._activeLibrarianDrag;
-                } catch (err) { }
+                const libData = this._parseDragPayload(e, this._activeLibrarianDrag);
                 if (
                     this.currentView === 'librarian' &&
                     libData &&
@@ -1844,7 +1798,6 @@ class App {
         const envCard = document.querySelector('.env-unified-card');
         if (envCard && envCard.refresh) envCard.refresh();
 
-        this.updateActivePartIndicator();
         this.updateTimbralModeUI();
         this.updateUndoRedoUI();
     }
@@ -1892,44 +1845,33 @@ class App {
             mtx: 'Mtx'
         };
 
-        targetEl.addEventListener('dragover', (e) => {
-            const active = this._activeDragSection;
-            const dstIdx = resolveTargetIndex();
-            if (!active || active.kind !== 'section' || active.sectionType !== sectionType || active.sectionIndex === dstIdx) {
-                return;
-            }
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-            targetEl.classList.add(hoverClass);
-            const secLabel = SECTION_TIP_LABELS[sectionType] || sectionType.toUpperCase();
-            this._setDropTip(targetEl, `Drop to copy ${secLabel} ${active.sectionIndex} to ${secLabel} ${dstIdx}`);
-        });
-
-        targetEl.addEventListener('dragleave', (e) => {
-            e.stopPropagation();
-            if (e.relatedTarget && typeof targetEl.contains === 'function' && targetEl.contains(e.relatedTarget)) {
-                return;
-            }
-            targetEl.classList.remove(hoverClass);
-            this._clearDropTip(targetEl);
-        });
-
-        targetEl.addEventListener('drop', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            targetEl.classList.remove(hoverClass);
-            this._clearDropTip(targetEl);
-            try {
+        this._bindDragTarget(targetEl, {
+            hoverClass,
+            stopLeavePropagation: true,
+            onDragOver: (e) => {
+                const active = this._activeDragSection;
                 const dstIdx = resolveTargetIndex();
-                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-                const data = raw ? JSON.parse(raw) : this._activeDragSection;
+                if (!active || active.kind !== 'section' || active.sectionType !== sectionType || active.sectionIndex === dstIdx) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                targetEl.classList.add(hoverClass);
+                const secLabel = SECTION_TIP_LABELS[sectionType] || sectionType.toUpperCase();
+                this._setDropTip(targetEl, `Drop to copy ${secLabel} ${active.sectionIndex} to ${secLabel} ${dstIdx}`);
+            },
+            onDrop: (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const dstIdx = resolveTargetIndex();
+                const data = this._parseDragPayload(e, this._activeDragSection);
                 if (data && data.kind === 'section' && data.sectionType === sectionType && data.sectionIndex !== dstIdx) {
                     copySection(sectionType, data.sectionIndex, sectionType, dstIdx, timbre(), onChange);
                     this._activeDragSection = null;
                     if (onDrop) onDrop(data.sectionIndex, dstIdx);
                 }
-            } catch (err) { }
+            }
         });
     }
 
@@ -1973,60 +1915,46 @@ class App {
             }
         });
 
-        el.addEventListener('dragover', (e) => {
-            const active = this._activeDragMtxField;
-            if (!active || active.kind !== 'mtx-field' || active.fieldType !== fieldType || active.slotIndex === slotIndex) {
-                return;
-            }
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-            el.classList.add('slot-drop-hover');
-            this._setDropTip(el, `Drop to copy Slot ${active.slotIndex} ${kindLabel} to Slot ${slotIndex}`);
-        });
+        this._bindDragTarget(el, {
+            hoverClass: 'slot-drop-hover',
+            onDragOver: (e) => {
+                const active = this._activeDragMtxField;
+                if (!active || active.kind !== 'mtx-field' || active.fieldType !== fieldType || active.slotIndex === slotIndex) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                el.classList.add('slot-drop-hover');
+                this._setDropTip(el, `Drop to copy Slot ${active.slotIndex} ${kindLabel} to Slot ${slotIndex}`);
+            },
+            onDrop: (e) => {
+                const data = this._parseDragPayload(e, this._activeDragMtxField);
+                if (!data || data.kind !== 'mtx-field' || data.fieldType !== fieldType || data.slotIndex === slotIndex) {
+                    return;
+                }
+                e.preventDefault();
+                e.stopPropagation();
 
-        el.addEventListener('dragleave', (e) => {
-            if (e.relatedTarget && typeof el.contains === 'function' && el.contains(e.relatedTarget)) {
-                return;
+                const prog = timbre();
+                if (!prog) return;
+                const srcKey = fieldType === 'src' ? `MTX${data.slotIndex}_SRC` : `MTX${data.slotIndex}_DST`;
+                const dstKey = fieldType === 'src' ? `MTX${slotIndex}_SRC` : `MTX${slotIndex}_DST`;
+                const val = prog.getValue(srcKey);
+                const prevVal = prog.getValue(dstKey);
+                if (onChange) {
+                    onChange(dstKey, val, {
+                        isFinal: true,
+                        prevVal,
+                        label: `Copy Slot ${data.slotIndex} ${kindLabel} → Slot ${slotIndex}`
+                    });
+                } else {
+                    prog.setValue(dstKey, val);
+                }
+                if (el.refresh) el.refresh();
+                this._activeDragMtxField = null;
+                this.showNotification(`Copied Slot ${data.slotIndex} ${kindLabel} to Slot ${slotIndex}`, 'success');
             }
-            el.classList.remove('slot-drop-hover');
-            this._clearDropTip(el);
-        });
-
-        el.addEventListener('drop', (e) => {
-            const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-            let data = null;
-            try {
-                data = raw ? JSON.parse(raw) : this._activeDragMtxField;
-            } catch (err) {
-                data = this._activeDragMtxField;
-            }
-            if (!data || data.kind !== 'mtx-field' || data.fieldType !== fieldType || data.slotIndex === slotIndex) {
-                return;
-            }
-            e.preventDefault();
-            e.stopPropagation();
-            el.classList.remove('slot-drop-hover');
-            this._clearDropTip(el);
-
-            const prog = timbre();
-            if (!prog) return;
-            const srcKey = fieldType === 'src' ? `MTX${data.slotIndex}_SRC` : `MTX${data.slotIndex}_DST`;
-            const dstKey = fieldType === 'src' ? `MTX${slotIndex}_SRC` : `MTX${slotIndex}_DST`;
-            const val = prog.getValue(srcKey);
-            const prevVal = prog.getValue(dstKey);
-            if (onChange) {
-                onChange(dstKey, val, {
-                    isFinal: true,
-                    prevVal,
-                    label: `Copy Slot ${data.slotIndex} ${kindLabel} → Slot ${slotIndex}`
-                });
-            } else {
-                prog.setValue(dstKey, val);
-            }
-            if (el.refresh) el.refresh();
-            this._activeDragMtxField = null;
-            this.showNotification(`Copied Slot ${data.slotIndex} ${kindLabel} to Slot ${slotIndex}`, 'success');
         });
     }
 
@@ -2145,13 +2073,7 @@ class App {
             });
 
             el.addEventListener('drop', (e) => {
-                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-                let data = null;
-                try {
-                    data = raw ? JSON.parse(raw) : this._activeDragSection;
-                } catch (err) {
-                    data = this._activeDragSection;
-                }
+                const data = this._parseDragPayload(e, this._activeDragSection);
                 const modSrc = resolveModSource(data);
                 if (!modSrc) return;
                 const prog = timbre();
@@ -2192,7 +2114,7 @@ class App {
                 const slotRow = Array.from(containerEl.querySelectorAll('.matrix-slot-row'))
                     .find(r => String(r.getAttribute('data-slot')) === String(emptySlot));
                 if (slotRow) {
-                    slotRow.querySelectorAll('[data-param]').forEach(node => node.refresh && node.refresh());
+                    this._refreshSectionNode(slotRow);
                 }
                 this.showNotification(`Mapped ${srcLabel} → ${dstLabel} (Matrix Slot ${emptySlot})`, 'success');
             });
@@ -2883,7 +2805,7 @@ class App {
             this.wireSectionDropTarget(subLfo, 'lfo', l, timbre, onChange, {
                 hoverClass: 'slot-drop-hover',
                 onDrop: (srcIdx, dstIdx) => {
-                    subLfo.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                    this._refreshSectionNode(subLfo);
                     const viz = subLfo.querySelector('.lfo-visualizer');
                     if (viz && viz.refresh) viz.refresh();
                     this.showNotification(`Copied LFO ${srcIdx} to LFO ${dstIdx}`, 'success');
@@ -2900,7 +2822,7 @@ class App {
             btnRandom.innerHTML = ICON_RANDOM_SVG;
             btnRandom.onclick = () => {
                 randomizeSection('lfo', l, timbre(), onChange);
-                subLfo.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                this._refreshSectionNode(subLfo);
                 const viz = subLfo.querySelector('.lfo-visualizer');
                 if (viz && viz.refresh) viz.refresh();
                 this.showNotification(`Randomized LFO ${l}`, 'info');
@@ -2913,7 +2835,7 @@ class App {
             btnClear.textContent = '✕';
             btnClear.onclick = () => {
                 resetSectionToInit('lfo', l, timbre(), onChange);
-                subLfo.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                this._refreshSectionNode(subLfo);
                 const viz = subLfo.querySelector('.lfo-visualizer');
                 if (viz && viz.refresh) viz.refresh();
                 this.showNotification(`Reset LFO ${l} to defaults`, 'info');
@@ -3006,7 +2928,7 @@ class App {
             btnClear.textContent = '✕';
             btnClear.onclick = () => {
                 resetSectionToInit('mult', m, timbre(), onChange);
-                multBox.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                this._refreshSectionNode(multBox);
                 this.showNotification(`Reset Multiplier ${m} to defaults`, 'info');
             };
 
@@ -3019,7 +2941,7 @@ class App {
             this.wireSectionDropTarget(multBox, 'mult', m, timbre, onChange, {
                 hoverClass: 'slot-drop-hover',
                 onDrop: (srcIdx, dstIdx) => {
-                    multBox.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                    this._refreshSectionNode(multBox);
                     this.showNotification(`Copied Multiplier ${srcIdx} to Multiplier ${dstIdx}`, 'success');
                 }
             });
@@ -3084,7 +3006,7 @@ class App {
             this.wireSectionDropTarget(slotRow, 'mtx', m, timbre, onChange, {
                 hoverClass: 'slot-drop-hover',
                 onDrop: (srcIdx, dstIdx) => {
-                    slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                    this._refreshSectionNode(slotRow);
                     this.showNotification(`Copied Slot ${srcIdx} to Slot ${dstIdx}`, 'success');
                 }
             });
@@ -3114,7 +3036,7 @@ class App {
             btnRandom.innerHTML = ICON_RANDOM_SVG;
             btnRandom.onclick = () => {
                 randomizeSection('mtx', m, timbre(), onChange);
-                slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                this._refreshSectionNode(slotRow);
                 this.showNotification(`Randomized Matrix Slot ${m}`, 'info');
             };
 
@@ -3125,7 +3047,7 @@ class App {
             btnClear.textContent = '✕';
             btnClear.onclick = () => {
                 resetSectionToInit('mtx', m, timbre(), onChange);
-                slotRow.querySelectorAll('[data-param]').forEach(el => el.refresh && el.refresh());
+                this._refreshSectionNode(slotRow);
             };
 
             actions.appendChild(btnRandom);
@@ -3245,10 +3167,6 @@ class App {
         chordSec.body.appendChild(chordTopRow);
 
         // Scale Degree Section (2 columns)
-        //const chordDegreesBox = document.createElement('div');
-        //chordDegreesBox.className = 'chord-degrees-grid';
-        //chordDegreesBox.innerHTML = '<div class="chord-degrees-title">Scale Degree Chords</div>';
-
         const chordCols = document.createElement('div');
         chordCols.className = 'chord-degrees-columns';
 
@@ -3272,9 +3190,7 @@ class App {
         col2.appendChild(noteEl);
         chordCols.appendChild(col2);
 
-        //chordDegreesBox.appendChild(chordCols);
         chordSec.body.appendChild(chordCols);
-        //chordSec.body.appendChild(chordDegreesBox);
         fxChordCol.appendChild(chordSec.card);
         row3.appendChild(fxChordCol);
 
@@ -3538,11 +3454,7 @@ class App {
                         return;
                     }
                     this.activeTimbre.rawData = msgs[0].bytes;
-                    if (this.activeSlot === 0) {
-                        this.originalSnapshotA = this.activeTimbre.clone();
-                    } else {
-                        this.originalSnapshotB = this.activeTimbre.clone();
-                    }
+                    this._setOriginalSnapshot(this.activeSlot, this.activeTimbre);
                     this.undoStack = [];
                     this.redoStack = [];
                     this.updateUndoRedoUI();
@@ -3602,18 +3514,14 @@ class App {
         if (btnCopyOther) {
             btnCopyOther.onclick = () => {
                 const targetSlot = this.activeSlot === 0 ? 1 : 0;
-                if (this.activeSlot === 0) {
-                    this.timbreB.rawData = this.timbreA.rawData;
-                    this.originalSnapshotB = this.timbreB.clone();
-                    this.showNotification(`Copied Part A "${this.timbreA.name}" to Part B`, 'success');
-                } else {
-                    this.timbreA.rawData = this.timbreB.rawData;
-                    this.originalSnapshotA = this.timbreA.clone();
-                    this.showNotification(`Copied Part B "${this.timbreB.name}" to Part A`, 'success');
-                }
+                const srcLabel = this.activeSlot === 0 ? 'A' : 'B';
+                const dstLabel = targetSlot === 1 ? 'B' : 'A';
+                const targetTimbre = this.getTimbre(targetSlot);
+                targetTimbre.rawData = this.activeTimbre.rawData;
+                this._setOriginalSnapshot(targetSlot, targetTimbre);
+                this.showNotification(`Copied Part ${srcLabel} "${this.activeTimbre.name}" to Part ${dstLabel}`, 'success');
                 this.refreshEditorControls();
                 if (this.tabSync) {
-                    const targetTimbre = targetSlot === 1 ? this.timbreB : this.timbreA;
                     this.tabSync.broadcast('PATCH_LOADED', {
                         slot: targetSlot,
                         rawData: Array.from(targetTimbre.rawData),
@@ -3656,11 +3564,7 @@ class App {
     _sendActiveProgramToHardware() {
         try {
             this.midi.sendProgram(this.activeTimbre, this.activeSlot, true);
-            if (this.activeSlot === 0) {
-                this.originalSnapshotA = this.activeTimbre.clone();
-            } else {
-                this.originalSnapshotB = this.activeTimbre.clone();
-            }
+            this._setOriginalSnapshot(this.activeSlot, this.activeTimbre);
             this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
             return true;
         } catch (err) {
@@ -5111,44 +5015,56 @@ class App {
         }
     }
 
-    applyRemoteParamChange(key, val, slot = 0) {
-        const targetTimbre = (slot === 1) ? this.timbreB : this.timbreA;
-        targetTimbre.setValue(key, val);
+    _applyIncomingParamToUI(paramKey, value, slot = 0, { autoSwitchTab = false, updateSync = false } = {}) {
+        const targetTimbre = this.getTimbre(slot);
+        targetTimbre.setValue(paramKey, value);
 
-        if (slot === this.activeSlot) {
-            if (key === 'ARP_OFF_ON' && val) {
-                this.resetAuditionLatch(slot);
+        if (slot !== this.activeSlot) return;
+
+        if (paramKey === 'ARP_OFF_ON' && value) {
+            this.resetAuditionLatch(slot);
+        }
+
+        const oscMatch = paramKey.match(/^OSC(\d)_/);
+        const envMatch = paramKey.match(/^ENV(\d)_/);
+        const envNum = envMatch ? parseInt(envMatch[1], 10) : 0;
+
+        if (autoSwitchTab) {
+            this._autoSwitchTabFor(paramKey);
+        }
+
+        if (typeof document !== 'undefined') {
+            if (oscMatch) {
+                const oscCard = document.querySelector('.osc-unified-card');
+                if (oscCard && oscCard.refresh) oscCard.refresh();
             }
-            this.refreshVisualizerFor(key);
-
-            const oscMatch = key.match(/^OSC(\d)_/);
-            const envMatch = key.match(/^ENV(\d)_/);
-            let envNum = envMatch ? parseInt(envMatch[1], 10) : 0;
-            if (!envNum && (key === 'ENV1_VCA_VEL_SENS' || key === 'ENV1_RESET')) envNum = 1;
-            if (!envNum && (key === 'ENV2_FLT_VEL_SENS' || key === 'ENV2_RESET')) envNum = 2;
-            if (!envNum && key === 'ENV3_RESET') envNum = 3;
-
-            if (typeof document !== 'undefined') {
-                if (oscMatch) {
-                    const oscCard = document.querySelector('.osc-unified-card');
-                    if (oscCard && oscCard.refresh) oscCard.refresh();
-                }
-                if (envNum) {
-                    const envCard = document.querySelector('.env-unified-card');
-                    if (envCard && envCard.refresh) envCard.refresh();
-                }
-
-                const el = (this._paramControlMap && this._paramControlMap.get(key)) ||
-                    document.querySelector(`.editor-grid [data-param="${key}"], #prog-tempo-container [data-param="${key}"]`);
-                if (el && el.refresh) {
-                    el.refresh();
-                }
+            if (envNum) {
+                const envCard = document.querySelector('.env-unified-card');
+                if (envCard && envCard.refresh) envCard.refresh();
             }
+
+            const el = (this._paramControlMap && this._paramControlMap.get(paramKey)) ||
+                document.querySelector(`.editor-grid [data-param="${paramKey}"], #prog-tempo-container [data-param="${paramKey}"]`);
+            if (el && el.refresh) {
+                el.refresh();
+            }
+        }
+
+        this.refreshVisualizerFor(paramKey);
+        if (updateSync && typeof document !== 'undefined') {
+            this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
         }
     }
 
+    applyRemoteParamChange(key, val, slot = 0) {
+        this._applyIncomingParamToUI(key, val, slot, {
+            autoSwitchTab: false,
+            updateSync: false
+        });
+    }
+
     applyRemoteMetaChange(slot, name, category) {
-        const targetTimbre = (slot === 1) ? this.timbreB : this.timbreA;
+        const targetTimbre = this.getTimbre(slot);
         if (name !== undefined) targetTimbre.name = name;
         if (category !== undefined) targetTimbre.category = category;
 
@@ -5161,15 +5077,10 @@ class App {
     }
 
     applyRemotePatchLoaded(slot, rawData, source) {
-        const targetTimbre = (slot === 1) ? this.timbreB : this.timbreA;
+        const targetTimbre = this.getTimbre(slot);
         const bytes = (rawData instanceof Uint8Array) ? rawData : new Uint8Array(rawData);
         targetTimbre.rawData = bytes;
-
-        if (slot === 1) {
-            this.originalSnapshotB = this.timbreB.clone();
-        } else {
-            this.originalSnapshotA = this.timbreA.clone();
-        }
+        this._setOriginalSnapshot(slot, targetTimbre);
 
         if (slot === this.activeSlot) {
             this.undoStack = [];
@@ -5261,7 +5172,6 @@ class App {
         this.updateUndoRedoUI();
         this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
         this.refreshEditorControls();
-        this.updateActivePartIndicator();
         this.updateConnectionStatus();
         this.showNotification('Synchronized settings from leader window', 'info');
     }
