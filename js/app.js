@@ -374,7 +374,7 @@ class App {
 
             if (slot === this.activeSlot) {
                 if (paramKey === 'ARP_OFF_ON' && value) {
-                    this.resetAuditionLatch();
+                    this.resetAuditionLatch(slot);
                 }
                 // If it's an oscillator parameter, switch active oscillator tab if needed
                 const oscMatch = paramKey.match(/^OSC(\d)_/);
@@ -2397,7 +2397,7 @@ class App {
             muteBtn.title = `Mute Osc ${i}`;
             muteBtn.onclick = (e) => {
                 e.stopPropagation();
-                this.toggleSoloMute('osc' + this.selectedOsc, 'mute');
+                this.toggleSoloMute('osc' + i, 'mute');
                 updateOscSelection();
             };
 
@@ -2408,7 +2408,7 @@ class App {
             soloBtn.title = `Solo Osc ${i}`;
             soloBtn.onclick = (e) => {
                 e.stopPropagation();
-                this.toggleSoloMute('osc' + this.selectedOsc, 'solo');
+                this.toggleSoloMute('osc' + i, 'solo');
                 updateOscSelection();
             };
 
@@ -5117,7 +5117,7 @@ class App {
 
         if (slot === this.activeSlot) {
             if (key === 'ARP_OFF_ON' && val) {
-                this.resetAuditionLatch();
+                this.resetAuditionLatch(slot);
             }
             this.refreshVisualizerFor(key);
 

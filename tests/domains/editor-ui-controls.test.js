@@ -1136,8 +1136,11 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
         assertEqual(oscApp.activeTimbre.getValue('MIX_OSC2'), 80, 'Osc 2 level restored when Osc 1 solo cancelled by mute');
 
         // Selecting solo on Osc 2 does not cancel mute on Osc 1
+        const oscSoloMuteGroups = oscOnlyPanel.querySelectorAll('.solo-mute-group');
+        const osc2SoloBtn = oscSoloMuteGroups[1] ? oscSoloMuteGroups[1].querySelector('.btn-solo') : null;
+        assert(osc2SoloBtn !== null, 'Osc 2 solo button exists');
         oscApp.selectedOsc = 2;
-        oscSoloBtn.click();
+        osc2SoloBtn.click();
         assertEqual(oscApp.soloState.osc2, true, 'Osc 2 soloState is true');
         assertEqual(oscApp.muteState.osc1, true, 'Osc 1 muteState is preserved when soloing Osc 2');
     });
