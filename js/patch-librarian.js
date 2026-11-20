@@ -16,15 +16,30 @@ class PatchLibrarian {
         this._listeners = new Map();
     }
 
+    /**
+     * Subscribes a listener callback to a librarian event.
+     * @param {string} event
+     * @param {Function} cb
+     */
     on(event, cb) {
         if (!this._listeners.has(event)) this._listeners.set(event, new Set());
         this._listeners.get(event).add(cb);
     }
 
+    /**
+     * Unsubscribes a listener callback from a librarian event.
+     * @param {string} event
+     * @param {Function} cb
+     */
     off(event, cb) {
         if (this._listeners.has(event)) this._listeners.get(event).delete(cb);
     }
 
+    /**
+     * Emits an event to all registered listeners.
+     * @param {string} event
+     * @param {*} data
+     */
     emit(event, data) {
         if (this._listeners.has(event)) {
             for (const cb of this._listeners.get(event)) {
@@ -33,10 +48,15 @@ class PatchLibrarian {
         }
     }
 
+    /** Currently selected MM2Bank instance, or null if none exists. */
     get activeBank() {
         return this.banks[this.activeBankIndex] || null;
     }
 
+    /**
+     * Initializes IndexedDB, loads persisted banks (or creates defaults), and emits 'update'.
+     * @returns {Promise<void>}
+     */
     async init() {
         await this.initDB();
         await this.loadAllBanks();
@@ -47,6 +67,10 @@ class PatchLibrarian {
         this.emit('update', { type: 'ready' });
     }
 
+    /**
+     * Opens the IndexedDB database, falling back gracefully when unavailable.
+     * @returns {Promise<IDBDatabase|null>}
+     */
     initDB() {
         return new Promise((resolve) => {
             if (typeof indexedDB === 'undefined') {
@@ -78,6 +102,7 @@ class PatchLibrarian {
         });
     }
 
+    /** Populates the librarian with three empty default banks. */
     createDefaultBanks() {
         this.banks = [
             new MM2Bank('Bank 1', 0),
@@ -86,6 +111,54 @@ class PatchLibrarian {
         ];
     }
 
+    /**
+     * Reconstructs MM2Bank instances from serialized storage records.
+     * @param {Array<{ name: string, index?: number, programs?: Array }>} records
+     * @param {boolean} useRecordIndex Whether to prefer `rec.index` over array position
+     * @returns {MM2Bank[]}
+     */
+    _hydrateBanks(records, useRecordIndex = false) {
+        return records.map((rec, idx) => {
+            const bankIndex = (useRecordIndex && rec.index !== undefined) ? rec.index : idx;
+            const bank = new MM2Bank(rec.name, bankIndex);
+            if (rec.programs) {
+                for (const pBytes of rec.programs) {
+                    bank.addProgram(new MM2Program(new Uint8Array(pBytes)));
+                }
+            }
+            return bank;
+        });
+    }
+
+    /**
+     * Re-numbers bank `.index` properties sequentially after add/remove/reorder.
+     * @param {MM2Bank[]} banks
+     */
+    static _reindexBanks(banks) {
+        for (let i = 0; i < banks.length; i++) {
+            banks[i].index = i;
+        }
+    }
+
+    /** Re-numbers this librarian's banks sequentially. */
+    _reindexBanks() {
+        PatchLibrarian._reindexBanks(this.banks);
+    }
+
+    /**
+     * Sanitizes a bank or program name for safe use in a download filename.
+     * @param {string} name
+     * @param {string} fallback
+     * @returns {string}
+     */
+    _sanitizeFilename(name, fallback) {
+        return (name || fallback).replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    /**
+     * Loads all banks from IndexedDB (or localStorage fallback) into memory.
+     * @returns {Promise<void>}
+     */
     async loadAllBanks() {
         if (!this.db) {
             // LocalStorage fallback
@@ -94,15 +167,7 @@ class PatchLibrarian {
                     const raw = window.localStorage.getItem('mm2_librarian_banks');
                     if (raw) {
                         const parsed = JSON.parse(raw);
-                        this.banks = parsed.map((bData, idx) => {
-                            const bank = new MM2Bank(bData.name, idx);
-                            if (bData.programs) {
-                                for (const pBytes of bData.programs) {
-                                    bank.addProgram(new MM2Program(new Uint8Array(pBytes)));
-                                }
-                            }
-                            return bank;
-                        });
+                        this.banks = this._hydrateBanks(parsed, false);
                     }
                 } catch (e) {
                     console.warn('Failed to load banks from localStorage:', e);
@@ -120,19 +185,14 @@ class PatchLibrarian {
                     const records = req.result || [];
                     if (records.length > 0) {
                         records.sort((a, b) => a.index - b.index);
-                        this.banks = records.map((rec) => {
-                            const bank = new MM2Bank(rec.name, rec.index);
-                            if (rec.programs) {
-                                for (const pBytes of rec.programs) {
-                                    bank.addProgram(new MM2Program(new Uint8Array(pBytes)));
-                                }
-                            }
-                            return bank;
-                        });
+                        this.banks = this._hydrateBanks(records, true);
                     }
                     resolve();
                 };
-                req.onerror = () => resolve();
+                req.onerror = (e) => {
+                    console.warn('Failed to load banks from IndexedDB:', e);
+                    resolve();
+                };
             } catch (e) {
                 console.warn('Error reading from IndexedDB:', e);
                 resolve();
@@ -140,6 +200,10 @@ class PatchLibrarian {
         });
     }
 
+    /**
+     * Persists all banks to IndexedDB (or localStorage fallback) and emits 'update'.
+     * @returns {Promise<void>}
+     */
     async saveAllBanks() {
         this.emit('update', { type: 'save' });
 
@@ -176,7 +240,10 @@ class PatchLibrarian {
                     }
                 };
                 tx.oncomplete = () => resolve();
-                tx.onerror = () => resolve();
+                tx.onerror = (e) => {
+                    console.warn('Failed to write banks to IndexedDB:', e);
+                    resolve();
+                };
             } catch (e) {
                 console.warn('Failed to write to IndexedDB:', e);
                 resolve();
@@ -184,6 +251,11 @@ class PatchLibrarian {
         });
     }
 
+    /**
+     * Appends a new empty bank and persists changes.
+     * @param {string} name
+     * @returns {MM2Bank}
+     */
     addBank(name = `Bank ${this.banks.length + 1}`) {
         const newBank = new MM2Bank(name, this.banks.length);
         this.banks.push(newBank);
@@ -191,6 +263,12 @@ class PatchLibrarian {
         return newBank;
     }
 
+    /**
+     * Renames the bank at `index` if non-empty and persists changes.
+     * @param {number} index
+     * @param {string} newName
+     * @returns {boolean}
+     */
     renameBank(index, newName) {
         if (index < 0 || index >= this.banks.length) return false;
         const trimmed = (newName || '').trim();
@@ -200,13 +278,16 @@ class PatchLibrarian {
         return true;
     }
 
+    /**
+     * Deletes the bank at `index` (keeping at least one bank) and updates active selection.
+     * @param {number} index
+     * @returns {boolean}
+     */
     removeBank(index) {
         if (this.banks.length <= 1) return false;
         if (index < 0 || index >= this.banks.length) return false;
         this.banks.splice(index, 1);
-        for (let i = 0; i < this.banks.length; i++) {
-            this.banks[i].index = i;
-        }
+        PatchLibrarian._reindexBanks(this.banks);
         if (this.activeBankIndex > index) {
             this.activeBankIndex--;
         } else if (this.activeBankIndex >= this.banks.length) {
@@ -227,9 +308,7 @@ class PatchLibrarian {
 
         const [item] = this.banks.splice(fromIndex, 1);
         this.banks.splice(toIndex, 0, item);
-        for (let i = 0; i < this.banks.length; i++) {
-            this.banks[i].index = i;
-        }
+        PatchLibrarian._reindexBanks(this.banks);
         this.activeBankIndex = toIndex;
         this.saveAllBanks();
         return true;
@@ -288,9 +367,9 @@ class PatchLibrarian {
         const dstBank = this.banks[targetBankIdx];
         if (!srcBank || !dstBank || !Array.isArray(progIndices)) return 0;
 
-        const sorted = [...new Set(progIndices)]
-            .filter(i => Number.isInteger(i) && i >= 0 && i < srcBank.length)
-            .sort((a, b) => a - b);
+        const sorted = typeof MM2Bank._normalizeIndexList === 'function'
+            ? MM2Bank._normalizeIndexList(progIndices, srcBank.length)
+            : [...new Set(progIndices)].filter(i => Number.isInteger(i) && i >= 0 && i < srcBank.length).sort((a, b) => a - b);
         if (sorted.length === 0) return 0;
 
         const indexSet = new Set(sorted);
@@ -354,18 +433,16 @@ class PatchLibrarian {
         // Cross-bank duplicate detection
         const allGroups = new Map();
         let totalDups = 0;
-        const duplicateItems = [];
 
         for (let b = 0; b < this.banks.length; b++) {
             const bank = this.banks[b];
             for (let p = 0; p < bank.programs.length; p++) {
                 const prog = bank.programs[p];
-                const key = soundOnly ? prog.computeSoundFingerprint() : prog.computeFullSignature();
+                const key = MM2Bank._getFingerprintKey(prog, soundOnly);
                 if (!allGroups.has(key)) {
                     allGroups.set(key, [{ bankIndex: b, progIndex: p, program: prog }]);
                 } else {
                     allGroups.get(key).push({ bankIndex: b, progIndex: p, program: prog });
-                    duplicateItems.push({ bankIndex: b, progIndex: p, program: prog });
                     totalDups++;
                 }
             }
@@ -417,7 +494,7 @@ class PatchLibrarian {
      */
     exportProgramFile(program, fileName = null, targetVersion = 3, fwId = SYSEX_V2_FW_ID) {
         const sysex = program.toSysEx(-1, targetVersion, fwId);
-        const cleanName = (program.name || 'patch').replace(/[^a-zA-Z0-9_-]/g, '_');
+        const cleanName = this._sanitizeFilename(program.name, 'patch');
         const finalName = fileName || `${cleanName}.MM2-PGM.syx`;
         PatchLibrarian.downloadBlob(sysex, finalName);
     }
@@ -429,7 +506,7 @@ class PatchLibrarian {
         const bank = this.banks[bankIndex];
         if (!bank || bank.length === 0) return false;
         const sysex = bank.toBankSysEx(targetVersion, fwId);
-        const cleanName = (bank.name || `bank_${bankIndex + 1}`).replace(/[^a-zA-Z0-9_-]/g, '_');
+        const cleanName = this._sanitizeFilename(bank.name, `bank_${bankIndex + 1}`);
         const finalName = fileName || `${cleanName}.MM2-BANK.syx`;
         PatchLibrarian.downloadBlob(sysex, finalName);
         return true;

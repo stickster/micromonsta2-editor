@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Librarian:** Clean up PatchLibrarian and TabSyncManager helpers and error logging.
 - **SysEx:** Clean up parameter specs, SysEx parser helpers, and bank utilities.
 
 ---

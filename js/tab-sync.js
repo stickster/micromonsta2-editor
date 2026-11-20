@@ -10,8 +10,13 @@ class TabSyncManager {
     static LEADER_LOCK_NAME = 'mm2_hardware_poll_leader';
     static FALLBACK_LEASE_KEY_ID = 'mm2_poll_leader_id';
     static FALLBACK_LEASE_KEY_TS = 'mm2_poll_leader_ts';
+    static FALLBACK_MSG_KEY = 'mm2_tab_sync_msg';
     static LEASE_TIMEOUT_MS = 20000;
 
+    /**
+     * @param {App} app Parent application instance
+     * @param {Object} [options] Optional overrides (`tabId`, `channelName`, `lockName`)
+     */
     constructor(app, options = {}) {
         this.app = app;
         this.tabId = options.tabId || `tab_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -29,28 +34,74 @@ class TabSyncManager {
         this.initLeaderElection();
     }
 
-    loadSetting() {
-        if (typeof window !== 'undefined' && window.localStorage) {
-            try {
-                const val = window.localStorage.getItem(TabSyncManager.SETTING_KEY);
-                if (val === null) return true; // Default ON
-                return val === 'true';
-            } catch (e) {
-                return true;
-            }
+    /**
+     * Safely reads a string value from `window.localStorage`.
+     * @param {string} key
+     * @returns {string|null}
+     */
+    _safeStorageGet(key) {
+        if (typeof window === 'undefined' || !window.localStorage) return null;
+        try {
+            return window.localStorage.getItem(key);
+        } catch (e) {
+            return null;
         }
-        return true;
     }
 
+    /**
+     * Safely writes a string value to `window.localStorage`.
+     * @param {string} key
+     * @param {string} value
+     */
+    _safeStorageSet(key, value) {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        try {
+            window.localStorage.setItem(key, value);
+        } catch (e) {}
+    }
+
+    /**
+     * Safely removes a key from `window.localStorage`.
+     * @param {string} key
+     */
+    _safeStorageRemove(key) {
+        if (typeof window === 'undefined' || !window.localStorage) return;
+        try {
+            window.localStorage.removeItem(key);
+        } catch (e) {}
+    }
+
+    /**
+     * Reads the current fallback leader lease record from `localStorage`.
+     * @returns {{ leaderId: string|null, timestamp: number, isExpired: boolean }}
+     */
+    _readFallbackLease() {
+        const leaderId = this._safeStorageGet(TabSyncManager.FALLBACK_LEASE_KEY_ID);
+        const timestamp = parseInt(this._safeStorageGet(TabSyncManager.FALLBACK_LEASE_KEY_TS) || '0', 10);
+        const isExpired = !leaderId || (Date.now() - timestamp) > TabSyncManager.LEASE_TIMEOUT_MS;
+        return { leaderId, timestamp, isExpired };
+    }
+
+    /**
+     * Loads whether cross-tab sync is enabled from `localStorage` (defaults to true).
+     * @returns {boolean}
+     */
+    loadSetting() {
+        const val = this._safeStorageGet(TabSyncManager.SETTING_KEY);
+        if (val === null) return true; // Default ON
+        return val === 'true';
+    }
+
+    /**
+     * Enables or disables cross-tab synchronization and persists the choice.
+     * @param {boolean} enabled
+     */
     setEnabled(enabled) {
         this.enabled = !!enabled;
-        if (typeof window !== 'undefined' && window.localStorage) {
-            try {
-                window.localStorage.setItem(TabSyncManager.SETTING_KEY, String(this.enabled));
-            } catch (e) {}
-        }
+        this._safeStorageSet(TabSyncManager.SETTING_KEY, String(this.enabled));
     }
 
+    /** Initializes BroadcastChannel or falls back to `localStorage` events. */
     initChannel() {
         if (typeof BroadcastChannel !== 'undefined') {
             try {
@@ -67,10 +118,11 @@ class TabSyncManager {
         }
     }
 
+    /** Registers a `storage` event listener for browsers without BroadcastChannel. */
     setupStorageFallback() {
         if (typeof window === 'undefined' || !window.addEventListener) return;
         this._storageListener = (e) => {
-            if (e.key === 'mm2_tab_sync_msg' && e.newValue) {
+            if (e.key === TabSyncManager.FALLBACK_MSG_KEY && e.newValue) {
                 try {
                     const data = JSON.parse(e.newValue);
                     this.handleIncomingMessage(data);
@@ -80,6 +132,7 @@ class TabSyncManager {
         window.addEventListener('storage', this._storageListener);
     }
 
+    /** Starts Web Locks leader election or falls back to a localStorage lease. */
     initLeaderElection() {
         if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
             this.acquireWebLock();
@@ -88,6 +141,7 @@ class TabSyncManager {
         }
     }
 
+    /** Attempts to acquire the exclusive hardware polling Web Lock. */
     async acquireWebLock() {
         try {
             if (navigator.locks && typeof navigator.locks.query === 'function') {
@@ -114,6 +168,7 @@ class TabSyncManager {
         }
     }
 
+    /** Runs periodic `localStorage` lease checks when Web Locks are unavailable. */
     initFallbackLeaderElection() {
         if (typeof window === 'undefined' || !window.localStorage) {
             this.setLeadership(true);
@@ -122,19 +177,11 @@ class TabSyncManager {
 
         const checkLease = () => {
             const now = Date.now();
-            let currentLeader = null;
-            let currentTs = 0;
-            try {
-                currentLeader = window.localStorage.getItem(TabSyncManager.FALLBACK_LEASE_KEY_ID);
-                currentTs = parseInt(window.localStorage.getItem(TabSyncManager.FALLBACK_LEASE_KEY_TS) || '0', 10);
-            } catch (e) {}
+            const { leaderId, isExpired } = this._readFallbackLease();
 
-            const isExpired = !currentLeader || (now - currentTs) > TabSyncManager.LEASE_TIMEOUT_MS;
-            if (currentLeader === this.tabId || isExpired) {
-                try {
-                    window.localStorage.setItem(TabSyncManager.FALLBACK_LEASE_KEY_ID, this.tabId);
-                    window.localStorage.setItem(TabSyncManager.FALLBACK_LEASE_KEY_TS, String(now));
-                } catch (e) {}
+            if (leaderId === this.tabId || isExpired) {
+                this._safeStorageSet(TabSyncManager.FALLBACK_LEASE_KEY_ID, this.tabId);
+                this._safeStorageSet(TabSyncManager.FALLBACK_LEASE_KEY_TS, String(now));
                 if (!this.isLeader) {
                     this.setLeadership(true);
                 }
@@ -149,21 +196,18 @@ class TabSyncManager {
         this._fallbackLeaseInterval = setInterval(checkLease, 5000);
     }
 
+    /** True when this tab is known to be a follower (either elected or via active fallback lease). */
     get isFollower() {
         if (this.isLeader === false) return true;
         if (this.isLeader === true) return false;
-        if (typeof window !== 'undefined' && window.localStorage) {
-            try {
-                const currentLeader = window.localStorage.getItem(TabSyncManager.FALLBACK_LEASE_KEY_ID);
-                const currentTs = parseInt(window.localStorage.getItem(TabSyncManager.FALLBACK_LEASE_KEY_TS) || '0', 10);
-                if (currentLeader && currentLeader !== this.tabId && (Date.now() - currentTs) <= TabSyncManager.LEASE_TIMEOUT_MS) {
-                    return true;
-                }
-            } catch (e) {}
-        }
-        return false;
+        const { leaderId, isExpired } = this._readFallbackLease();
+        return !!(leaderId && leaderId !== this.tabId && !isExpired);
     }
 
+    /**
+     * Updates polling leadership status and requests leader state when becoming a follower.
+     * @param {boolean} isLeader
+     */
     setLeadership(isLeader) {
         if (this.isLeader === isLeader) return;
         this.isLeader = isLeader;
@@ -175,11 +219,17 @@ class TabSyncManager {
         }
     }
 
+    /** Broadcasts a request for the active leader's current state snapshot. */
     requestLeaderState() {
         if (!this.enabled || this.isLeader) return;
         this.broadcast('REQUEST_LEADER_STATE', {});
     }
 
+    /**
+     * Broadcasts a sync message to all other tabs unless suppressed by remote application.
+     * @param {string} type
+     * @param {Object} [payload]
+     */
     broadcast(type, payload = {}) {
         if (!this.enabled || this._isApplyingRemoteSync) return;
         const message = {
@@ -196,16 +246,107 @@ class TabSyncManager {
                 console.warn('[TabSync] Failed to postMessage:', e);
             }
         } else if (typeof window !== 'undefined' && window.localStorage) {
-            try {
-                window.localStorage.setItem('mm2_tab_sync_msg', JSON.stringify(message));
-                // Clear immediately after to allow identical consecutive messages
-                setTimeout(() => {
-                    try { window.localStorage.removeItem('mm2_tab_sync_msg'); } catch (e) {}
-                }, 50);
-            } catch (e) {}
+            this._safeStorageSet(TabSyncManager.FALLBACK_MSG_KEY, JSON.stringify(message));
+            // Clear immediately after to allow identical consecutive messages
+            setTimeout(() => {
+                this._safeStorageRemove(TabSyncManager.FALLBACK_MSG_KEY);
+            }, 50);
         }
     }
 
+    /**
+     * Updates remote probe suppression state on the follower's MIDI manager.
+     * @param {boolean} isProbing
+     * @param {number} [timeoutMs=3000]
+     */
+    _applyRemoteProbing(isProbing, timeoutMs = 3000) {
+        const midi = this.app && this.app.midi;
+        if (!midi || this.isLeader) return;
+        if (typeof midi.setRemoteProbing === 'function') {
+            midi.setRemoteProbing(isProbing, timeoutMs);
+            return;
+        }
+        clearTimeout(midi._remoteProbeTimeout);
+        midi._isProbing = !!isProbing;
+        if (isProbing) {
+            midi._remoteProbeTimeout = setTimeout(() => {
+                if (this.app && this.app.midi) {
+                    this.app.midi._isProbing = false;
+                }
+            }, timeoutMs);
+        }
+    }
+
+    /**
+     * Responds to a follower's `REQUEST_LEADER_STATE` with the leader's current snapshot.
+     * @param {Object} data
+     */
+    _handleLeaderStateRequest(data) {
+        if (!this.isLeader || !this.app) return;
+        const snapshot = typeof this.app.getLeaderStateSnapshot === 'function'
+            ? this.app.getLeaderStateSnapshot()
+            : {
+                mode: this.app.synthTimbralMode,
+                timbreA: this.app.timbreA ? Array.from(this.app.timbreA.rawData) : null,
+                timbreB: this.app.timbreB ? Array.from(this.app.timbreB.rawData) : null,
+                hardwareResponsive: this.app.midi ? this.app.midi.hardwareResponsive : null,
+                liveSync: this.app.midi ? this.app.midi.liveSync : false
+            };
+        this.broadcast('SYNC_LEADER_STATE', {
+            targetTabId: data.senderTabId,
+            ...snapshot
+        });
+    }
+
+    /**
+     * Dispatches a validated remote sync message to the appropriate handler.
+     * @param {Object} data
+     */
+    _dispatchRemoteMessage(data) {
+        const app = this.app;
+        switch (data.type) {
+            case 'PARAM_CHANGE':
+                app?.applyRemoteParamChange?.(data.key, data.val, data.slot);
+                break;
+            case 'PATCH_META_CHANGE':
+                app?.applyRemoteMetaChange?.(data.slot, data.name, data.category);
+                break;
+            case 'PATCH_LOADED':
+                app?.applyRemotePatchLoaded?.(data.slot, data.rawData, data.source);
+                break;
+            case 'LIBRARIAN_CHANGED':
+                app?.applyRemoteLibrarianChange?.();
+                break;
+            case 'TIMBRAL_MODE_CHANGED':
+                app?.applyRemoteTimbralMode?.(data.mode);
+                break;
+            case 'HARDWARE_STATUS':
+                app?.applyRemoteHardwareStatus?.(data.responsive);
+                break;
+            case 'LIVE_SYNC_CHANGED':
+                app?.applyRemoteLiveSync?.(data.liveSync);
+                break;
+            case 'HARDWARE_PROBE_START':
+                this._applyRemoteProbing(true, (data && data.timeoutMs) || 3000);
+                break;
+            case 'HARDWARE_PROBE_END':
+                this._applyRemoteProbing(false);
+                break;
+            case 'REQUEST_LEADER_STATE':
+                this._handleLeaderStateRequest(data);
+                break;
+            case 'SYNC_LEADER_STATE':
+                if ((!data.targetTabId || data.targetTabId === this.tabId) && !this.isLeader) {
+                    app?.applyLeaderState?.(data);
+                }
+                break;
+        }
+    }
+
+    /**
+     * Processes an incoming cross-tab sync payload while preventing echo loops.
+     * @param {Object} data
+     */
     handleIncomingMessage(data) {
         if (!this.enabled || !data || data.senderTabId === this.tabId) {
             return;
@@ -213,80 +354,7 @@ class TabSyncManager {
 
         this._isApplyingRemoteSync = true;
         try {
-            switch (data.type) {
-                case 'PARAM_CHANGE':
-                    if (this.app && typeof this.app.applyRemoteParamChange === 'function') {
-                        this.app.applyRemoteParamChange(data.key, data.val, data.slot);
-                    }
-                    break;
-                case 'PATCH_META_CHANGE':
-                    if (this.app && typeof this.app.applyRemoteMetaChange === 'function') {
-                        this.app.applyRemoteMetaChange(data.slot, data.name, data.category);
-                    }
-                    break;
-                case 'PATCH_LOADED':
-                    if (this.app && typeof this.app.applyRemotePatchLoaded === 'function') {
-                        this.app.applyRemotePatchLoaded(data.slot, data.rawData, data.source);
-                    }
-                    break;
-                case 'LIBRARIAN_CHANGED':
-                    if (this.app && typeof this.app.applyRemoteLibrarianChange === 'function') {
-                        this.app.applyRemoteLibrarianChange();
-                    }
-                    break;
-                case 'TIMBRAL_MODE_CHANGED':
-                    if (this.app && typeof this.app.applyRemoteTimbralMode === 'function') {
-                        this.app.applyRemoteTimbralMode(data.mode);
-                    }
-                    break;
-                case 'HARDWARE_STATUS':
-                    if (this.app && typeof this.app.applyRemoteHardwareStatus === 'function') {
-                        this.app.applyRemoteHardwareStatus(data.responsive);
-                    }
-                    break;
-                case 'LIVE_SYNC_CHANGED':
-                    if (this.app && typeof this.app.applyRemoteLiveSync === 'function') {
-                        this.app.applyRemoteLiveSync(data.liveSync);
-                    }
-                    break;
-                case 'HARDWARE_PROBE_START':
-                    if (this.app && this.app.midi && !this.isLeader) {
-                        this.app.midi._isProbing = true;
-                        clearTimeout(this.app.midi._remoteProbeTimeout);
-                        this.app.midi._remoteProbeTimeout = setTimeout(() => {
-                            if (this.app && this.app.midi) {
-                                this.app.midi._isProbing = false;
-                            }
-                        }, (data && data.timeoutMs) || 3000);
-                    }
-                    break;
-                case 'HARDWARE_PROBE_END':
-                    if (this.app && this.app.midi && !this.isLeader) {
-                        clearTimeout(this.app.midi._remoteProbeTimeout);
-                        this.app.midi._isProbing = false;
-                    }
-                    break;
-                case 'REQUEST_LEADER_STATE':
-                    if (this.isLeader && this.app) {
-                        const payload = {
-                            targetTabId: data.senderTabId,
-                            mode: this.app.synthTimbralMode,
-                            timbreA: this.app.timbreA ? Array.from(this.app.timbreA.rawData) : null,
-                            timbreB: this.app.timbreB ? Array.from(this.app.timbreB.rawData) : null,
-                            hardwareResponsive: this.app.midi ? this.app.midi.hardwareResponsive : null,
-                            liveSync: this.app.midi ? this.app.midi.liveSync : false
-                        };
-                        this.broadcast('SYNC_LEADER_STATE', payload);
-                    }
-                    break;
-                case 'SYNC_LEADER_STATE':
-                    if ((!data.targetTabId || data.targetTabId === this.tabId) && !this.isLeader) {
-                        if (this.app && typeof this.app.applyLeaderState === 'function') {
-                            this.app.applyLeaderState(data);
-                        }
-                    }
-                    break;
-            }
+            this._dispatchRemoteMessage(data);
         } catch (err) {
             console.error('[TabSync] Error applying remote sync message:', err, data);
         } finally {
@@ -294,6 +362,7 @@ class TabSyncManager {
         }
     }
 
+    /** Releases locks, timers, storage leases, and listeners on teardown. */
     destroy() {
         if (this._releaseLock) {
             this._releaseLock();
@@ -303,13 +372,9 @@ class TabSyncManager {
             clearInterval(this._fallbackLeaseInterval);
             this._fallbackLeaseInterval = null;
         }
-        if (typeof window !== 'undefined' && window.localStorage) {
-            try {
-                if (window.localStorage.getItem(TabSyncManager.FALLBACK_LEASE_KEY_ID) === this.tabId) {
-                    window.localStorage.removeItem(TabSyncManager.FALLBACK_LEASE_KEY_ID);
-                    window.localStorage.removeItem(TabSyncManager.FALLBACK_LEASE_KEY_TS);
-                }
-            } catch (e) {}
+        if (this._safeStorageGet(TabSyncManager.FALLBACK_LEASE_KEY_ID) === this.tabId) {
+            this._safeStorageRemove(TabSyncManager.FALLBACK_LEASE_KEY_ID);
+            this._safeStorageRemove(TabSyncManager.FALLBACK_LEASE_KEY_TS);
         }
         if (this.channel) {
             try {
