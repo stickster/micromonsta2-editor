@@ -22,9 +22,7 @@ function validateSysEx(bytes) {
         if (bytes[i] > 127) return 0;
     }
 
-    if (len === SYSEX_V3_LEN) return 3;
-    if (len === SYSEX_V2_LEN) return 2;
-    return 0;
+    return len === SYSEX_V3_LEN ? 3 : 2;
 }
 
 /**
@@ -298,6 +296,9 @@ let INIT_SOUND_FINGERPRINT = null;
  * Represents a single MicroMonsta 2 sound program (Firmware v3, 216 bytes)
  */
 class MM2Program {
+    /**
+     * @param {Uint8Array|MM2Program|null} sourceData Optional raw SysEx bytes or program to initialize from
+     */
     constructor(sourceData = null) {
         this._data = new Uint8Array(SYSEX_V3_LEN);
         if (sourceData) {
@@ -353,15 +354,22 @@ class MM2Program {
         this._selected = !!val;
     }
 
+    /**
+     * Reads a parameter value from the program buffer.
+     * @param {string} key Parameter key defined in PARAM_MAP
+     * @returns {number}
+     */
     getValue(key) {
         const def = PARAM_MAP.get(key);
         if (!def) throw new Error(`Unknown parameter key: "${key}"`);
-        if (def.long) {
-            return (this._data[def.sysEx] << 7) + this._data[def.sysEx + 1];
-        }
-        return this._data[def.sysEx];
+        return readBytes(this._data, def.sysEx, def.long ? 2 : 1);
     }
 
+    /**
+     * Clamps and writes a parameter value to the program buffer.
+     * @param {string} key Parameter key defined in PARAM_MAP
+     * @param {number} value Raw parameter value
+     */
     setValue(key, value) {
         const def = PARAM_MAP.get(key);
         if (!def) throw new Error(`Unknown parameter key: "${key}"`);
@@ -370,12 +378,7 @@ class MM2Program {
         if (max < min) [min, max] = [max, min];
         const clamped = clamp(Math.round(value), min, max);
 
-        if (def.long) {
-            this._data[def.sysEx] = (clamped >> 7) & 127;
-            this._data[def.sysEx + 1] = clamped & 127;
-        } else {
-            this._data[def.sysEx] = clamped & 127;
-        }
+        writeBytes(this._data, def.sysEx, def.long ? 2 : 1, clamped);
         this._soundFingerprint = null;
     }
 
@@ -452,29 +455,54 @@ class MM2Program {
  * - Bank condensation
  */
 class MM2Bank {
+    /**
+     * @param {string} name Display name of the bank
+     * @param {number} index Zero-based bank index
+     */
     constructor(name = 'Bank 1', index = 0) {
         this.name = name;
         this.index = index;
         this.programs = [];
-        this._isReceiving = false;
     }
 
+    /**
+     * Deduplicates, validates, and sorts an array of program indices within [0, length).
+     * @param {number[]} indices Candidate indices
+     * @param {number} length Upper bound (exclusive)
+     * @returns {number[]}
+     */
+    static _normalizeIndexList(indices, length) {
+        if (!Array.isArray(indices) || indices.length === 0) return [];
+        return [...new Set(indices)]
+            .filter(i => Number.isInteger(i) && i >= 0 && i < length)
+            .sort((a, b) => a - b);
+    }
+
+    /**
+     * Computes the comparison key used for duplicate detection.
+     * @param {MM2Program} program
+     * @param {boolean} soundOnly If true, ignores name and category
+     * @returns {string}
+     */
+    static _getFingerprintKey(program, soundOnly = true) {
+        return soundOnly ? program.computeSoundFingerprint() : program.computeFullSignature();
+    }
+
+    /** Number of programs currently stored in the bank. */
     get length() {
         return this.programs.length;
     }
 
-    get isReceiving() {
-        return this._isReceiving;
-    }
-
-    set isReceiving(val) {
-        this._isReceiving = !!val;
-    }
-
+    /** Removes all programs from the bank. */
     clear() {
         this.programs = [];
     }
 
+    /**
+     * Appends a program (or raw SysEx data) to the bank and returns its index.
+     * @param {MM2Program|Uint8Array} program
+     * @returns {number}
+     */
     addProgram(program) {
         if (!(program instanceof MM2Program)) {
             program = new MM2Program(program);
@@ -483,16 +511,31 @@ class MM2Bank {
         return this.programs.length - 1;
     }
 
+    /**
+     * Returns the program at the given index, or null if out of bounds.
+     * @param {number} index
+     * @returns {MM2Program|null}
+     */
     getProgram(index) {
         return this.programs[index] || null;
     }
 
+    /**
+     * Replaces the program at the given index if within bounds.
+     * @param {number} index
+     * @param {MM2Program|Uint8Array} program
+     */
     setProgram(index, program) {
         if (index >= 0 && index < this.programs.length) {
             this.programs[index] = program instanceof MM2Program ? program : new MM2Program(program);
         }
     }
 
+    /**
+     * Removes and returns the program at the given index, or null if out of bounds.
+     * @param {number} index
+     * @returns {MM2Program|null}
+     */
     removeProgram(index) {
         if (index >= 0 && index < this.programs.length) {
             return this.programs.splice(index, 1)[0];
@@ -536,11 +579,8 @@ class MM2Bank {
      * pushing other programs down.
      */
     moveProgramsGroup(fromIndices, toIndex) {
-        if (!Array.isArray(fromIndices) || fromIndices.length === 0) return false;
         if (toIndex < 0 || toIndex >= this.programs.length) return false;
-        const sorted = [...new Set(fromIndices)]
-            .filter(i => Number.isInteger(i) && i >= 0 && i < this.programs.length)
-            .sort((a, b) => a - b);
+        const sorted = MM2Bank._normalizeIndexList(fromIndices, this.programs.length);
         if (sorted.length === 0) return false;
         if (sorted.length === 1) {
             return this.moveProgram(sorted[0], toIndex);
@@ -563,6 +603,10 @@ class MM2Bank {
         return true;
     }
 
+    /**
+     * Sorts programs alphabetically by name.
+     * @param {boolean} ascending
+     */
     sortByName(ascending = true) {
         this.programs.sort((a, b) => {
             const cmp = a.name.localeCompare(b.name);
@@ -570,6 +614,10 @@ class MM2Bank {
         });
     }
 
+    /**
+     * Sorts programs by category index, then alphabetically by name.
+     * @param {boolean} ascending
+     */
     sortByCategory(ascending = true) {
         this.programs.sort((a, b) => {
             const catDiff = a.category - b.category;
@@ -584,7 +632,7 @@ class MM2Bank {
      * {
      *   duplicatesFound: number,
      *   duplicateIndices: Set<number>, // Indices of items that are redundant duplicates
-     *   groups: Array<{ key: string, programs: Array<{ index: number, program: MM2Program }> }>
+     *   groups: Array<{ key: string, entries: Array<{ index: number, program: MM2Program }> }>
      * }
      */
     detectDuplicates(soundOnly = true) {
@@ -594,7 +642,7 @@ class MM2Bank {
 
         for (let i = 0; i < this.programs.length; i++) {
             const p = this.programs[i];
-            const key = soundOnly ? p.computeSoundFingerprint() : p.computeFullSignature();
+            const key = MM2Bank._getFingerprintKey(p, soundOnly);
             if (!groupMap.has(key)) {
                 groupMap.set(key, [{ index: i, program: p }]);
             } else {
@@ -631,7 +679,7 @@ class MM2Bank {
 
         for (let i = 0; i < this.programs.length; i++) {
             const p = this.programs[i];
-            const key = soundOnly ? p.computeSoundFingerprint() : p.computeFullSignature();
+            const key = MM2Bank._getFingerprintKey(p, soundOnly);
             if (seen.has(key)) {
                 removed++;
             } else {

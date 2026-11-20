@@ -491,7 +491,7 @@ const {
         { key: "DLY_TYPE", nrpn: 138, sysEx: 165, label: "Mode", title: "Delay Mode", values: ei },
         { key: "ARP_OFF_ON", nrpn: 140, sysEx: 167, label: "Enable", title: "Enable Arpeggiator", values: F },
         { key: "ARP_LATCH", nrpn: 141, sysEx: 168, label: "Latch", title: "Arpeggiator Latch", values: F },
-        { key: "ARP_OCTAVE", nrpn: 142, sysEx: 169, label: "Octs", title: "Arpeggiator Ocatve Spread", min: 0, max: 3, displayOffset: 1, default: 0 },
+        { key: "ARP_OCTAVE", nrpn: 142, sysEx: 169, label: "Octs", title: "Arpeggiator Octave Spread", min: 0, max: 3, displayOffset: 1, default: 0 },
         { key: "ARP_PTN_LENGTH", nrpn: 143, sysEx: 170, label: "Length", title: "Arpeggiator Pattern Length", min: 0, max: 15, displayOffset: 1, default: 15 },
         { key: "ARP_PTN_STEP01", nrpn: 144, sysEx: 171, label: "1", title: "Arpeggiator Note Step 1", values: S },
         { key: "ARP_PTN_STEP02", nrpn: 145, sysEx: 172, label: "2", title: "Arpeggiator Note Step 2", values: S },
@@ -680,52 +680,54 @@ const V2_NRPN_TO_PARAM = new Map();
     // NRPN 9..47 match v3 (LAY_CATEGORY .. FILTER_FM)
     for (const p of MM2_PARAMETERS) {
         if (p.nrpn !== undefined && p.nrpn >= 9 && p.nrpn <= 47) {
-            v2Entries.push([p.key, p.nrpn, !!p.long]);
+            v2Entries.push([p.key, p.nrpn]);
         }
     }
     v2Entries.push(
-        ['DRIVE_VOICE', 48, false],
-        ['ENV1_ATK', 49, false], ['ENV1_DCY', 50, false], ['ENV1_SUS', 51, false], ['ENV1_REL', 52, false],
-        ['ENV2_ATK', 53, false], ['ENV2_DCY', 54, false], ['ENV2_SUS', 55, false], ['ENV2_REL', 56, false],
-        ['ENV3_ATK', 57, false], ['ENV3_DCY', 58, false], ['ENV3_SUS', 59, false], ['ENV3_REL', 60, false],
-        ['LFO1_WAVE', 61, false], ['LFO1_SPEED', 62, true], ['LFO1_MODE', 63, false],
-        ['LFO2_WAVE', 64, false], ['LFO2_SPEED', 65, true], ['LFO2_MODE', 66, false],
-        ['LFO3_WAVE', 67, false], ['LFO3_SPEED', 68, true], ['LFO3_MODE', 69, false]
+        ['DRIVE_VOICE', 48],
+        ['ENV1_ATK', 49], ['ENV1_DCY', 50], ['ENV1_SUS', 51], ['ENV1_REL', 52],
+        ['ENV2_ATK', 53], ['ENV2_DCY', 54], ['ENV2_SUS', 55], ['ENV2_REL', 56],
+        ['ENV3_ATK', 57], ['ENV3_DCY', 58], ['ENV3_SUS', 59], ['ENV3_REL', 60],
+        ['LFO1_WAVE', 61], ['LFO1_SPEED', 62], ['LFO1_MODE', 63],
+        ['LFO2_WAVE', 64], ['LFO2_SPEED', 65], ['LFO2_MODE', 66],
+        ['LFO3_WAVE', 67], ['LFO3_SPEED', 68], ['LFO3_MODE', 69]
     );
     for (let m = 1; m <= 10; m++) {
         const base = 70 + (m - 1) * 3;
         v2Entries.push(
-            [`MTX${m}_SRC`, base, false],
-            [`MTX${m}_DST`, base + 1, false],
-            [`MTX${m}_AMT`, base + 2, true]
+            [`MTX${m}_SRC`, base],
+            [`MTX${m}_DST`, base + 1],
+            [`MTX${m}_AMT`, base + 2]
         );
     }
     v2Entries.push(
-        ['LAG_SRC1', 100, false], ['LAG_AMT1', 101, false],
-        ['MULT_A1', 102, false], ['MULT_B1', 103, false],
-        ['MULT_A2', 104, false], ['MULT_B2', 105, false],
+        ['LAG_SRC1', 100], ['LAG_AMT1', 101],
+        ['MULT_A1', 102], ['MULT_B1', 103],
+        ['MULT_A2', 104], ['MULT_B2', 105],
         // NRPN 106 unused (MORPH_KNOB uses CC 70 in v2.x)
-        ['IFX_EQ', 107, true], ['DLY_PARAM1', 108, true],
-        ['DLY_PARAM2', 109, false], ['DLY_PARAM3', 110, false],
-        ['REV_PARAM1', 111, false], ['REV_PARAM2', 112, false], ['REV_PARAM3', 113, false],
-        ['ARP_TYPE', 114, false], ['ARP_GATE', 115, false], ['ARP_SPEED', 116, false],
-        ['VCE_MODE', 117, false], ['VCE_UNISON', 118, false], ['PAN_MODE', 119, false],
-        ['ENV1_RESET', 120, false], ['ENV2_RESET', 121, false], ['ENV3_RESET', 122, false],
+        ['IFX_EQ', 107], ['DLY_PARAM1', 108],
+        ['DLY_PARAM2', 109], ['DLY_PARAM3', 110],
+        ['REV_PARAM1', 111], ['REV_PARAM2', 112], ['REV_PARAM3', 113],
+        ['ARP_TYPE', 114], ['ARP_GATE', 115], ['ARP_SPEED', 116],
+        ['VCE_MODE', 117], ['VCE_UNISON', 118], ['PAN_MODE', 119],
+        ['ENV1_RESET', 120], ['ENV2_RESET', 121], ['ENV3_RESET', 122],
         // NRPN 123 unused
-        ['OSC_PHASE_RESET', 124, false], ['FILTER_ALGO', 125, false],
-        ['FILTER_CHARACTER', 126, false], ['IFX_CHORUS', 127, false], ['DLY_TYPE', 128, false],
+        ['OSC_PHASE_RESET', 124], ['FILTER_ALGO', 125],
+        // FILTER_CHARACTER (NRPN 126) is kept for inbound v2 NRPN decoding (V2_NRPN_TO_PARAM);
+        // outbound sends are gated by V3_ONLY_PARAMS because v2/v3 character enums differ.
+        ['FILTER_CHARACTER', 126], ['IFX_CHORUS', 127], ['DLY_TYPE', 128],
         // NRPN 129 unused
-        ['ARP_OFF_ON', 130, false], ['ARP_LATCH', 131, false],
-        ['ARP_OCTAVE', 132, false], ['ARP_PTN_LENGTH', 133, false]
+        ['ARP_OFF_ON', 130], ['ARP_LATCH', 131],
+        ['ARP_OCTAVE', 132], ['ARP_PTN_LENGTH', 133]
     );
     for (let s = 1; s <= 16; s++) {
         const key = `ARP_PTN_STEP${String(s).padStart(2, '0')}`;
-        v2Entries.push([key, 133 + s, false]);
+        v2Entries.push([key, 133 + s]);
     }
-    for (const [key, nrpn, long] of v2Entries) {
+    for (const [key, nrpn] of v2Entries) {
         const def = PARAM_MAP.get(key);
         if (!def) continue;
-        V2_NRPN_MAP.set(key, { nrpn, long });
+        V2_NRPN_MAP.set(key, { nrpn, long: !!def.long });
         V2_NRPN_TO_PARAM.set(nrpn, def);
     }
 })();
