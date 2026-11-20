@@ -376,4 +376,34 @@ MM2TestRunner.register('Undo/Redo & Compare Buffer', async ({ assert, assertEqua
         assertEqual(pushUndoApp.activeTimbre.getValue('OSC1_SHAPE'), 0, 'Undo works after Push');
     });
 
+    await runSection('\n--- [70] Undo/Redo Tooltip Action Label Tests ---', async () => {
+        const mockUndoBtn = { disabled: true, title: 'Undo change (Ctrl+Z)' };
+        const mockRedoBtn = { disabled: true, title: 'Redo change (Ctrl+Y)' };
+        document.registerMockElement('btn-prog-undo', mockUndoBtn);
+        document.registerMockElement('btn-prog-redo', mockRedoBtn);
+
+        const tipApp = new App();
+        tipApp.updateUndoRedoUI();
+        assertEqual(mockUndoBtn.title, 'Undo change (Ctrl+Z)', 'Empty undo stack shows default undo tooltip');
+        assertEqual(mockRedoBtn.title, 'Redo change (Ctrl+Y)', 'Empty redo stack shows default redo tooltip');
+
+        tipApp.onParameterChanged('OSC1_SHAPE', 42, { isFinal: true });
+        const shapeLabel = PARAM_MAP.get('OSC1_SHAPE').label;
+        assertEqual(mockUndoBtn.disabled, false, 'Undo button enabled after parameter change');
+        assertEqual(mockUndoBtn.title, `Undo: ${shapeLabel} (Ctrl+Z)`, 'Undo tooltip shows last undo-able parameter label');
+
+        tipApp.beginUndoGroup('Reset Osc 1');
+        tipApp.onParameterChanged('OSC1_ALGO', 2, { isFinal: true });
+        tipApp.endUndoGroup();
+        assertEqual(mockUndoBtn.title, 'Undo: Reset Osc 1 (Ctrl+Z)', 'Undo tooltip shows last undo-able group label');
+
+        tipApp.undo();
+        assertEqual(mockUndoBtn.title, `Undo: ${shapeLabel} (Ctrl+Z)`, 'Undo tooltip updates to previous action after undo');
+        assertEqual(mockRedoBtn.title, 'Redo: Reset Osc 1 (Ctrl+Y)', 'Redo tooltip shows undone action label');
+
+        tipApp.undo();
+        assertEqual(mockUndoBtn.disabled, true, 'Undo button disabled when stack is empty');
+        assertEqual(mockUndoBtn.title, 'Undo change (Ctrl+Z)', 'Undo tooltip resets to default when stack is empty');
+    });
+
 });

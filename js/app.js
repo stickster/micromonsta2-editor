@@ -885,6 +885,13 @@ class App {
         this._applyHistoryStep(true);
     }
 
+    _getHistoryActionLabel(action) {
+        if (!action) return '';
+        if (action.type === 'part-snapshot') return action.label || 'Part Change';
+        if (action.type === 'bank-snapshot') return action.label || 'Bank Change';
+        return action.label || (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get(action.key)?.label) || action.key || 'Change';
+    }
+
     _applyHistoryStep(isRedo) {
         const sourceStack = isRedo ? this.redoStack : this.undoStack;
         const targetStack = isRedo ? this.undoStack : this.redoStack;
@@ -898,14 +905,15 @@ class App {
         }
 
         const prefix = isRedo ? 'Redo' : 'Undo';
+        const actionLabel = this._getHistoryActionLabel(action);
         if (action.type === 'part-snapshot') {
             const rawData = isRedo ? action.newRawData : action.prevRawData;
-            this._applyPartSnapshot(action.slot, rawData, isRedo ? 'redo' : 'undo', `${prefix}: ${action.label || 'Part Change'}`);
+            this._applyPartSnapshot(action.slot, rawData, isRedo ? 'redo' : 'undo', `${prefix}: ${actionLabel}`);
             return;
         }
         if (action.type === 'bank-snapshot') {
             const programs = isRedo ? action.newPrograms : action.prevPrograms;
-            this._applyBankSnapshot(action.bankIndex, programs, `${prefix}: ${action.label || 'Bank Change'}`);
+            this._applyBankSnapshot(action.bankIndex, programs, `${prefix}: ${actionLabel}`);
             return;
         }
 
@@ -931,8 +939,7 @@ class App {
 
         this.refreshEditorControls();
         this.updateUndoRedoUI();
-        const label = action.label || (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get(action.key)?.label) || action.key;
-        this.showNotification(`${prefix}: ${label}`, 'info');
+        this.showNotification(`${prefix}: ${actionLabel}`, 'info');
     }
 
     _recordBankUndo(bankIndex, prevPrograms, newPrograms, label) {
@@ -969,8 +976,24 @@ class App {
         if (typeof document === 'undefined') return;
         const btnUndo = document.getElementById('btn-prog-undo');
         const btnRedo = document.getElementById('btn-prog-redo');
-        if (btnUndo) btnUndo.disabled = this.undoStack.length === 0;
-        if (btnRedo) btnRedo.disabled = this.redoStack.length === 0;
+        if (btnUndo) {
+            btnUndo.disabled = this.undoStack.length === 0;
+            if (this.undoStack.length > 0) {
+                const label = this._getHistoryActionLabel(this.undoStack[this.undoStack.length - 1]);
+                btnUndo.title = `Undo: ${label} (Ctrl+Z)`;
+            } else {
+                btnUndo.title = 'Undo change (Ctrl+Z)';
+            }
+        }
+        if (btnRedo) {
+            btnRedo.disabled = this.redoStack.length === 0;
+            if (this.redoStack.length > 0) {
+                const label = this._getHistoryActionLabel(this.redoStack[this.redoStack.length - 1]);
+                btnRedo.title = `Redo: ${label} (Ctrl+Y)`;
+            } else {
+                btnRedo.title = 'Redo change (Ctrl+Y)';
+            }
+        }
     }
 
     /**

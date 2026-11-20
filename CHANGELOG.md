@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Editor:** Show last undo-able and redo-able action in Undo/Redo tooltips.
+
 ### Fixed
 - **UI:** Close inline knob value editor when double-clicking knob to reset.
 - **Editor:** Escape bank and program names in librarian and duplicate modal HTML.
