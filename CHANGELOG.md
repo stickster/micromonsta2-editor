@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Tab Sync:** Transition initial fallback leadership from `null` to `false` when lease is held.
+
 ### Changed
 - **Librarian:** Clean up PatchLibrarian and TabSyncManager helpers and error logging.
 - **SysEx:** Clean up parameter specs, SysEx parser helpers, and bank utilities.

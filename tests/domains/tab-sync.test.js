@@ -413,4 +413,43 @@ MM2TestRunner.register('Cross-Tab Synchronization', async ({ assert, assertEqual
         followerSync.destroy();
     });
 
+    await runSection('\n--- [50] Fallback Leader Election Initial Follower Transition Tests ---', async () => {
+        const prevLocks = navigator.locks;
+        try {
+            Object.defineProperty(navigator, 'locks', {
+                value: undefined,
+                configurable: true
+            });
+        } catch (e) {
+            navigator.locks = undefined;
+        }
+
+        const now = Date.now();
+        window.localStorage.setItem(TabSyncManager.FALLBACK_LEASE_KEY_ID, 'existing_leader_tab');
+        window.localStorage.setItem(TabSyncManager.FALLBACK_LEASE_KEY_TS, String(now));
+
+        const followerApp = new App();
+        if (followerApp.tabSync) followerApp.tabSync.destroy();
+        let leadershipApplied = null;
+        followerApp.midi.setLeaderStatus = (val) => { leadershipApplied = val; };
+
+        const sync = new TabSyncManager(followerApp, { tabId: 'tab_new_follower', channelName: 'test-chan-50' });
+
+        assertEqual(sync.isLeader, false, 'Fallback election transitions initial isLeader from null to false when lease is held');
+        assertEqual(sync.isFollower, true, 'isFollower is true immediately when another tab holds the fallback lease');
+        assertEqual(leadershipApplied, false, 'setLeadership(false) notifies midi.setLeaderStatus(false) on initial fallback check');
+
+        sync.destroy();
+        window.localStorage.removeItem(TabSyncManager.FALLBACK_LEASE_KEY_ID);
+        window.localStorage.removeItem(TabSyncManager.FALLBACK_LEASE_KEY_TS);
+        try {
+            Object.defineProperty(navigator, 'locks', {
+                value: prevLocks,
+                configurable: true
+            });
+        } catch (e) {
+            navigator.locks = prevLocks;
+        }
+    });
+
 });

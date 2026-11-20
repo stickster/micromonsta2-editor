@@ -186,7 +186,7 @@ class TabSyncManager {
                     this.setLeadership(true);
                 }
             } else {
-                if (this.isLeader) {
+                if (this.isLeader !== false) {
                     this.setLeadership(false);
                 }
             }
