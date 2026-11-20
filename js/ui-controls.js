@@ -12,16 +12,294 @@
  */
 
 // Single-Color Line-Drawing SVG Icons for UI Actions
-const ICON_COPY_SVG = `<svg class="icon-line" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="9" height="9" rx="1.5"></rect><path d="M11 2.5H3.5A1.5 1.5 0 0 0 2 4v7.5"></path></svg>`;
-const ICON_PASTE_SVG = `<svg class="icon-line" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 3H4a1.5 1.5 0 0 0-1.5 1.5v9A1.5 1.5 0 0 0 4 15h8a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 12 3h-1.5"></path><rect x="5.5" y="1" width="5" height="3" rx="1"></rect><path d="M8 7v5M5.5 9.5 8 12l2.5-2.5"></path></svg>`;
-const ICON_RANDOM_SVG = `<svg class="icon-line" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 13h3.5l5-10H14M11.5 3H14v2.5M2 3h3.5l1.5 3M9 10l1.5 3H14M11.5 13H14v-2.5"></path></svg>`;
-const ICON_RESET_SVG = `<svg class="icon-line" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 7.5A5.5 5.5 0 1 1 4 11.5"></path><path d="M2.5 3.5v4h4"></path></svg>`;
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function svgEl(tag, attrs = {}) {
+    const el = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) {
+        if (v !== undefined && v !== null) {
+            el.setAttribute(k, String(v));
+        }
+    }
+    return el;
+}
+
+function svgIcon(inner) {
+    return `<svg class="icon-line" viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${inner}</svg>`;
+}
+
+const ICON_COPY_SVG = svgIcon('<rect x="5" y="5" width="9" height="9" rx="1.5"></rect><path d="M11 2.5H3.5A1.5 1.5 0 0 0 2 4v7.5"></path>');
+const ICON_PASTE_SVG = svgIcon('<path d="M5.5 3H4a1.5 1.5 0 0 0-1.5 1.5v9A1.5 1.5 0 0 0 4 15h8a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 12 3h-1.5"></path><rect x="5.5" y="1" width="5" height="3" rx="1"></rect><path d="M8 7v5M5.5 9.5 8 12l2.5-2.5"></path>');
+const ICON_RANDOM_SVG = svgIcon('<path d="M2 13h3.5l5-10H14M11.5 3H14v2.5M2 3h3.5l1.5 3M9 10l1.5 3H14M11.5 13H14v-2.5"></path>');
+const ICON_RESET_SVG = svgIcon('<path d="M2.5 7.5A5.5 5.5 0 1 1 4 11.5"></path><path d="M2.5 3.5v4h4"></path>');
 
 /**
  * Resolves a program reference which can be either an MM2Program instance or a dynamic provider function
  */
 function resolveProgram(program) {
     return typeof program === 'function' ? program() : program;
+}
+
+function createVisualizerBox(className, title, viewBox, dataAttr) {
+    const container = document.createElement('div');
+    container.className = `visualizer-box ${className}`;
+    container.title = title;
+    if (dataAttr) {
+        container.setAttribute(dataAttr[0], dataAttr[1]);
+    }
+    const svg = svgEl('svg', { viewBox, class: 'visualizer-svg' });
+    container.appendChild(svg);
+    return { container, svg };
+}
+
+function createSvgGradient(id, topOpacity, botOpacity) {
+    const defs = svgEl('defs');
+    const grad = svgEl('linearGradient', { id, x1: '0%', y1: '0%', x2: '0%', y2: '100%' });
+    grad.appendChild(svgEl('stop', { offset: '0%', 'stop-color': 'var(--accent-cyan)', 'stop-opacity': topOpacity }));
+    grad.appendChild(svgEl('stop', { offset: '100%', 'stop-color': 'var(--accent-cyan)', 'stop-opacity': botOpacity }));
+    defs.appendChild(grad);
+    return defs;
+}
+
+function withChangeGroup(onChangeCallback, label, fn) {
+    if (onChangeCallback && typeof onChangeCallback.beginGroup === 'function') {
+        onChangeCallback.beginGroup(label);
+    }
+    try {
+        return fn();
+    } finally {
+        if (onChangeCallback && typeof onChangeCallback.endGroup === 'function') {
+            onChangeCallback.endGroup();
+        }
+    }
+}
+
+function getParamBounds(def) {
+    const min = def.min ?? 0;
+    const max = def.max ?? (def.values ? def.values.length - 1 : 127);
+    const range = Math.max(1, Math.abs(max - min));
+    return { min, max, range };
+}
+
+function toDisplayNumber(def, val) {
+    if (!def) return val;
+    if (def.displayOffset) return val + def.displayOffset;
+    if (def.offset && def.offset > 0) return val - def.offset;
+    return val;
+}
+
+function fromDisplayNumber(def, num) {
+    if (!def) return num;
+    if (def.displayOffset) return num - def.displayOffset;
+    if (def.offset && def.offset > 0) return num + def.offset;
+    return num;
+}
+
+function initParamControl(paramKey, program, className) {
+    const def = PARAM_MAP.get(paramKey);
+    const container = document.createElement('div');
+    const getProg = () => resolveProgram(program);
+    if (!def) {
+        return { def: null, container, getProg };
+    }
+    container.className = className;
+    container.setAttribute('data-param', paramKey);
+    return { def, container, getProg };
+}
+
+function commitParamValue(getProg, paramKey, val, cb, meta = { isFinal: true }) {
+    const prog = getProg();
+    const prevVal = prog ? prog.getValue(paramKey) : val;
+    if (prog) {
+        prog.setValue(paramKey, val);
+    }
+    if (cb) cb(paramKey, val, { prevVal, ...meta });
+    return prevVal;
+}
+
+function bindResetActions(el, resetFn, isDisabledFn) {
+    el.addEventListener('dblclick', (e) => {
+        if (isDisabledFn && isDisabledFn()) return;
+        e.preventDefault();
+        resetFn();
+    });
+    el.addEventListener('contextmenu', (e) => {
+        if (isDisabledFn && isDisabledFn()) return;
+        e.preventDefault();
+        resetFn();
+    });
+}
+
+function createDebouncedCommitter(getProg, paramKey, onChangeCallback, delayMs = 350) {
+    let timer = null;
+    let startVal = null;
+    return {
+        begin(curVal) {
+            if (startVal === null) startVal = curVal;
+            return startVal;
+        },
+        schedule() {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                const prog = getProg();
+                const finalVal = prog ? prog.getValue(paramKey) : startVal;
+                if (startVal !== null && finalVal !== startVal && onChangeCallback) {
+                    onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: startVal });
+                }
+                startVal = null;
+            }, delayMs);
+        }
+    };
+}
+
+function startWindowPointerDrag(onMove, onEnd) {
+    if (typeof window === 'undefined') return;
+    const finish = (e) => {
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', finish);
+        window.removeEventListener('pointercancel', finish);
+        onEnd(e);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+}
+
+function attachInlineValueEditor({
+    triggerEl,
+    def,
+    min,
+    max,
+    getProg,
+    paramKey,
+    onChangeCallback,
+    refresh,
+    inputClassName,
+    inputType = 'text',
+    shouldOpen
+}) {
+    triggerEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (shouldOpen && !shouldOpen(e)) return;
+        if (triggerEl.querySelector('input')) return;
+
+        const prog = getProg();
+        const defaultFallback = def.default ?? min;
+        const initialVal = prog ? prog.getValue(paramKey) : defaultFallback;
+
+        const input = document.createElement('input');
+        input.type = inputType;
+        input.className = inputClassName;
+        if (inputType === 'number') {
+            input.min = toDisplayNumber(def, min);
+            input.max = toDisplayNumber(def, max);
+        }
+        input.value = String(toDisplayNumber(def, initialVal));
+
+        triggerEl.textContent = '';
+        triggerEl.appendChild(input);
+        if (input.focus) input.focus();
+        if (input.select) input.select();
+
+        let committed = false;
+        const closeInput = () => {
+            if (input.parentNode === triggerEl && triggerEl.removeChild) {
+                triggerEl.removeChild(input);
+            } else {
+                triggerEl.innerHTML = '';
+            }
+            refresh();
+        };
+
+        const commit = () => {
+            if (committed) return;
+            committed = true;
+            const parsedNum = parseInt(input.value.trim(), 10);
+            if (!isNaN(parsedNum)) {
+                const targetVal = Math.min(max, Math.max(min, fromDisplayNumber(def, parsedNum)));
+                const currentProg = getProg();
+                if (currentProg && targetVal !== initialVal) {
+                    currentProg.setValue(paramKey, targetVal);
+                    if (onChangeCallback) onChangeCallback(paramKey, targetVal, { isFinal: true, prevVal: initialVal });
+                }
+            }
+            closeInput();
+        };
+
+        input.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') {
+                ev.preventDefault();
+                commit();
+            } else if (ev.key === 'Escape') {
+                ev.preventDefault();
+                committed = true;
+                const currentProg = getProg();
+                if (currentProg && currentProg.getValue(paramKey) !== initialVal) {
+                    currentProg.setValue(paramKey, initialVal);
+                    if (onChangeCallback) onChangeCallback(paramKey, initialVal, { isInterim: true, prevVal: initialVal });
+                }
+                closeInput();
+            } else if (inputType === 'text' && ['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'Home', 'End'].includes(ev.key)) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                const currentProg = getProg();
+                const cur = currentProg ? currentProg.getValue(paramKey) : initialVal;
+                let nextVal;
+                if (ev.key === 'Home') {
+                    nextVal = min;
+                } else if (ev.key === 'End') {
+                    nextVal = max;
+                } else {
+                    const delta = (ev.key === 'ArrowUp' || ev.key === 'ArrowRight') ? 1 : -1;
+                    nextVal = Math.min(Math.max(cur + delta, min), max);
+                }
+                if (currentProg && nextVal !== cur) {
+                    currentProg.setValue(paramKey, nextVal);
+                    if (onChangeCallback) onChangeCallback(paramKey, nextVal, { isInterim: true, prevVal: initialVal });
+                    refresh();
+                }
+                input.value = String(toDisplayNumber(def, nextVal));
+                if (input.select) input.select();
+            } else if (inputType === 'text') {
+                const allowsNegative = toDisplayNumber(def, min) < 0;
+                const isAllowedChar = ev.key === '-' ? allowsNegative : /^[0-9+]$/.test(ev.key);
+                if (!ev.ctrlKey && !ev.metaKey && !['Backspace', 'Delete', 'Tab'].includes(ev.key) && !isAllowedChar) {
+                    ev.preventDefault();
+                }
+            }
+        });
+        input.addEventListener('blur', commit);
+    });
+}
+
+function createToggleButtonElement({ label, title, className = 'btn-param-toggle', id, showStateBadge = true, initialOn = false }) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = className;
+    if (id) button.id = id;
+    if (title) button.title = title;
+
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'toggle-label';
+    labelSpan.textContent = label;
+    button.appendChild(labelSpan);
+
+    let stateSpan = null;
+    if (showStateBadge) {
+        stateSpan = document.createElement('span');
+        stateSpan.className = 'toggle-state-badge';
+        button.appendChild(stateSpan);
+    }
+
+    const setOn = (isOn) => {
+        const active = !!isOn;
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        button.classList.toggle('active', active);
+        if (stateSpan) stateSpan.textContent = active ? 'ON' : 'OFF';
+    };
+    setOn(initialOn);
+
+    return { button, stateSpan, setOn };
 }
 
 // Section definitions for modular copying, clipboard, and smart randomization
@@ -247,24 +525,20 @@ function pasteSectionFromClipboard(targetType, targetIndex, program, onChangeCal
     if (!def) return false;
     const dstParams = def.getParams(targetIndex);
 
-    if (onChangeCallback && onChangeCallback.beginGroup) {
-        onChangeCallback.beginGroup(`Paste ${targetType.toUpperCase()} ${targetIndex}`);
-    }
-    for (const [role, val] of Object.entries(currentSectionClipboard.data)) {
-        const dstKey = dstParams[role];
-        if (dstKey) {
-            let clampedVal = val;
-            if (targetType === 'osc' && role === 'algo' && targetIndex === 1 && clampedVal > 15) {
-                clampedVal = 15;
+    withChangeGroup(onChangeCallback, `Paste ${targetType.toUpperCase()} ${targetIndex}`, () => {
+        for (const [role, val] of Object.entries(currentSectionClipboard.data)) {
+            const dstKey = dstParams[role];
+            if (dstKey) {
+                let clampedVal = val;
+                if (targetType === 'osc' && role === 'algo' && targetIndex === 1 && clampedVal > 15) {
+                    clampedVal = 15;
+                }
+                const prevVal = program.getValue(dstKey);
+                program.setValue(dstKey, clampedVal);
+                if (onChangeCallback) onChangeCallback(dstKey, clampedVal, { isFinal: true, prevVal });
             }
-            const prevVal = program.getValue(dstKey);
-            program.setValue(dstKey, clampedVal);
-            if (onChangeCallback) onChangeCallback(dstKey, clampedVal, { isFinal: true, prevVal });
         }
-    }
-    if (onChangeCallback && onChangeCallback.endGroup) {
-        onChangeCallback.endGroup();
-    }
+    });
     return true;
 }
 
@@ -277,24 +551,20 @@ function copySection(sourceType, sourceIndex, targetType, targetIndex, program, 
     const srcParams = def.getParams(sourceIndex);
     const dstParams = def.getParams(targetIndex);
 
-    if (onChangeCallback && onChangeCallback.beginGroup) {
-        onChangeCallback.beginGroup(`Copy ${sourceType.toUpperCase()} ${sourceIndex}->${targetIndex}`);
-    }
-    for (const [role, srcKey] of Object.entries(srcParams)) {
-        const dstKey = dstParams[role];
-        if (dstKey && srcKey) {
-            let val = program.getValue(srcKey);
-            if (sourceType === 'osc' && role === 'algo' && targetIndex === 1 && val > 15) {
-                val = 15;
+    withChangeGroup(onChangeCallback, `Copy ${sourceType.toUpperCase()} ${sourceIndex}->${targetIndex}`, () => {
+        for (const [role, srcKey] of Object.entries(srcParams)) {
+            const dstKey = dstParams[role];
+            if (dstKey && srcKey) {
+                let val = program.getValue(srcKey);
+                if (sourceType === 'osc' && role === 'algo' && targetIndex === 1 && val > 15) {
+                    val = 15;
+                }
+                const prevVal = program.getValue(dstKey);
+                program.setValue(dstKey, val);
+                if (onChangeCallback) onChangeCallback(dstKey, val, { isFinal: true, prevVal });
             }
-            const prevVal = program.getValue(dstKey);
-            program.setValue(dstKey, val);
-            if (onChangeCallback) onChangeCallback(dstKey, val, { isFinal: true, prevVal });
         }
-    }
-    if (onChangeCallback && onChangeCallback.endGroup) {
-        onChangeCallback.endGroup();
-    }
+    });
     return true;
 }
 
@@ -305,21 +575,17 @@ function resetSectionToInit(sectionType, sectionIndex, program, onChangeCallback
     const params = def.getParams(sectionIndex);
     const initProgram = (sectionType === 'mtx_group' && typeof MM2Program !== 'undefined') ? new MM2Program() : null;
 
-    if (onChangeCallback && onChangeCallback.beginGroup) {
-        onChangeCallback.beginGroup(`Reset ${sectionType.toUpperCase()} ${sectionIndex}`);
-    }
-    for (const paramKey of Object.values(params)) {
-        const pDef = PARAM_MAP.get(paramKey);
-        if (pDef) {
-            const defVal = initProgram ? initProgram.getValue(paramKey) : (pDef.default ?? 0);
-            const prevVal = program.getValue(paramKey);
-            program.setValue(paramKey, defVal);
-            if (onChangeCallback) onChangeCallback(paramKey, defVal, { isFinal: true, prevVal });
+    withChangeGroup(onChangeCallback, `Reset ${sectionType.toUpperCase()} ${sectionIndex}`, () => {
+        for (const paramKey of Object.values(params)) {
+            const pDef = PARAM_MAP.get(paramKey);
+            if (pDef) {
+                const defVal = initProgram ? initProgram.getValue(paramKey) : (pDef.default ?? 0);
+                const prevVal = program.getValue(paramKey);
+                program.setValue(paramKey, defVal);
+                if (onChangeCallback) onChangeCallback(paramKey, defVal, { isFinal: true, prevVal });
+            }
         }
-    }
-    if (onChangeCallback && onChangeCallback.endGroup) {
-        onChangeCallback.endGroup();
-    }
+    });
 }
 
 function randomizeSection(sectionType, sectionIndex, program, onChangeCallback) {
@@ -328,42 +594,256 @@ function randomizeSection(sectionType, sectionIndex, program, onChangeCallback) 
     if (!def || !def.randomize || !program) return;
     const randomized = def.randomize(program, sectionIndex);
 
-    if (onChangeCallback && onChangeCallback.beginGroup) {
-        onChangeCallback.beginGroup(`Randomize ${sectionType.toUpperCase()} ${sectionIndex}`);
+    withChangeGroup(onChangeCallback, `Randomize ${sectionType.toUpperCase()} ${sectionIndex}`, () => {
+        for (const [paramKey, val] of Object.entries(randomized)) {
+            const prevVal = program.getValue(paramKey);
+            program.setValue(paramKey, val);
+            if (onChangeCallback) onChangeCallback(paramKey, val, { isFinal: true, prevVal });
+        }
+    });
+}
+
+const KNOB_START_RAD = (135 * Math.PI) / 180;
+const KNOB_END_RAD = (405 * Math.PI) / 180;
+const KNOB_SPAN_RAD = (270 * Math.PI) / 180;
+const KNOB_CENTER_RAD = (270 * Math.PI) / 180;
+
+function drawKnobCanvas(canvas, ctx, { val, min, range, isLarge, isSmall, isBipolar, isActive, color }) {
+    if (!ctx) return;
+    const clampedNorm = Math.min(Math.max((val - min) / range, 0), 1);
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const trackWidth = isLarge ? 6 : (isSmall ? 4.5 : 5);
+    const r = (w / 2) - 8;
+
+    ctx.clearRect(0, 0, w, h);
+
+    // 1. Flat Matte Inner Disc (high-contrast backdrop for centered readout)
+    const discR = Math.max(4, r - trackWidth - 2);
+    ctx.beginPath();
+    ctx.arc(cx, cy, discR, 0, Math.PI * 2);
+    ctx.fillStyle = '#191c23';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // 2. Outer Track Arc (from 135 deg to 405 deg, 270 deg span)
+    const curRad = KNOB_START_RAD + clampedNorm * KNOB_SPAN_RAD;
+    ctx.lineWidth = trackWidth;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#252a35';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, KNOB_START_RAD, KNOB_END_RAD, false);
+    ctx.stroke();
+
+    // 3. Active Gauge Arc (Audiothingies orange #f76d22 or cyan for bipolar / mod)
+    const gaugeColor = color || (isBipolar ? '#00d2ff' : '#f76d22');
+    ctx.strokeStyle = gaugeColor;
+
+    if (isBipolar) {
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(KNOB_CENTER_RAD) * r, cy + Math.sin(KNOB_CENTER_RAD) * r, 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = '#525b6e';
+        ctx.fill();
+
+        if (Math.abs(curRad - KNOB_CENTER_RAD) > 0.02) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, Math.min(KNOB_CENTER_RAD, curRad), Math.max(KNOB_CENTER_RAD, curRad), false);
+            ctx.stroke();
+        }
+    } else if (clampedNorm > 0.01) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, KNOB_START_RAD, curRad, false);
+        ctx.stroke();
     }
-    for (const [paramKey, val] of Object.entries(randomized)) {
-        const prevVal = program.getValue(paramKey);
-        program.setValue(paramKey, val);
-        if (onChangeCallback) onChangeCallback(paramKey, val, { isFinal: true, prevVal });
-    }
-    if (onChangeCallback && onChangeCallback.endGroup) {
-        onChangeCallback.endGroup();
-    }
+
+    // 4. Highlight Dot on Colored Ring at Current Value
+    const dotX = cx + Math.cos(curRad) * r;
+    const dotY = cy + Math.sin(curRad) * r;
+    const dotR = isActive
+        ? (isLarge ? 5.5 : (isSmall ? 4.2 : 4.8))
+        : (isLarge ? 4.5 : (isSmall ? 3.5 : 4.0));
+
+    if (ctx.save) ctx.save();
+    ctx.shadowColor = gaugeColor;
+    ctx.shadowBlur = isActive ? 12 : 6;
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = gaugeColor;
+    ctx.stroke();
+    if (ctx.restore) ctx.restore();
+}
+
+function attachKnobPointerDrag({
+    container,
+    canvas,
+    valueEl,
+    dialWrap,
+    paramKey,
+    bounds,
+    getProg,
+    onChangeCallback,
+    drawKnob,
+    resetToDefault,
+    isDisabled,
+    setSuppressNextClick
+}) {
+    const { min, max, range } = bounds;
+    let startX = 0;
+    let startY = 0;
+    let startVal = 0;
+    let isDragging = false;
+    let hasDragged = false;
+
+    const onPointerMove = (e) => {
+        if (!isDragging) return;
+        if (!hasDragged && Math.hypot(e.clientX - startX, e.clientY - startY) > 3) {
+            hasDragged = true;
+        }
+        const delta = (startY - e.clientY) + (e.clientX - startX);
+        const sensitivity = (e.shiftKey || e.ctrlKey) ? 0.001 : 0.005;
+        const newVal = Math.min(Math.max(Math.round(startVal + delta * sensitivity * range), min), max);
+
+        const prog = getProg();
+        if (prog && newVal !== prog.getValue(paramKey)) {
+            prog.setValue(paramKey, newVal);
+            drawKnob();
+            if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: startVal });
+        }
+    };
+
+    const onPointerUp = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        if (hasDragged) {
+            setSuppressNextClick(true);
+            setTimeout(() => setSuppressNextClick(false), 0);
+        }
+        dialWrap.classList.remove('active');
+        drawKnob();
+
+        const prog = getProg();
+        const finalVal = prog ? prog.getValue(paramKey) : startVal;
+        if (finalVal !== startVal && onChangeCallback) {
+            onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: startVal });
+        }
+        if (typeof container.blur === 'function') container.blur();
+    };
+
+    const onPointerDown = (e) => {
+        if (isDisabled() || e.button === 2) return;
+        if (e.target && e.target.tagName === 'INPUT') return;
+        if (typeof document !== 'undefined' && document.activeElement &&
+            document.activeElement.classList && document.activeElement.classList.contains('knob-value-input') &&
+            document.activeElement !== e.target) {
+            document.activeElement.blur();
+        }
+        e.preventDefault();
+        if (e.altKey && e.button === 0) {
+            setSuppressNextClick(true);
+            setTimeout(() => setSuppressNextClick(false), 0);
+            resetToDefault();
+            return;
+        }
+        startX = e.clientX;
+        startY = e.clientY;
+        const prog = getProg();
+        startVal = prog ? prog.getValue(paramKey) : 0;
+        isDragging = true;
+        hasDragged = false;
+        dialWrap.classList.add('active');
+        drawKnob();
+        startWindowPointerDrag(onPointerMove, onPointerUp);
+    };
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    valueEl.addEventListener('pointerdown', onPointerDown);
+}
+
+function attachDebouncedStepping({ container, valueEl, paramKey, bounds, getProg, onChangeCallback, drawKnob, isDisabled }) {
+    const { min, max, range } = bounds;
+    const wheelCommitter = createDebouncedCommitter(getProg, paramKey, onChangeCallback);
+    const keyCommitter = createDebouncedCommitter(getProg, paramKey, onChangeCallback);
+
+    container.addEventListener('wheel', (e) => {
+        if (isDisabled()) return;
+        e.preventDefault();
+        const step = (e.shiftKey || e.ctrlKey) ? 1 : Math.max(1, Math.round(range / 64));
+        const dir = e.deltaY < 0 ? 1 : -1;
+        const prog = getProg();
+        if (prog) {
+            const cur = prog.getValue(paramKey);
+            const startVal = wheelCommitter.begin(cur);
+            const newVal = Math.min(Math.max(cur + dir * step, min), max);
+            if (newVal !== cur) {
+                prog.setValue(paramKey, newVal);
+                drawKnob();
+                if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: startVal });
+            }
+            wheelCommitter.schedule();
+        }
+        if (typeof container.blur === 'function') container.blur();
+    }, { passive: false });
+
+    container.addEventListener('keydown', (e) => {
+        if (isDisabled()) return;
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
+        if (valueEl.querySelector('input')) return;
+        const prog = getProg();
+        if (!prog) return;
+
+        let delta = 0;
+        if (['ArrowUp', 'ArrowRight', '+', '='].includes(e.key)) delta = 1;
+        else if (['ArrowDown', 'ArrowLeft', '-', '_'].includes(e.key)) delta = -1;
+
+        if (delta !== 0) {
+            e.preventDefault();
+            const cur = prog.getValue(paramKey);
+            const startVal = keyCommitter.begin(cur);
+            const newVal = Math.min(max, Math.max(min, cur + delta));
+            if (newVal !== cur) {
+                prog.setValue(paramKey, newVal);
+                drawKnob();
+                if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: startVal });
+                keyCommitter.schedule();
+            }
+        } else if (e.key === 'Home' || e.key === 'End') {
+            e.preventDefault();
+            const target = e.key === 'Home' ? min : max;
+            const cur = prog.getValue(paramKey);
+            if (cur !== target) {
+                commitParamValue(getProg, paramKey, target, onChangeCallback, { isFinal: true, prevVal: cur });
+                drawKnob();
+            }
+        }
+    });
 }
 
 /**
  * Creates an interactive rotary knob element
  */
 function createKnob(paramKey, program, onChangeCallback, opts = {}) {
-    const def = PARAM_MAP.get(paramKey);
+    const { def, container, getProg } = initParamControl(paramKey, program, '');
     if (!def) {
         console.warn(`Cannot create knob for unknown parameter: ${paramKey}`);
-        const div = document.createElement('div');
-        div.textContent = paramKey;
-        return div;
+        container.textContent = paramKey;
+        return container;
     }
 
-    const container = document.createElement('div');
     const isLarge = !!opts.large;
     const isSmall = !!opts.small;
     container.className = `knob-container ${isLarge ? 'knob-large' : ''} ${isSmall ? 'knob-small' : ''}`;
-    container.setAttribute('data-param', paramKey);
     container.setAttribute('tabindex', '0');
     container.title = `${def.title || def.label || paramKey} (Default: ${formatParamDisplay(def, def.default ?? 0)}) • Double-click/Right-click/Alt/Opt-click to reset • Click value to type`;
 
-    const min = def.min ?? 0;
-    const max = def.max ?? (def.values ? def.values.length - 1 : 127);
-    const range = Math.max(1, Math.abs(max - min));
+    const bounds = getParamBounds(def);
+    const { min, max, range } = bounds;
     // Offset-based params only draw from center when the offset lies inside the range.
     // Ranges that end at the offset (e.g. -12..0 pitch bend down) behave like unipolar knobs.
     const offsetIsRelative = !!(def.offset && def.offset >= max);
@@ -394,409 +874,89 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
     container.appendChild(labelEl);
 
     const ctx = canvas.getContext ? canvas.getContext('2d') : null;
-    const getProg = () => resolveProgram(program);
 
     function drawKnob() {
-        if (!ctx) return;
         const prog = getProg();
         const val = prog ? prog.getValue(paramKey) : (def.default ?? 0);
-        const norm = (val - min) / range;
-        const clampedNorm = Math.min(Math.max(norm, 0), 1);
-
-        const w = canvas.width;
-        const h = canvas.height;
-        const cx = w / 2;
-        const cy = h / 2;
-        const trackWidth = isLarge ? 6 : (isSmall ? 4.5 : 5);
-        const r = (w / 2) - 8;
-        const isActive = dialWrap.classList.contains('active');
-
-        ctx.clearRect(0, 0, w, h);
-
-        // 1. Flat Matte Inner Disc (high-contrast backdrop for centered readout)
-        const discR = Math.max(4, r - trackWidth - 2);
-        ctx.beginPath();
-        ctx.arc(cx, cy, discR, 0, Math.PI * 2);
-        ctx.fillStyle = '#191c23';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // 2. Outer Track Arc (from 135 deg to 405 deg, 270 deg span)
-        const startRad = (135 * Math.PI) / 180;
-        const endRad = (405 * Math.PI) / 180;
-        const curRad = startRad + clampedNorm * ((270 * Math.PI) / 180);
-
-        ctx.lineWidth = trackWidth;
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = '#252a35';
-        ctx.beginPath();
-        ctx.arc(cx, cy, r, startRad, endRad, false);
-        ctx.stroke();
-
-        // 3. Active Gauge Arc (Audiothingies orange #f76d22 or cyan for bipolar / mod)
-        const gaugeColor = opts.color || (isBipolar ? '#00d2ff' : '#f76d22');
-        ctx.strokeStyle = gaugeColor;
-
-        if (isBipolar) {
-            const centerRad = (270 * Math.PI) / 180; // 12 o'clock
-            ctx.beginPath();
-            ctx.arc(cx + Math.cos(centerRad) * r, cy + Math.sin(centerRad) * r, 2.2, 0, Math.PI * 2);
-            ctx.fillStyle = '#525b6e';
-            ctx.fill();
-
-            if (Math.abs(curRad - centerRad) > 0.02) {
-                ctx.beginPath();
-                ctx.arc(cx, cy, r, Math.min(centerRad, curRad), Math.max(centerRad, curRad), false);
-                ctx.stroke();
-            }
-        } else if (clampedNorm > 0.01) {
-            ctx.beginPath();
-            ctx.arc(cx, cy, r, startRad, curRad, false);
-            ctx.stroke();
-        }
-
-        // 4. Highlight Dot on Colored Ring at Current Value
-        const dotX = cx + Math.cos(curRad) * r;
-        const dotY = cy + Math.sin(curRad) * r;
-        const dotR = isActive
-            ? (isLarge ? 5.5 : (isSmall ? 4.2 : 4.8))
-            : (isLarge ? 4.5 : (isSmall ? 3.5 : 4.0));
-
-        if (ctx.save) ctx.save();
-        ctx.shadowColor = gaugeColor;
-        ctx.shadowBlur = isActive ? 12 : 6;
-        ctx.beginPath();
-        ctx.arc(dotX, dotY, dotR, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = gaugeColor;
-        ctx.stroke();
-        if (ctx.restore) ctx.restore();
-
-        // Update value text (if not currently focused input)
+        drawKnobCanvas(canvas, ctx, {
+            val,
+            min,
+            range,
+            isLarge,
+            isSmall,
+            isBipolar,
+            isActive: dialWrap.classList.contains('active'),
+            color: opts.color
+        });
         if (!valueEl.querySelector('input')) {
             valueEl.textContent = formatParamDisplay(def, val);
         }
     }
 
-    function updateVisual() {
-        drawKnob();
-    }
-
-    // Dual-axis Drag Interaction (both Vertical and Horizontal drag supported)
-    let startX = 0;
-    let startY = 0;
-    let startVal = 0;
-    let isDragging = false;
     let isDisabled = false;
-    let hasDragged = false;
     let suppressNextClick = false;
 
-    function onPointerDown(e) {
-        if (isDisabled) return;
-        if (e.button === 2) return; // Ignore right-click on pointerdown (handled by contextmenu)
-        if (e.target && e.target.tagName === 'INPUT') return;
-        if (typeof document !== 'undefined' && document.activeElement &&
-            document.activeElement.classList && document.activeElement.classList.contains('knob-value-input') &&
-            document.activeElement !== e.target) {
-            document.activeElement.blur();
-        }
-        e.preventDefault();
-        if (e.altKey && e.button === 0) {
-            suppressNextClick = true;
-            setTimeout(() => { suppressNextClick = false; }, 0);
-            resetToDefault();
-            return;
-        }
-        startX = e.clientX;
-        startY = e.clientY;
-        const prog = getProg();
-        startVal = prog ? prog.getValue(paramKey) : 0;
-        isDragging = true;
-        hasDragged = false;
-        dialWrap.classList.add('active');
-        drawKnob();
-        window.addEventListener('pointermove', onPointerMove);
-        window.addEventListener('pointerup', onPointerUp);
-    }
-
-    function onPointerMove(e) {
-        if (!isDragging) return;
-        if (!hasDragged && Math.hypot(e.clientX - startX, e.clientY - startY) > 3) {
-            hasDragged = true;
-        }
-        const delta = (startY - e.clientY) + (e.clientX - startX);
-        const sensitivity = (e.shiftKey || e.ctrlKey) ? 0.001 : 0.005;
-        const deltaVal = delta * sensitivity * range;
-        let newVal = Math.round(startVal + deltaVal);
-        newVal = Math.min(Math.max(newVal, min), max);
-
-        const prog = getProg();
-        if (prog && newVal !== prog.getValue(paramKey)) {
-            prog.setValue(paramKey, newVal);
-            updateVisual();
-            if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: startVal });
-        }
-    }
-
-    function onPointerUp() {
-        if (!isDragging) return;
-        isDragging = false;
-        if (hasDragged) {
-            suppressNextClick = true;
-            setTimeout(() => { suppressNextClick = false; }, 0);
-        }
-        dialWrap.classList.remove('active');
-        drawKnob();
-        window.removeEventListener('pointermove', onPointerMove);
-        window.removeEventListener('pointerup', onPointerUp);
-
-        const prog = getProg();
-        const finalVal = prog ? prog.getValue(paramKey) : startVal;
-        if (finalVal !== startVal && onChangeCallback) {
-            onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: startVal });
-        }
-        if (typeof container.blur === 'function') container.blur();
-    }
-
-    canvas.addEventListener('pointerdown', onPointerDown);
-    valueEl.addEventListener('pointerdown', onPointerDown);
-
-    // Mouse wheel support with debounced commit
-    let wheelTimer = null;
-    let wheelStartVal = null;
-    container.addEventListener('wheel', (e) => {
-        if (isDisabled) return;
-        e.preventDefault();
-        const step = (e.shiftKey || e.ctrlKey) ? 1 : Math.max(1, Math.round(range / 64));
-        const dir = e.deltaY < 0 ? 1 : -1;
-        const prog = getProg();
-        if (prog) {
-            let cur = prog.getValue(paramKey);
-            if (wheelStartVal === null) {
-                wheelStartVal = cur;
-            }
-            let newVal = Math.min(Math.max(cur + dir * step, min), max);
-            if (newVal !== cur) {
-                prog.setValue(paramKey, newVal);
-                updateVisual();
-                if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: wheelStartVal });
-            }
-            clearTimeout(wheelTimer);
-            wheelTimer = setTimeout(() => {
-                const finalVal = prog.getValue(paramKey);
-                if (wheelStartVal !== null && finalVal !== wheelStartVal && onChangeCallback) {
-                    onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: wheelStartVal });
-                }
-                wheelStartVal = null;
-            }, 350);
-        }
-        if (typeof container.blur === 'function') container.blur();
-    }, { passive: false });
-
-    // Reset helper
     function resetToDefault() {
         const defVal = def.default ?? (isBipolar ? (def.offset ?? min) : min);
         const prog = getProg();
-        if (prog) {
-            const curVal = prog.getValue(paramKey);
-            if (curVal !== defVal) {
-                prog.setValue(paramKey, defVal);
-                updateVisual();
-                if (onChangeCallback) onChangeCallback(paramKey, defVal, { isFinal: true, prevVal: curVal });
-            }
+        if (prog && prog.getValue(paramKey) !== defVal) {
+            commitParamValue(getProg, paramKey, defVal, onChangeCallback);
+            drawKnob();
         }
         if (typeof container.blur === 'function') container.blur();
     }
 
-    // Double click to reset
-    container.addEventListener('dblclick', (e) => {
-        if (isDisabled) return;
-        e.preventDefault();
-        resetToDefault();
+    attachKnobPointerDrag({
+        container,
+        canvas,
+        valueEl,
+        dialWrap,
+        paramKey,
+        bounds,
+        getProg,
+        onChangeCallback,
+        drawKnob,
+        resetToDefault,
+        isDisabled: () => isDisabled,
+        setSuppressNextClick: (v) => { suppressNextClick = v; }
     });
 
-    // Right click (contextmenu) to reset
-    container.addEventListener('contextmenu', (e) => {
-        if (isDisabled) return;
-        e.preventDefault();
-        resetToDefault();
+    attachDebouncedStepping({
+        container,
+        valueEl,
+        paramKey,
+        bounds,
+        getProg,
+        onChangeCallback,
+        drawKnob,
+        isDisabled: () => isDisabled
     });
 
-    // Hover / Focus Keyboard Stepping (+ / -, Arrow keys) with debounced commit
-    let keyTimer = null;
-    let keyStartVal = null;
-    container.addEventListener('keydown', (e) => {
-        if (isDisabled) return;
-        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT')) return;
-        if (valueEl.querySelector('input')) return;
-        const prog = getProg();
-        if (!prog) return;
+    bindResetActions(container, resetToDefault, () => isDisabled);
 
-        const step = 1;
-
-        if (['ArrowUp', 'ArrowRight', '+', '='].includes(e.key)) {
-            e.preventDefault();
-            if (keyStartVal === null) keyStartVal = prog.getValue(paramKey);
-            let newVal = Math.min(max, prog.getValue(paramKey) + step);
-            if (newVal !== prog.getValue(paramKey)) {
-                prog.setValue(paramKey, newVal);
-                updateVisual();
-                if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: keyStartVal });
-                clearTimeout(keyTimer);
-                keyTimer = setTimeout(() => {
-                    const finalVal = prog.getValue(paramKey);
-                    if (keyStartVal !== null && finalVal !== keyStartVal && onChangeCallback) {
-                        onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: keyStartVal });
-                    }
-                    keyStartVal = null;
-                }, 350);
+    attachInlineValueEditor({
+        triggerEl: valueEl,
+        def,
+        min,
+        max,
+        getProg,
+        paramKey,
+        onChangeCallback,
+        refresh: drawKnob,
+        inputClassName: 'knob-value-input',
+        inputType: 'text',
+        shouldOpen: (e) => {
+            if (isDisabled) return false;
+            if (suppressNextClick) {
+                suppressNextClick = false;
+                return false;
             }
-        } else if (['ArrowDown', 'ArrowLeft', '-', '_'].includes(e.key)) {
-            e.preventDefault();
-            if (keyStartVal === null) keyStartVal = prog.getValue(paramKey);
-            let newVal = Math.max(min, prog.getValue(paramKey) - step);
-            if (newVal !== prog.getValue(paramKey)) {
-                prog.setValue(paramKey, newVal);
-                updateVisual();
-                if (onChangeCallback) onChangeCallback(paramKey, newVal, { isInterim: true, prevVal: keyStartVal });
-                clearTimeout(keyTimer);
-                keyTimer = setTimeout(() => {
-                    const finalVal = prog.getValue(paramKey);
-                    if (keyStartVal !== null && finalVal !== keyStartVal && onChangeCallback) {
-                        onChangeCallback(paramKey, finalVal, { isFinal: true, prevVal: keyStartVal });
-                    }
-                    keyStartVal = null;
-                }, 350);
+            if (e.altKey) {
+                resetToDefault();
+                return false;
             }
-        } else if (e.key === 'Home') {
-            e.preventDefault();
-            const cur = prog.getValue(paramKey);
-            if (cur !== min) {
-                prog.setValue(paramKey, min);
-                updateVisual();
-                if (onChangeCallback) onChangeCallback(paramKey, min, { isFinal: true, prevVal: cur });
-            }
-        } else if (e.key === 'End') {
-            e.preventDefault();
-            const cur = prog.getValue(paramKey);
-            if (cur !== max) {
-                prog.setValue(paramKey, max);
-                updateVisual();
-                if (onChangeCallback) onChangeCallback(paramKey, max, { isFinal: true, prevVal: cur });
-            }
+            return true;
         }
-    });
-
-    // Click-to-Type Value Editing
-    valueEl.addEventListener('click', (e) => {
-        if (isDisabled) return;
-        e.stopPropagation();
-        if (suppressNextClick) {
-            suppressNextClick = false;
-            return;
-        }
-        if (e.altKey) {
-            resetToDefault();
-            return;
-        }
-        if (valueEl.querySelector('input')) return;
-
-        const prog = getProg();
-        const initialVal = prog ? prog.getValue(paramKey) : 0;
-        const formatInputValue = (val) => {
-            if (def.displayOffset) return `${val + def.displayOffset}`;
-            if (def.offset && def.offset > 0) return `${val - def.offset}`;
-            return `${val}`;
-        };
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.className = 'knob-value-input';
-        input.value = formatInputValue(initialVal);
-
-        valueEl.textContent = '';
-        valueEl.appendChild(input);
-        if (input.focus) input.focus();
-        if (input.select) input.select();
-
-        let committed = false;
-        const closeInput = () => {
-            if (input.parentNode === valueEl && valueEl.removeChild) {
-                valueEl.removeChild(input);
-            } else {
-                valueEl.innerHTML = '';
-            }
-            updateVisual();
-        };
-
-        function commit() {
-            if (committed) return;
-            committed = true;
-            const raw = input.value.trim();
-            let parsed = parseInt(raw, 10);
-            if (!isNaN(parsed)) {
-                if (def.displayOffset) {
-                    parsed -= def.displayOffset;
-                } else if (def.offset && def.offset > 0) {
-                    parsed += def.offset;
-                }
-                parsed = Math.min(Math.max(parsed, min), max);
-                const currentProg = getProg();
-                if (currentProg && parsed !== initialVal) {
-                    currentProg.setValue(paramKey, parsed);
-                    if (onChangeCallback) onChangeCallback(paramKey, parsed, { isFinal: true, prevVal: initialVal });
-                }
-            }
-            closeInput();
-        }
-
-        input.addEventListener('keydown', (ev) => {
-            if (ev.key === 'Enter') {
-                ev.preventDefault();
-                commit();
-            } else if (ev.key === 'Escape') {
-                ev.preventDefault();
-                committed = true;
-                const currentProg = getProg();
-                if (currentProg && currentProg.getValue(paramKey) !== initialVal) {
-                    currentProg.setValue(paramKey, initialVal);
-                    if (onChangeCallback) onChangeCallback(paramKey, initialVal, { isInterim: true, prevVal: initialVal });
-                }
-                closeInput();
-            } else if (['ArrowUp', 'ArrowRight', 'ArrowDown', 'ArrowLeft', 'Home', 'End'].includes(ev.key)) {
-                ev.preventDefault();
-                ev.stopPropagation();
-                const currentProg = getProg();
-                const cur = currentProg ? currentProg.getValue(paramKey) : initialVal;
-                let nextVal;
-                if (ev.key === 'Home') {
-                    nextVal = min;
-                } else if (ev.key === 'End') {
-                    nextVal = max;
-                } else {
-                    const delta = (ev.key === 'ArrowUp' || ev.key === 'ArrowRight') ? 1 : -1;
-                    nextVal = Math.min(Math.max(cur + delta, min), max);
-                }
-                if (currentProg && nextVal !== cur) {
-                    currentProg.setValue(paramKey, nextVal);
-                    if (onChangeCallback) onChangeCallback(paramKey, nextVal, { isInterim: true, prevVal: initialVal });
-                    drawKnob();
-                }
-                input.value = formatInputValue(nextVal);
-                if (input.select) input.select();
-            } else {
-                const visibleMin = def.displayOffset ? (min + def.displayOffset) : (def.offset && def.offset > 0 ? min - def.offset : min);
-                const allowsNegative = visibleMin < 0;
-                const isAllowedChar = ev.key === '-' ? allowsNegative : /^[0-9+]$/.test(ev.key);
-                if (!ev.ctrlKey && !ev.metaKey && !['Backspace', 'Delete', 'Tab'].includes(ev.key) && !isAllowedChar) {
-                    ev.preventDefault();
-                }
-            }
-        });
-        input.addEventListener('blur', commit);
     });
 
     container.setDisabled = (disabled) => {
@@ -807,8 +967,8 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
         valueEl.classList.toggle('editable', !isDisabled);
     };
 
-    container.refresh = updateVisual;
-    updateVisual();
+    container.refresh = drawKnob;
+    drawKnob();
 
     return container;
 }
@@ -816,49 +976,20 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
 /**
  * Creates a toggle button bound to a binary On/Off parameter
  */
-function createToggleButton(paramKey, program, onChangeCallback, opts = {}) {
-    const def = PARAM_MAP.get(paramKey);
-    if (!def) return document.createElement('div');
+function createToggleButton(paramKey, program, onChangeCallback) {
+    const { def, container, getProg } = initParamControl(paramKey, program, 'toggle-container');
+    if (!def) return container;
 
-    const showStateBadge = opts.showStateBadge !== false;
-
-    const container = document.createElement('div');
-    container.className = 'toggle-container';
-    container.setAttribute('data-param', paramKey);
-
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'btn-param-toggle';
-    button.title = `${def.title || def.label || paramKey} (Click to toggle)`;
-
-    const labelSpan = document.createElement('span');
-    labelSpan.className = 'toggle-label';
-    labelSpan.textContent = def.label || paramKey;
-
-    button.appendChild(labelSpan);
-
-    let stateSpan = null;
-    if (showStateBadge) {
-        stateSpan = document.createElement('span');
-        stateSpan.className = 'toggle-state-badge';
-        button.appendChild(stateSpan);
-    }
-
-    const getProg = () => resolveProgram(program);
+    const { button, setOn } = createToggleButtonElement({
+        label: def.label || paramKey,
+        title: `${def.title || def.label || paramKey} (Click to toggle)`,
+        showStateBadge: true
+    });
 
     function updateVisual() {
         const prog = getProg();
         if (prog) {
-            const val = prog.getValue(paramKey);
-            const isOn = val === 1;
-            button.setAttribute('aria-pressed', isOn ? 'true' : 'false');
-            if (isOn) {
-                button.classList.add('active');
-                if (stateSpan) stateSpan.textContent = 'ON';
-            } else {
-                button.classList.remove('active');
-                if (stateSpan) stateSpan.textContent = 'OFF';
-            }
+            setOn(prog.getValue(paramKey) === 1);
         }
     }
 
@@ -866,11 +997,9 @@ function createToggleButton(paramKey, program, onChangeCallback, opts = {}) {
         e.preventDefault();
         const prog = getProg();
         if (prog) {
-            const current = prog.getValue(paramKey);
-            const next = current === 1 ? 0 : 1;
-            prog.setValue(paramKey, next);
+            const next = prog.getValue(paramKey) === 1 ? 0 : 1;
+            commitParamValue(getProg, paramKey, next, onChangeCallback);
             updateVisual();
-            if (onChangeCallback) onChangeCallback(paramKey, next, { isFinal: true, prevVal: current });
         }
         if (typeof button.blur === 'function') button.blur();
     });
@@ -882,16 +1011,32 @@ function createToggleButton(paramKey, program, onChangeCallback, opts = {}) {
     return container;
 }
 
+function renderBipolarFill(fillBar, val, min, max, center) {
+    const diff = val - center;
+    if (diff > 0) {
+        const widthPct = Math.min(1, Math.max(0, diff / (max - center))) * 50;
+        fillBar.style.left = '50%';
+        fillBar.style.width = `${widthPct}%`;
+        fillBar.className = 'bipolar-fill fill-pos';
+    } else if (diff < 0) {
+        const widthPct = Math.min(1, Math.max(0, (center - val) / (center - min))) * 50;
+        fillBar.style.left = `${50 - widthPct}%`;
+        fillBar.style.width = `${widthPct}%`;
+        fillBar.className = 'bipolar-fill fill-neg';
+    } else {
+        fillBar.style.left = '50%';
+        fillBar.style.width = '0%';
+        fillBar.className = 'bipolar-fill';
+    }
+    return diff;
+}
+
 /**
  * Creates a bidirectional bipolar slider (-99 to +99) bound to a parameter (e.g. MTX AMT)
  */
 function createBipolarSlider(paramKey, program, onChangeCallback, opts = {}) {
-    const def = PARAM_MAP.get(paramKey);
-    if (!def) return document.createElement('div');
-
-    const container = document.createElement('div');
-    container.className = 'bipolar-slider-container';
-    container.setAttribute('data-param', paramKey);
+    const { def, container, getProg } = initParamControl(paramKey, program, 'bipolar-slider-container');
+    if (!def) return container;
 
     const min = def.min ?? 29;
     const max = def.max ?? 227;
@@ -937,33 +1082,12 @@ function createBipolarSlider(paramKey, program, onChangeCallback, opts = {}) {
     container.appendChild(trackWrap);
     container.appendChild(valDisplay);
 
-    const getProg = () => resolveProgram(program);
-
     function updateVisual() {
         const prog = getProg();
         const val = prog ? prog.getValue(paramKey) : defaultVal;
         rangeInput.value = val;
-
-        const diff = val - center;
+        const diff = renderBipolarFill(fillBar, val, min, max, center);
         valDisplay.textContent = diff > 0 ? `+${diff}` : `${diff}`;
-
-        if (diff > 0) {
-            const posRatio = Math.min(1, Math.max(0, (val - center) / (max - center)));
-            const widthPct = posRatio * 50;
-            fillBar.style.left = '50%';
-            fillBar.style.width = `${widthPct}%`;
-            fillBar.className = 'bipolar-fill fill-pos';
-        } else if (diff < 0) {
-            const negRatio = Math.min(1, Math.max(0, (center - val) / (center - min)));
-            const widthPct = negRatio * 50;
-            fillBar.style.left = `${50 - widthPct}%`;
-            fillBar.style.width = `${widthPct}%`;
-            fillBar.className = 'bipolar-fill fill-neg';
-        } else {
-            fillBar.style.left = '50%';
-            fillBar.style.width = '0%';
-            fillBar.className = 'bipolar-fill';
-        }
     }
 
     let startVal = null;
@@ -979,76 +1103,40 @@ function createBipolarSlider(paramKey, program, onChangeCallback, opts = {}) {
         if (startVal === null) {
             startVal = prog ? prog.getValue(paramKey) : val;
         }
-        if (prog) {
-            prog.setValue(paramKey, val);
-        }
+        if (prog) prog.setValue(paramKey, val);
         updateVisual();
         if (onChangeCallback) onChangeCallback(paramKey, val, { isInterim: true, prevVal: startVal });
     });
 
     const commitSlider = () => {
         const val = parseInt(rangeInput.value, 10);
-        if (startVal !== null && val !== startVal) {
-            if (onChangeCallback) onChangeCallback(paramKey, val, { isFinal: true, prevVal: startVal });
+        if (startVal !== null && val !== startVal && onChangeCallback) {
+            onChangeCallback(paramKey, val, { isFinal: true, prevVal: startVal });
         }
         startVal = null;
     };
     rangeInput.addEventListener('change', commitSlider);
     rangeInput.addEventListener('pointerup', commitSlider);
 
-    // Reset to center (0) on double-click or right-click
-    const resetCenter = (e) => {
-        e.preventDefault();
+    bindResetActions(rangeInput, () => {
         const prog = getProg();
-        if (prog) {
-            const curVal = prog.getValue(paramKey);
-            if (curVal !== center) {
-                prog.setValue(paramKey, center);
-                updateVisual();
-                if (onChangeCallback) onChangeCallback(paramKey, center, { isFinal: true, prevVal: curVal });
-            }
-        }
-    };
-    rangeInput.addEventListener('dblclick', resetCenter);
-    rangeInput.addEventListener('contextmenu', resetCenter);
-
-    // Click-to-type inline editing
-    valDisplay.addEventListener('click', () => {
-        const prog = getProg();
-        const currentDiff = (prog ? prog.getValue(paramKey) : defaultVal) - center;
-        const input = document.createElement('input');
-        input.type = 'number';
-        input.className = 'bipolar-val-input';
-        input.min = min - center;
-        input.max = max - center;
-        input.value = currentDiff;
-        valDisplay.textContent = '';
-        valDisplay.appendChild(input);
-        input.focus();
-        input.select();
-
-        const commit = () => {
-            let typed = parseInt(input.value, 10);
-            if (isNaN(typed)) typed = currentDiff;
-            const targetVal = Math.min(max, Math.max(min, typed + center));
-            const curVal = currentDiff + center;
-            if (prog && targetVal !== curVal) {
-                prog.setValue(paramKey, targetVal);
-                if (onChangeCallback) onChangeCallback(paramKey, targetVal, { isFinal: true, prevVal: curVal });
-            }
+        if (prog && prog.getValue(paramKey) !== center) {
+            commitParamValue(getProg, paramKey, center, onChangeCallback);
             updateVisual();
-        };
+        }
+    });
 
-        input.addEventListener('blur', commit);
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                input.blur();
-            } else if (e.key === 'Escape') {
-                e.preventDefault();
-                updateVisual();
-            }
-        });
+    attachInlineValueEditor({
+        triggerEl: valDisplay,
+        def: { ...def, offset: center, displayOffset: undefined },
+        min,
+        max,
+        getProg,
+        paramKey,
+        onChangeCallback,
+        refresh: updateVisual,
+        inputClassName: 'bipolar-val-input',
+        inputType: 'number'
     });
 
     container.refresh = updateVisual;
@@ -1061,17 +1149,13 @@ function createBipolarSlider(paramKey, program, onChangeCallback, opts = {}) {
  * Creates a select dropdown bound to a parameter
  */
 function createSelect(paramKey, program, onChangeCallback) {
-    const def = PARAM_MAP.get(paramKey);
-    if (!def) return document.createElement('div');
+    const { def, container, getProg } = initParamControl(paramKey, program, 'select-container');
+    if (!def) return container;
 
     // Auto-promote binary On/Off dropdowns to clean toggle buttons
     if (def.values && def.values.length === 2 && def.values[0] === 'Off' && def.values[1] === 'On') {
         return createToggleButton(paramKey, program, onChangeCallback);
     }
-
-    const container = document.createElement('div');
-    container.className = 'select-container';
-    container.setAttribute('data-param', paramKey);
 
     const label = document.createElement('label');
     label.className = 'control-label';
@@ -1081,8 +1165,7 @@ function createSelect(paramKey, program, onChangeCallback) {
     const select = document.createElement('select');
     select.className = 'control-select';
 
-    const min = def.min ?? 0;
-    const max = def.max ?? (def.values ? def.values.length - 1 : 127);
+    const { min, max } = getParamBounds(def);
 
     if (def.values && def.values.length > 0) {
         def.values.forEach((valText, idx) => {
@@ -1100,8 +1183,6 @@ function createSelect(paramKey, program, onChangeCallback) {
         }
     }
 
-    const getProg = () => resolveProgram(program);
-
     function updateVisual() {
         const prog = getProg();
         if (prog) {
@@ -1109,15 +1190,7 @@ function createSelect(paramKey, program, onChangeCallback) {
         }
     }
 
-    const commitSelectValue = (val) => {
-        const prog = getProg();
-        let curVal = val;
-        if (prog) {
-            curVal = prog.getValue(paramKey);
-            prog.setValue(paramKey, val);
-        }
-        if (onChangeCallback) onChangeCallback(paramKey, val, { isFinal: true, prevVal: curVal });
-    };
+    const commitSelectValue = (val) => commitParamValue(getProg, paramKey, val, onChangeCallback);
 
     select.addEventListener('change', () => {
         commitSelectValue(parseInt(select.value, 10));
@@ -1166,47 +1239,36 @@ function formatParamDisplay(def, val) {
     if (def.values && def.values[val] !== undefined) {
         return def.values[val];
     }
-    if (def.displayOffset) return `${val + def.displayOffset}`;
-    if (def.offset && def.offset > 0) {
-        const diff = val - def.offset;
-        return diff > 0 ? `+${diff}` : `${diff}`;
+    const num = toDisplayNumber(def, val);
+    if (def.offset && def.offset > 0 && !def.displayOffset) {
+        return num > 0 ? `+${num}` : `${num}`;
     }
-    return `${val}`;
+    return `${num}`;
 }
+
+const ADSR_T_MIN = 0.002;
+const ADSR_T_MAX = 10;
+const ADSR_RC_K = 4;
+const ADSR_RC_NORM = 1 - Math.exp(-ADSR_RC_K);
 
 /**
  * Creates an interactive SVG ADSR curve visualizer for Envelope 1, 2, or 3
  */
 function createADSRVisualizer(envNumber, program) {
-    const container = document.createElement('div');
-    container.className = 'visualizer-box adsr-visualizer';
-    container.title = `Envelope ${envNumber} ADSR Curve`;
-    container.setAttribute('data-env', envNumber);
+    const { container, svg } = createVisualizerBox(
+        'adsr-visualizer',
+        `Envelope ${envNumber} ADSR Curve`,
+        '0 0 160 96',
+        ['data-env', envNumber]
+    );
 
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 160 96');
-    svg.setAttribute('class', 'visualizer-svg');
-
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
     const gradId = `adsr-grad-${envNumber}-${Math.random().toString(36).substring(2, 6)}`;
-    defs.innerHTML = `
-        <linearGradient id="${gradId}" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="var(--accent-cyan)" stop-opacity="0.4" />
-            <stop offset="100%" stop-color="var(--accent-cyan)" stop-opacity="0.02" />
-        </linearGradient>
-    `;
-    svg.appendChild(defs);
+    svg.appendChild(createSvgGradient(gradId, '0.4', '0.02'));
 
-    const pathBg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pathBg.setAttribute('class', 'adsr-fill');
-    pathBg.setAttribute('fill', `url(#${gradId})`);
-
-    const pathLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pathLine.setAttribute('class', 'adsr-stroke');
-
+    const pathBg = svgEl('path', { class: 'adsr-fill', fill: `url(#${gradId})` });
+    const pathLine = svgEl('path', { class: 'adsr-stroke' });
     svg.appendChild(pathBg);
     svg.appendChild(pathLine);
-    container.appendChild(svg);
 
     const getProg = () => resolveProgram(program);
 
@@ -1219,19 +1281,15 @@ function createADSRVisualizer(envNumber, program) {
         const rel = prog.getValue(`ENV${envNumber}_REL`);
 
         const padX = 6;
-        const totalW = 160 - padX * 2;
         const h = 96;
         const padY = 6;
         const bottomY = h - padY;
         const topY = padY;
 
-        // Stage times (assumed exponential knob taper): 0 -> instant, 1..127 -> ~2 ms .. 10 s.
-        const T_MIN = 0.002, T_MAX = 10;
-        const toTime = (v) => (v <= 0 ? 0 : T_MIN * Math.pow(T_MAX / T_MIN, (v - 1) / 126));
+        const toTime = (v) => (v <= 0 ? 0 : ADSR_T_MIN * Math.pow(ADSR_T_MAX / ADSR_T_MIN, (v - 1) / 126));
         const tA = toTime(atk), tD = toTime(dcy), tR = toTime(rel);
         const susNorm = sus / 127;
 
-        // Fixed-length sustain hold, drawn as 25% of the total shown time (min 0.3 s)
         const tSus = Math.max(0.3, (tA + tD + tR) / 3);
         const tTotal = tA + tD + tSus + tR;
 
@@ -1239,15 +1297,11 @@ function createADSRVisualizer(envNumber, program) {
         const xOf = (t) => padX + (t / tTotal) * plotW;
         const yOf = (lvl) => bottomY - lvl * (bottomY - topY);
 
-        // Analog-style RC segments: each stage runs ~4 time constants (tau = T/4),
-        // normalized so the stage lands exactly on its target level.
-        const K = 4;
-        const norm = 1 - Math.exp(-K);
         const curve = (t0, dur, from, to, steps) => {
             let d = '';
             for (let i = 1; i <= steps; i++) {
                 const f = i / steps;
-                const e = (1 - Math.exp(-K * f)) / norm; // 0..1 charging curve
+                const e = (1 - Math.exp(-ADSR_RC_K * f)) / ADSR_RC_NORM;
                 d += ` L ${xOf(t0 + f * dur).toFixed(2)} ${yOf(from + (to - from) * e).toFixed(2)}`;
             }
             return d;
@@ -1255,16 +1309,12 @@ function createADSRVisualizer(envNumber, program) {
 
         let strokePath = `M ${padX} ${yOf(0)}`;
         let t = 0;
-        // Attack: RC charge 0 -> 1 (concave, fast start)
         if (tA > 0) strokePath += curve(t, tA, 0, 1, 24); else strokePath += ` L ${xOf(0)} ${yOf(1)}`;
         t += tA;
-        // Decay: exponential fall 1 -> sustain
         if (tD > 0) strokePath += curve(t, tD, 1, susNorm, 24); else strokePath += ` L ${xOf(t)} ${yOf(susNorm)}`;
         t += tD;
-        // Sustain hold
         strokePath += ` L ${xOf(t + tSus).toFixed(2)} ${yOf(susNorm).toFixed(2)}`;
         t += tSus;
-        // Release: exponential fall sustain -> 0
         if (tR > 0) strokePath += curve(t, tR, susNorm, 0, 24); else strokePath += ` L ${xOf(t)} ${yOf(0)}`;
         const fillPath = `${strokePath} L ${padX} ${bottomY} Z`;
 
@@ -1277,233 +1327,135 @@ function createADSRVisualizer(envNumber, program) {
     return container;
 }
 
-/**
- * Creates an interactive SVG Filter frequency response curve
- */
-function createFilterCurveVisualizer(program, onChange) {
-    const container = document.createElement('div');
-    container.className = 'visualizer-box filter-visualizer';
-    container.title = 'Filter Magnitude Response (20 Hz–20 kHz, log; +24 to −48 dB) — Drag dot to adjust Cutoff & Resonance';
+const FILTER_FREQ_MIN = 20;
+const FILTER_FREQ_MAX = 20000;
+const FILTER_DB_MIN = -48;
+const FILTER_DB_MAX = 24;
+const FILTER_VIEW_W = 200;
+const FILTER_VIEW_H = 84;
+const FILTER_X0 = 6;
+const FILTER_X1 = FILTER_VIEW_W - 6;
+const FILTER_Y_TOP = 6;
+const FILTER_Y_BOT = 78;
+const FILTER_FLOOR_EPSILON = 0.5;
+const FILTER_RESO_DRAG_SPAN = 42;
 
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 200 84');
-    svg.setAttribute('class', 'visualizer-svg');
+function computeFilterMagnitude(omega, algo, Q, normReso) {
+    const cmul = (p, q) => [p[0] * q[0] - p[1] * q[1], p[0] * q[1] + p[1] * q[0]];
+    const cadd = (p, q) => [p[0] + q[0], p[1] + q[1]];
+    const cdiv = (p, q) => {
+        const d = q[0] * q[0] + q[1] * q[1];
+        if (d < 1e-12) return [1e6, 0];
+        return [(p[0] * q[0] + p[1] * q[1]) / d, (p[1] * q[0] - p[0] * q[1]) / d];
+    };
+    const cabs = (p) => Math.hypot(p[0], p[1]);
+    const cpow = (p, n) => { let r = [1, 0]; for (let i = 0; i < n; i++) r = cmul(r, p); return r; };
 
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    defs.innerHTML = `
-        <linearGradient id="filter-curve-grad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="var(--accent-cyan)" stop-opacity="0.35" />
-            <stop offset="100%" stop-color="var(--accent-cyan)" stop-opacity="0.0" />
-        </linearGradient>
-    `;
-    svg.appendChild(defs);
+    const s_ = [0, omega];
+    const one = [1, 0];
+    const onePlusS = cadd(one, s_);
+    const biquad = cadd(cadd(cmul(s_, s_), [0, omega / Q]), one);
 
-    const pathBg = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pathBg.setAttribute('class', 'filter-fill');
-    pathBg.setAttribute('fill', 'url(#filter-curve-grad)');
+    switch (algo) {
+        case 0: return cabs(cdiv(one, onePlusS));
+        case 1: return cabs(cdiv(one, biquad));
+        case 2: return cabs(cdiv(one, cadd(cpow(onePlusS, 3), [normReso * 8, 0])));
+        case 3: return cabs(cdiv(one, cadd(cpow(onePlusS, 4), [normReso * 4, 0])));
+        case 4: return cabs(cdiv(cmul(s_, s_), biquad));
+        case 5: return cabs(cdiv([0, omega / Q], biquad));
+        case 6: return cabs(cdiv(cadd(cmul(s_, s_), one), biquad));
+        default: {
+            const ap = cdiv([1, -omega], onePlusS);
+            return cabs(cadd(one, cmul(ap, ap))) / 2;
+        }
+    }
+}
 
-    const pathStopband = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pathStopband.setAttribute('class', 'filter-stroke-stopband');
+function splitPassStopPaths(pts) {
+    let curvePath = '';
+    let floorPath = '';
+    let curveStarted = false;
+    let floorStarted = false;
+    const floorThreshold = FILTER_DB_MIN + FILTER_FLOOR_EPSILON;
 
-    const pathPassband = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pathPassband.setAttribute('class', 'filter-stroke');
+    for (let i = 0; i < pts.length; i++) {
+        const pt = pts[i];
+        const isFloor = pt.db <= floorThreshold;
+        const prevOnFloor = i > 0 && pts[i - 1].db <= floorThreshold;
+        const nextOnFloor = i < pts.length - 1 && pts[i + 1].db <= floorThreshold;
 
-    const cutoffPoint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    cutoffPoint.setAttribute('class', 'filter-cutoff-point');
-    cutoffPoint.setAttribute('r', '3');
-
-    svg.appendChild(pathBg);
-    svg.appendChild(pathStopband);
-    svg.appendChild(pathPassband);
-    svg.appendChild(cutoffPoint);
-    container.appendChild(svg);
-
-    const getProg = () => resolveProgram(program);
-
-    function updateVisual() {
-        const prog = getProg();
-        if (!prog) return;
-        const freq = prog.getValue('FILTER_FREQ'); // 0..255
-        const reso = prog.getValue('FILTER_RESO'); // 0..127
-        const algo = prog.getValue('FILTER_ALGO'); // 0..7 (LP1..4, HP2, BP2, Notch, Phaser)
-
-        // Log frequency axis 20 Hz..20 kHz; cutoff knob 0..255 maps log-linearly onto it (assumed).
-        const F_MIN = 20, F_MAX = 20000;
-        const cutoffHz = F_MIN * Math.pow(F_MAX / F_MIN, freq / 255);
-        const normReso = reso / 127;
-
-        const w = 200;
-        const x0 = 6, x1 = w - 6;
-        const yTop = 6, yBot = 78;
-        const DB_MAX = 24, DB_MIN = -48;
-        const dbToY = (db) => yBot - ((Math.max(DB_MIN, Math.min(DB_MAX, db)) - DB_MIN) / (DB_MAX - DB_MIN)) * (yBot - yTop);
-        const hzToX = (hz) => x0 + (Math.log(hz / F_MIN) / Math.log(F_MAX / F_MIN)) * (x1 - x0);
-
-        // Minimal complex helpers: [re, im]
-        const cmul = (p, q) => [p[0] * q[0] - p[1] * q[1], p[0] * q[1] + p[1] * q[0]];
-        const cadd = (p, q) => [p[0] + q[0], p[1] + q[1]];
-        const cdiv = (p, q) => {
-            const d = q[0] * q[0] + q[1] * q[1];
-            if (d < 1e-12) return [1e6, 0];
-            return [(p[0] * q[0] + p[1] * q[1]) / d, (p[1] * q[0] - p[0] * q[1]) / d];
-        };
-        const cabs = (p) => Math.hypot(p[0], p[1]);
-        const cpow = (p, n) => { let r = [1, 0]; for (let i = 0; i < n; i++) r = cmul(r, p); return r; };
-
-        // Q for 2-pole sections: 0.5 (no peak) up to 20 at max resonance (exponential)
-        const Q = 0.5 * Math.pow(40, normReso);
-
-        // Magnitude |H(jΩ)| for normalized frequency Ω = f / fc (analog prototypes)
-        function magnitude(omega) {
-            const s_ = [0, omega];
-            const one = [1, 0];
-            const onePlusS = cadd(one, s_);
-            const biquad = cadd(cadd(cmul(s_, s_), [0, omega / Q]), one); // s² + s/Q + 1
-            switch (algo) {
-                case 0: return cabs(cdiv(one, onePlusS)); // 1 pole, 6 dB/oct, no resonance
-                case 1: return cabs(cdiv(one, biquad)); // 2 pole, 12 dB/oct
-                case 2: { // 3-pole ladder with feedback k (self-oscillates at k = 8)
-                    const k = normReso * 8;
-                    return cabs(cdiv(one, cadd(cpow(onePlusS, 3), [k, 0])));
-                }
-                case 3: { // 4-pole ladder with feedback k (self-oscillates at k = 4)
-                    const k = normReso * 4;
-                    return cabs(cdiv(one, cadd(cpow(onePlusS, 4), [k, 0])));
-                }
-                case 4: return cabs(cdiv(cmul(s_, s_), biquad)); // 2-pole highpass
-                case 5: return cabs(cdiv([0, omega / Q], biquad)); // 2-pole bandpass (peak gain 1)
-                case 6: return cabs(cdiv(cadd(cmul(s_, s_), one), biquad)); // notch
-                default: { // Phaser: input + 2-stage allpass, notch at cutoff
-                    const ap = cdiv([1, -omega], onePlusS);
-                    const A = cmul(ap, ap);
-                    return cabs(cadd(one, A)) / 2;
-                }
+        if (!isFloor || !prevOnFloor || !nextOnFloor) {
+            if (!isFloor || prevOnFloor !== nextOnFloor) {
+                curvePath += `${!curveStarted ? 'M' : 'L'} ${pt.x.toFixed(2)} ${pt.y.toFixed(2)} `;
+                curveStarted = true;
             }
+        } else {
+            curveStarted = false;
         }
 
-        const N = 120;
-        let strokePath = '';
-        const pts = [];
-        for (let i = 0; i <= N; i++) {
-            const x = x0 + (i / N) * (x1 - x0);
-            const hz = F_MIN * Math.pow(F_MAX / F_MIN, i / N);
-            const db = 20 * Math.log10(Math.max(1e-6, magnitude(hz / cutoffHz)));
-            const y = dbToY(db);
-            pts.push({ x, y, hz, db });
-            strokePath += `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)} `;
+        if (isFloor) {
+            floorPath += `${!floorStarted ? 'M' : 'L'} ${pt.x.toFixed(2)} ${pt.y.toFixed(2)} `;
+            floorStarted = true;
+        } else {
+            floorStarted = false;
         }
-        strokePath = strokePath.trim();
-
-        // Segregate the active curve from the flat attenuation floor (at DB_MIN = -48 dB).
-        // Frequencies rolling off or passing remain in the full bright filter curve.
-        // Once the response bottoms out at the attenuation floor, it transitions to a thin floor line.
-        let curvePath = '';
-        let floorPath = '';
-        let curveStarted = false;
-        let floorStarted = false;
-
-        const FLOOR_EPSILON = 0.5; // Within 0.5 dB of DB_MIN (-48 dB) is on the attenuation floor
-
-        for (let i = 0; i <= N; i++) {
-            const pt = pts[i];
-            const isFloor = pt.db <= (DB_MIN + FLOOR_EPSILON);
-            const prevOnFloor = i > 0 && pts[i - 1].db <= (DB_MIN + FLOOR_EPSILON);
-            const nextOnFloor = i < N && pts[i + 1].db <= (DB_MIN + FLOOR_EPSILON);
-
-            // Active curve segment includes all points not on the floor, plus the boundary point entering/leaving the floor
-            if (!isFloor || !prevOnFloor || !nextOnFloor) {
-                if (!isFloor || prevOnFloor !== nextOnFloor) {
-                    curvePath += `${!curveStarted ? 'M' : 'L'} ${pt.x.toFixed(2)} ${pt.y.toFixed(2)} `;
-                    curveStarted = true;
-                }
-            } else {
-                curveStarted = false;
-            }
-
-            // Attenuation floor segment connects points on the floor (connecting from the point where it reaches the floor)
-            if (isFloor) {
-                floorPath += `${!floorStarted ? 'M' : 'L'} ${pt.x.toFixed(2)} ${pt.y.toFixed(2)} `;
-                floorStarted = true;
-            } else {
-                floorStarted = false;
-            }
-        }
-
-        const cutDb = 20 * Math.log10(Math.max(1e-6, magnitude(1)));
-        cutoffPoint.setAttribute('cx', hzToX(cutoffHz).toFixed(2));
-        cutoffPoint.setAttribute('cy', dbToY(cutDb).toFixed(2));
-
-        const bottomLevel = yBot;
-        const fillPath = `${strokePath} L ${x1} ${bottomLevel} L ${x0} ${bottomLevel} Z`;
-        pathPassband.setAttribute('d', curvePath.trim());
-        pathStopband.setAttribute('d', floorPath.trim());
-        pathBg.setAttribute('d', fillPath);
     }
 
-    // Interactive drag on the filter peak/cutoff dot (controls Cutoff X and Resonance Y simultaneously)
-    if (onChange) {
-        const X_MIN = 6;
-        const X_MAX = 194;
-        const RESO_DRAG_SPAN = 42; // SVG Y units for full 0..127 resonance sweep
+    return { curvePath: curvePath.trim(), floorPath: floorPath.trim() };
+}
 
-        const toSvgCoords = (clientX, clientY) => {
-            const rect = svg.getBoundingClientRect ? svg.getBoundingClientRect() : null;
-            if (!rect || !rect.width || !rect.height) {
-                return { x: clientX, y: clientY };
-            }
-            return {
-                x: ((clientX - rect.left) / rect.width) * 200,
-                y: ((clientY - rect.top) / rect.height) * 84
-            };
+function attachFilterDrag(svg, cutoffPoint, getProg, onChange, updateVisual) {
+    const toSvgCoords = (clientX, clientY) => {
+        const rect = svg.getBoundingClientRect ? svg.getBoundingClientRect() : null;
+        if (!rect || !rect.width || !rect.height) {
+            return { x: clientX, y: clientY };
+        }
+        return {
+            x: ((clientX - rect.left) / rect.width) * FILTER_VIEW_W,
+            y: ((clientY - rect.top) / rect.height) * FILTER_VIEW_H
         };
+    };
 
-        const syncFilterKnob = (key) => {
-            if (typeof document === 'undefined') return;
-            document.querySelectorAll(`[data-param="${key}"]`).forEach(el => {
-                if (el.refresh) el.refresh();
-            });
-        };
+    const syncFilterKnob = (key) => {
+        if (typeof document === 'undefined') return;
+        document.querySelectorAll(`[data-param="${key}"]`).forEach(el => {
+            if (el.refresh) el.refresh();
+        });
+    };
 
-        let dragState = null;
+    let dragState = null;
 
-        const onPointerMove = (e) => {
-            if (!dragState) return;
-            const pt = toSvgCoords(e.clientX, e.clientY);
-            const normX = Math.max(0, Math.min(1, (pt.x - X_MIN) / (X_MAX - X_MIN)));
-            const nextFreq = Math.round(normX * 255);
-            const deltaY = dragState.startY - pt.y;
-            const nextReso = Math.max(0, Math.min(127, Math.round(dragState.startReso + (deltaY / RESO_DRAG_SPAN) * 127)));
+    const onPointerMove = (e) => {
+        if (!dragState) return;
+        const pt = toSvgCoords(e.clientX, e.clientY);
+        const normX = Math.max(0, Math.min(1, (pt.x - FILTER_X0) / (FILTER_X1 - FILTER_X0)));
+        const nextFreq = Math.round(normX * 255);
+        const deltaY = dragState.startY - pt.y;
+        const nextReso = Math.max(0, Math.min(127, Math.round(dragState.startReso + (deltaY / FILTER_RESO_DRAG_SPAN) * 127)));
 
-            if (nextFreq !== dragState.curFreq) {
-                dragState.curFreq = nextFreq;
-                onChange('FILTER_FREQ', nextFreq, { isInterim: true, prevVal: dragState.startFreq });
-                syncFilterKnob('FILTER_FREQ');
-            }
-            if (nextReso !== dragState.curReso) {
-                dragState.curReso = nextReso;
-                onChange('FILTER_RESO', nextReso, { isInterim: true, prevVal: dragState.startReso });
-                syncFilterKnob('FILTER_RESO');
-            }
-            updateVisual();
-        };
+        if (nextFreq !== dragState.curFreq) {
+            dragState.curFreq = nextFreq;
+            onChange('FILTER_FREQ', nextFreq, { isInterim: true, prevVal: dragState.startFreq });
+            syncFilterKnob('FILTER_FREQ');
+        }
+        if (nextReso !== dragState.curReso) {
+            dragState.curReso = nextReso;
+            onChange('FILTER_RESO', nextReso, { isInterim: true, prevVal: dragState.startReso });
+            syncFilterKnob('FILTER_RESO');
+        }
+        updateVisual();
+    };
 
-        const onPointerUp = () => {
-            if (!dragState) return;
-            const { startFreq, startReso, curFreq, curReso } = dragState;
-            dragState = null;
-            cutoffPoint.classList.remove('dragging');
-            if (typeof window !== 'undefined') {
-                window.removeEventListener('pointermove', onPointerMove);
-                window.removeEventListener('pointerup', onPointerUp);
-                window.removeEventListener('pointercancel', onPointerUp);
-            }
+    const onPointerUp = () => {
+        if (!dragState) return;
+        const { startFreq, startReso, curFreq, curReso } = dragState;
+        dragState = null;
+        cutoffPoint.classList.remove('dragging');
 
-            const freqChanged = curFreq !== startFreq;
-            const resoChanged = curReso !== startReso;
-            if (freqChanged || resoChanged) {
-                if (typeof onChange.beginGroup === 'function') {
-                    onChange.beginGroup('Filter Cutoff & Resonance');
-                }
+        const freqChanged = curFreq !== startFreq;
+        const resoChanged = curReso !== startReso;
+        if (freqChanged || resoChanged) {
+            withChangeGroup(onChange, 'Filter Cutoff & Resonance', () => {
                 if (freqChanged) {
                     onChange('FILTER_FREQ', curFreq, { isFinal: true, prevVal: startFreq });
                     syncFilterKnob('FILTER_FREQ');
@@ -1512,35 +1464,94 @@ function createFilterCurveVisualizer(program, onChange) {
                     onChange('FILTER_RESO', curReso, { isFinal: true, prevVal: startReso });
                     syncFilterKnob('FILTER_RESO');
                 }
-                if (typeof onChange.endGroup === 'function') {
-                    onChange.endGroup();
-                }
-            }
+            });
+        }
+    };
+
+    cutoffPoint.addEventListener('pointerdown', (e) => {
+        const prog = getProg();
+        if (!prog) return;
+        if (e.preventDefault) e.preventDefault();
+        if (e.stopPropagation) e.stopPropagation();
+
+        const pt = toSvgCoords(e.clientX, e.clientY);
+        const startFreq = prog.getValue('FILTER_FREQ');
+        const startReso = prog.getValue('FILTER_RESO');
+        dragState = {
+            startY: pt.y,
+            startFreq,
+            startReso,
+            curFreq: startFreq,
+            curReso: startReso
         };
+        cutoffPoint.classList.add('dragging');
+        startWindowPointerDrag(onPointerMove, onPointerUp);
+    });
+}
 
-        cutoffPoint.addEventListener('pointerdown', (e) => {
-            const prog = getProg();
-            if (!prog) return;
-            if (e.preventDefault) e.preventDefault();
-            if (e.stopPropagation) e.stopPropagation();
+/**
+ * Creates an interactive SVG Filter frequency response curve
+ */
+function createFilterCurveVisualizer(program, onChange) {
+    const { container, svg } = createVisualizerBox(
+        'filter-visualizer',
+        'Filter Magnitude Response (20 Hz–20 kHz, log; +24 to −48 dB) — Drag dot to adjust Cutoff & Resonance',
+        `0 0 ${FILTER_VIEW_W} ${FILTER_VIEW_H}`
+    );
 
-            const pt = toSvgCoords(e.clientX, e.clientY);
-            const startFreq = prog.getValue('FILTER_FREQ');
-            const startReso = prog.getValue('FILTER_RESO');
-            dragState = {
-                startY: pt.y,
-                startFreq,
-                startReso,
-                curFreq: startFreq,
-                curReso: startReso
-            };
-            cutoffPoint.classList.add('dragging');
-            if (typeof window !== 'undefined') {
-                window.addEventListener('pointermove', onPointerMove);
-                window.addEventListener('pointerup', onPointerUp);
-                window.addEventListener('pointercancel', onPointerUp);
-            }
-        });
+    svg.appendChild(createSvgGradient('filter-curve-grad', '0.35', '0.0'));
+
+    const pathBg = svgEl('path', { class: 'filter-fill', fill: 'url(#filter-curve-grad)' });
+    const pathStopband = svgEl('path', { class: 'filter-stroke-stopband' });
+    const pathPassband = svgEl('path', { class: 'filter-stroke' });
+    const cutoffPoint = svgEl('circle', { class: 'filter-cutoff-point', r: '3' });
+
+    svg.appendChild(pathBg);
+    svg.appendChild(pathStopband);
+    svg.appendChild(pathPassband);
+    svg.appendChild(cutoffPoint);
+
+    const getProg = () => resolveProgram(program);
+
+    function updateVisual() {
+        const prog = getProg();
+        if (!prog) return;
+        const freq = prog.getValue('FILTER_FREQ');
+        const reso = prog.getValue('FILTER_RESO');
+        const algo = prog.getValue('FILTER_ALGO');
+
+        const cutoffHz = FILTER_FREQ_MIN * Math.pow(FILTER_FREQ_MAX / FILTER_FREQ_MIN, freq / 255);
+        const normReso = reso / 127;
+        const Q = 0.5 * Math.pow(40, normReso);
+
+        const dbToY = (db) => FILTER_Y_BOT - ((Math.max(FILTER_DB_MIN, Math.min(FILTER_DB_MAX, db)) - FILTER_DB_MIN) / (FILTER_DB_MAX - FILTER_DB_MIN)) * (FILTER_Y_BOT - FILTER_Y_TOP);
+        const hzToX = (hz) => FILTER_X0 + (Math.log(hz / FILTER_FREQ_MIN) / Math.log(FILTER_FREQ_MAX / FILTER_FREQ_MIN)) * (FILTER_X1 - FILTER_X0);
+
+        const N = 120;
+        let strokePath = '';
+        const pts = [];
+        for (let i = 0; i <= N; i++) {
+            const x = FILTER_X0 + (i / N) * (FILTER_X1 - FILTER_X0);
+            const hz = FILTER_FREQ_MIN * Math.pow(FILTER_FREQ_MAX / FILTER_FREQ_MIN, i / N);
+            const db = 20 * Math.log10(Math.max(1e-6, computeFilterMagnitude(hz / cutoffHz, algo, Q, normReso)));
+            const y = dbToY(db);
+            pts.push({ x, y, hz, db });
+            strokePath += `${i === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)} `;
+        }
+
+        const { curvePath, floorPath } = splitPassStopPaths(pts);
+        const cutDb = 20 * Math.log10(Math.max(1e-6, computeFilterMagnitude(1, algo, Q, normReso)));
+        cutoffPoint.setAttribute('cx', hzToX(cutoffHz).toFixed(2));
+        cutoffPoint.setAttribute('cy', dbToY(cutDb).toFixed(2));
+
+        const fillPath = `${strokePath.trim()} L ${FILTER_X1} ${FILTER_Y_BOT} L ${FILTER_X0} ${FILTER_Y_BOT} Z`;
+        pathPassband.setAttribute('d', curvePath);
+        pathStopband.setAttribute('d', floorPath);
+        pathBg.setAttribute('d', fillPath);
+    }
+
+    if (onChange) {
+        attachFilterDrag(svg, cutoffPoint, getProg, onChange, updateVisual);
     }
 
     container.refresh = updateVisual;
@@ -1548,30 +1559,115 @@ function createFilterCurveVisualizer(program, onChange) {
     return container;
 }
 
+const LFO_MAX_CYCLES = 12;
+
+function computeLfoCycles(speed, speedDef) {
+    let pos;
+    const syncLabel = speedDef && speedDef.values ? speedDef.values[speed] : null;
+    if (speed >= 128 && syncLabel) {
+        const period = (lbl) => {
+            let m = /^(\d+)\/(\d+)$/.exec(lbl);
+            if (m) return parseInt(m[1], 10) / parseInt(m[2], 10);
+            m = /^(\d+)([dt])$/.exec(lbl);
+            if (m) return (1 / parseInt(m[1], 10)) * (m[2] === 'd' ? 1.5 : 2 / 3);
+            return 1;
+        };
+        const slowest = period(speedDef.values[128]);
+        const fastest = period(speedDef.values[speedDef.values.length - 1]);
+        pos = Math.log(slowest / period(syncLabel)) / Math.log(slowest / fastest);
+    } else {
+        pos = Math.min(1, Math.max(0, speed / 127));
+    }
+    return { pos, cycles: 1 + Math.round(pos * (LFO_MAX_CYCLES - 1)) };
+}
+
+function buildLfoWavePath(wave, cycles, pos, lfoNumber) {
+    const mid = 15;
+    const amp = 10;
+    const x0 = 6, x1 = 94;
+    const yOf = (v) => mid - v * amp;
+    const yUni = (v) => mid + amp - v * 2 * amp;
+    const frac = (v) => v - Math.floor(v);
+    const rnd = (n) => {
+        const r = Math.sin(n * 127.1 + lfoNumber * 311.7) * 43758.5453;
+        return (r - Math.floor(r)) * 2 - 1;
+    };
+    const periodic = (fn) => {
+        const N = 360;
+        let out = '';
+        for (let i = 0; i <= N; i++) {
+            const f = i / N;
+            out += `${i === 0 ? 'M' : 'L'} ${(x0 + f * (x1 - x0)).toFixed(2)} ${fn(f * cycles).toFixed(2)} `;
+        }
+        return out.trim();
+    };
+
+    switch (wave) {
+        case 0: return periodic((ph) => yOf(Math.sin(2 * Math.PI * ph)));
+        case 1: return periodic((ph) => {
+            const f = frac(ph);
+            return yOf(f < 0.25 ? 4 * f : f < 0.75 ? 2 - 4 * f : 4 * f - 4);
+        });
+        case 2: return periodic((ph) => yOf(2 * frac(ph + 0.5) - 1));
+        case 3: return periodic((ph) => yOf(frac(ph) < 0.5 ? 1 : -1));
+        case 4:
+        case 17: {
+            const uni = wave === 17;
+            return periodic((ph) => {
+                const v = rnd(Math.floor(ph));
+                return uni ? yUni((v + 1) / 2) : yOf(v);
+            });
+        }
+        case 5:
+        case 18: {
+            const uni = wave === 18;
+            const nodes = 3 + pos * 21;
+            const valueNoise = (t, seed) => {
+                const n = Math.floor(t);
+                const f = frac(t);
+                const sm = f * f * (3 - 2 * f);
+                return rnd(n + seed) + (rnd(n + 1 + seed) - rnd(n + seed)) * sm;
+            };
+            const N = 360;
+            let d = '';
+            for (let i = 0; i <= N; i++) {
+                const f = i / N;
+                const v = 0.65 * valueNoise(f * nodes, 0) + 0.35 * valueNoise(f * nodes * 2.3, 1000);
+                const y = uni ? yUni((v + 1) / 2) : yOf(v);
+                d += `${i === 0 ? 'M' : 'L'} ${(x0 + f * (x1 - x0)).toFixed(2)} ${y.toFixed(2)} `;
+            }
+            return d.trim();
+        }
+        case 6: case 7: case 8:
+            return `M 6 ${mid + amp} Q 50 ${mid + amp} 94 ${mid - amp}`;
+        case 9: case 10: case 11:
+            return `M 6 ${mid - amp} Q 50 ${mid + amp} 94 ${mid + amp}`;
+        case 12: case 13: case 14:
+            return `M 6 ${mid + amp} Q 30 ${mid - amp} 50 ${mid - amp} Q 70 ${mid - amp} 94 ${mid + amp}`;
+        case 15:
+            return `M 6 ${mid - amp} L 65 ${mid - amp} L 65 ${mid + amp} L 94 ${mid + amp}`;
+        case 16:
+            return `M 6 ${mid + amp} L 65 ${mid + amp} L 65 ${mid - amp} L 94 ${mid - amp}`;
+        default:
+            return periodic(() => mid);
+    }
+}
+
 /**
  * Creates an interactive SVG LFO Waveform Preview
  */
 function createLFOWaveformPreview(lfoNumber, program) {
-    const container = document.createElement('div');
-    container.className = 'visualizer-box lfo-visualizer';
-    container.title = `LFO ${lfoNumber} Waveform Preview`;
-    container.setAttribute('data-lfo', lfoNumber);
+    const { container, svg } = createVisualizerBox(
+        'lfo-visualizer',
+        `LFO ${lfoNumber} Waveform Preview`,
+        '0 0 100 36',
+        ['data-lfo', lfoNumber]
+    );
 
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 100 36');
-    svg.setAttribute('class', 'visualizer-svg');
-
-    const pathLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pathLine.setAttribute('class', 'lfo-stroke');
-
-    const nameText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    nameText.setAttribute('x', '5');
-    nameText.setAttribute('y', '32');
-    nameText.setAttribute('class', 'lfo-text');
-
+    const pathLine = svgEl('path', { class: 'lfo-stroke' });
+    const nameText = svgEl('text', { x: '5', y: '32', class: 'lfo-text' });
     svg.appendChild(pathLine);
     svg.appendChild(nameText);
-    container.appendChild(svg);
 
     const getProg = () => resolveProgram(program);
 
@@ -1579,127 +1675,11 @@ function createLFOWaveformPreview(lfoNumber, program) {
         const prog = getProg();
         if (!prog) return;
         const wave = prog.getValue(`LFO${lfoNumber}_WAVE`);
-        const waveNames = LOOKUPS.lfoWaves;
-        nameText.textContent = waveNames[wave] || `Wave ${wave}`;
+        nameText.textContent = LOOKUPS.lfoWaves[wave] || `Wave ${wave}`;
 
-        const mid = 15;
-        const amp = 10;
-        const x0 = 6, x1 = 94;
-        const speedDef = PARAM_MAP.get(`LFO${lfoNumber}_SPEED`);
-        const speed = prog.getValue(`LFO${lfoNumber}_SPEED`);
-
-        // Cycles shown across the window: 1 at slowest speed, up to MAX_CYCLES at fastest (log-compressed).
-        const MAX_CYCLES = 12;
-        let pos; // 0..1 position along the speed range
-        const syncLabel = speedDef && speedDef.values ? speedDef.values[speed] : null;
-        if (speed >= 128 && syncLabel) {
-            // Tempo-synced divisions: period in whole notes (32/1 slowest ... 64t fastest)
-            const period = (lbl) => {
-                let m = /^(\d+)\/(\d+)$/.exec(lbl);
-                if (m) return parseInt(m[1], 10) / parseInt(m[2], 10);
-                m = /^(\d+)([dt])$/.exec(lbl);
-                if (m) return (1 / parseInt(m[1], 10)) * (m[2] === 'd' ? 1.5 : 2 / 3);
-                return 1;
-            };
-            const slowest = period(speedDef.values[128]);
-            const fastest = period(speedDef.values[speedDef.values.length - 1]);
-            pos = Math.log(slowest / period(syncLabel)) / Math.log(slowest / fastest);
-        } else {
-            pos = Math.min(1, Math.max(0, speed / 127)); // free-running rate
-        }
-        const cycles = 1 + Math.round(pos * (MAX_CYCLES - 1)); // whole cycles so the trace ends cleanly
-
-        const yOf = (v) => mid - v * amp; // v in -1..1
-        const yUni = (v) => mid + amp - v * 2 * amp; // v in 0..1 spans full height
-
-        // Deterministic pseudo-random value per cycle index (-1..1)
-        const rnd = (n) => {
-            const r = Math.sin(n * 127.1 + lfoNumber * 311.7) * 43758.5453;
-            return (r - Math.floor(r)) * 2 - 1;
-        };
-
-        const periodic = (fn) => {
-            const N = 360;
-            let out = '';
-            for (let i = 0; i <= N; i++) {
-                const f = i / N;
-                const ph = f * cycles;
-                out += `${i === 0 ? 'M' : 'L'} ${(x0 + f * (x1 - x0)).toFixed(2)} ${fn(ph).toFixed(2)} `;
-            }
-            return out.trim();
-        };
-        const frac = (v) => v - Math.floor(v);
-        let d = '';
-
-        switch (wave) {
-            case 0: // Sine
-                d = periodic((ph) => yOf(Math.sin(2 * Math.PI * ph)));
-                break;
-            case 1: // Triangle (starts at 0, rising)
-                d = periodic((ph) => {
-                    const f = frac(ph);
-                    return yOf(f < 0.25 ? 4 * f : f < 0.75 ? 2 - 4 * f : 4 * f - 4);
-                });
-                break;
-            case 2: // Sawtooth (ramp up, snap down)
-                d = periodic((ph) => yOf(2 * frac(ph + 0.5) - 1));
-                break;
-            case 3: // Square (50% duty)
-                d = periodic((ph) => yOf(frac(ph) < 0.5 ? 1 : -1));
-                break;
-            case 4: // S&H Bipolar: new random level each cycle, held
-            case 17: { // S&H Unipolar
-                const uni = wave === 17;
-                d = periodic((ph) => {
-                    const v = rnd(Math.floor(ph));
-                    return uni ? yUni((v + 1) / 2) : yOf(v);
-                });
-                break;
-            }
-            case 5: // Random Bipolar: smooth, multi-node random curve
-            case 18: { // Random Unipolar
-                const uni = wave === 18;
-                // Smoothly interpolated random "value noise" so the trace stays distinctive even at the
-                // slowest speed: several random nodes across the window plus a faster, quieter second layer.
-                // The node count scales continuously with speed so the trace morphs smoothly as the knob turns.
-                const nodes = 3 + pos * 21;
-                const valueNoise = (t, seed) => {
-                    const n = Math.floor(t);
-                    const f = frac(t);
-                    const sm = f * f * (3 - 2 * f);
-                    return rnd(n + seed) + (rnd(n + 1 + seed) - rnd(n + seed)) * sm;
-                };
-                const N = 360;
-                for (let i = 0; i <= N; i++) {
-                    const f = i / N;
-                    const v = 0.65 * valueNoise(f * nodes, 0) + 0.35 * valueNoise(f * nodes * 2.3, 1000);
-                    const y = uni ? yUni((v + 1) / 2) : yOf(v);
-                    d += `${i === 0 ? 'M' : 'L'} ${(x0 + f * (x1 - x0)).toFixed(2)} ${y.toFixed(2)} `;
-                }
-                d = d.trim();
-                break;
-            }
-            case 6: case 7: case 8: // Attack A/B/C
-                d = `M 6 ${mid + amp} Q 50 ${mid + amp} 94 ${mid - amp}`;
-                break;
-            case 9: case 10: case 11: // Decay A/B/C
-                d = `M 6 ${mid - amp} Q 50 ${mid + amp} 94 ${mid + amp}`;
-                break;
-            case 12: case 13: case 14: // Attack-Decay A/B/C
-                d = `M 6 ${mid + amp} Q 30 ${mid - amp} 50 ${mid - amp} Q 70 ${mid - amp} 94 ${mid + amp}`;
-                break;
-            case 15: // Square 1 > 0
-                d = `M 6 ${mid - amp} L 65 ${mid - amp} L 65 ${mid + amp} L 94 ${mid + amp}`;
-                break;
-            case 16: // Square 0 > 1
-                d = `M 6 ${mid + amp} L 65 ${mid + amp} L 65 ${mid - amp} L 94 ${mid - amp}`;
-                break;
-            default:
-                d = periodic(() => mid);
-                break;
-        }
-
-        pathLine.setAttribute('d', d);
+        const speedKey = `LFO${lfoNumber}_SPEED`;
+        const { pos, cycles } = computeLfoCycles(prog.getValue(speedKey), PARAM_MAP.get(speedKey));
+        pathLine.setAttribute('d', buildLfoWavePath(wave, cycles, pos, lfoNumber));
     }
 
     container.refresh = updateVisual;
