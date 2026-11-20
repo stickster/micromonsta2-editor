@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Editor:** Escape bank and program names in librarian and duplicate modal HTML.
 - **Editor:** Target clicked oscillator in mute/solo buttons and pass slot to `resetAuditionLatch`.
 - **MIDI:** Guard fresh-session channel migration and cancel probes on port disconnect.
 - **Tab Sync:** Transition initial fallback leadership from `null` to `false` when lease is held.

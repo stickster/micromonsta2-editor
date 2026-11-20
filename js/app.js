@@ -48,6 +48,20 @@ const PARAM_TO_MTX_DST = {
     ARP_GATE: 44
 };
 
+/**
+ * Escapes HTML special characters for safe interpolation into markup or attributes.
+ * @param {*} value
+ * @returns {string}
+ */
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 class App {
     static get VERSION() {
         return typeof APP_VERSION !== 'undefined' ? APP_VERSION : '0.1.0';
@@ -4109,9 +4123,9 @@ class App {
             tab.setAttribute('draggable', 'true');
             tab.innerHTML = `
                 <span class="bank-tab-drag" title="Drag to reorder banks">⋮⋮</span>
-                <span class="bank-tab-title">${bank.name}</span>
+                <span class="bank-tab-title">${escapeHtml(bank.name)}</span>
                 <span class="bank-tab-count">(${bank.length})</span>
-                ${this.librarian.banks.length > 1 ? `<button class="bank-tab-close" data-index="${idx}" title="Delete bank ${bank.name}">✕</button>` : ''}
+                ${this.librarian.banks.length > 1 ? `<button class="bank-tab-close" data-index="${idx}" title="Delete bank ${escapeHtml(bank.name)}">✕</button>` : ''}
             `;
 
             tab.onclick = () => {
@@ -4467,11 +4481,11 @@ class App {
 
             row.innerHTML = `
                 <div class="prog-drag-handle" title="Drag to reorder, swap, or move to another bank">⋮⋮</div>
-                <button type="button" class="prog-select-cb${isSelected ? ' active' : ''}" aria-pressed="${isSelected ? 'true' : 'false'}" title="Select patch for multi-drag" aria-label="Select ${program.name}">
+                <button type="button" class="prog-select-cb${isSelected ? ' active' : ''}" aria-pressed="${isSelected ? 'true' : 'false'}" title="Select patch for multi-drag" aria-label="Select ${escapeHtml(program.name)}">
                     <svg class="prog-select-check" viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2.2 6.2 4.8 8.8 9.8 3.2"></polyline></svg>
                 </button>
                 <div class="prog-slot-num">#${(originalIndex + 1).toString().padStart(2, '0')}</div>
-                <div class="prog-name">${program.name}</div>
+                <div class="prog-name">${escapeHtml(program.name)}</div>
                 <select class="prog-cat-badge prog-cat-select" data-prog-index="${originalIndex}" title="Edit category">
                     ${catOptions}
                 </select>
@@ -4720,7 +4734,7 @@ class App {
         if (dupInfo.duplicatesFound === 0) {
             body.innerHTML = `
                 <div class="empty-state">
-                    <p class="text-success">✓ Clean bank! No duplicate patches detected in "${activeBank.name}".</p>
+                    <p class="text-success">✓ Clean bank! No duplicate patches detected in "${escapeHtml(activeBank.name)}".</p>
                 </div>
             `;
         } else {
@@ -4746,7 +4760,7 @@ class App {
                     const item = document.createElement('div');
                     item.className = 'dup-group-item';
                     item.innerHTML = `
-                        <span>Slot #${(index + 1).toString().padStart(2, '0')}: <strong>${program.name}</strong> (${LOOKUPS.categories[program.category]})</span>
+                        <span>Slot #${(index + 1).toString().padStart(2, '0')}: <strong>${escapeHtml(program.name)}</strong> (${escapeHtml(LOOKUPS.categories[program.category])})</span>
                         <span class="badge ${idx === 0 ? 'badge-info' : 'badge-warning'}">${idx === 0 ? 'Original' : 'Duplicate'}</span>
                     `;
                     list.appendChild(item);

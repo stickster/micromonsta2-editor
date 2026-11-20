@@ -992,4 +992,84 @@ MM2TestRunner.register('Patch Librarian, Banks & Duplicates', async ({ assert, a
         }
     });
 
+    await runSection('\n--- [67] Librarian & Duplicate Modal HTML Escaping Tests ---', async () => {
+        const app = new App();
+        const xssBankName = 'Bank "<img src=x onerror=1>&';
+        const xssProgName = '<sc>"&';
+        const bank1 = new MM2Bank(xssBankName, 0);
+        const bank2 = new MM2Bank('Safe Bank', 1);
+        const p1 = new MM2Program();
+        p1.name = xssProgName;
+        const p2 = p1.clone();
+        bank1.addProgram(p1);
+        bank1.addProgram(p2);
+        app.librarian.banks = [bank1, bank2];
+        app.librarian.activeBankIndex = 0;
+
+        const bankTabsEl = { innerHTML: '', children: [], appendChild(c) { this.children.push(c); } };
+        const progListEl = { innerHTML: '', children: [], appendChild(c) { this.children.push(c); } };
+        const modalEl = { classList: new Set(), addCalled: false };
+        modalEl.classList = {
+            add: (c) => { if (c === 'open') modalEl.addCalled = true; },
+            remove: () => {}
+        };
+        const modalBodyEl = {
+            innerHTML: '',
+            children: [],
+            appendChild(c) { this.children.push(c); },
+            querySelector: () => ({ onclick: null })
+        };
+
+        document.registerMockElement('bank-tabs', bankTabsEl);
+        document.registerMockElement('librarian-prog-list', progListEl);
+        document.registerMockElement('duplicate-modal', modalEl);
+        document.registerMockElement('duplicate-modal-body', modalBodyEl);
+
+        const prevCreateEl = document.createElement;
+        document.createElement = () => ({
+            className: '',
+            dataset: {},
+            style: {},
+            innerHTML: '',
+            children: [],
+            setAttribute: () => {},
+            appendChild(c) { this.children.push(c); },
+            querySelector: () => ({})
+        });
+
+        try {
+            app.renderLibrarianBank();
+            const tabHtml = bankTabsEl.children[0].innerHTML;
+            assert(!tabHtml.includes('<img'), 'Bank tab escapes <img in bank name');
+            assert(tabHtml.includes('&lt;img'), 'Bank tab encodes < as &lt;');
+            assert(tabHtml.includes('&quot;'), 'Bank tab encodes " as &quot;');
+            assert(tabHtml.includes('&amp;'), 'Bank tab encodes & as &amp;');
+
+            const rowHtml = progListEl.children[0].innerHTML;
+            assert(!rowHtml.includes('<sc>'), 'Program row escapes <sc> in program name');
+            assert(rowHtml.includes('&lt;sc&gt;&quot;&amp;'), 'Program row encodes <sc>"& safely');
+
+            // Test duplicate modal with duplicates present
+            app.showDuplicateModal();
+            const dupGroupCard = modalBodyEl.children[1];
+            const dupList = dupGroupCard.children[0];
+            const dupItemHtml = dupList.children[0].innerHTML;
+            assert(!dupItemHtml.includes('<sc>'), 'Duplicate modal item escapes <sc> in program name');
+            assert(dupItemHtml.includes('&lt;sc&gt;&quot;&amp;'), 'Duplicate modal item encodes <sc>"& safely');
+
+            // Test duplicate modal with clean bank (0 duplicates)
+            app.librarian.activeBankIndex = 1;
+            bank2.name = xssBankName;
+            app.showDuplicateModal();
+            assert(!modalBodyEl.innerHTML.includes('<img'), 'Empty duplicate modal escapes <img in bank name');
+            assert(modalBodyEl.innerHTML.includes('&lt;img'), 'Empty duplicate modal encodes < as &lt;');
+        } finally {
+            document.createElement = prevCreateEl;
+            document.registerMockElement('bank-tabs', null);
+            document.registerMockElement('librarian-prog-list', null);
+            document.registerMockElement('duplicate-modal', null);
+            document.registerMockElement('duplicate-modal-body', null);
+        }
+    });
+
 });
