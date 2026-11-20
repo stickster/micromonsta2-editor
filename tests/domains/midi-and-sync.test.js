@@ -1478,4 +1478,58 @@ MM2TestRunner.register('MIDI, Hardware Sync & Connection Lifecycle', async ({ as
         assertEqual(outputs.filter(p => p.name === 'Euphonix MIDI').length, 1, 'Only one Euphonix MIDI output returned');
     });
 
+    await runSection('\n--- [51] Fresh-Session Channel Migration Guard & Disconnect Cleanup Tests ---', async () => {
+        // 1. Fresh session on default Channel 15 (baseChannel=14, savedBaseChannel=undefined) does not emit spurious migration
+        const freshMidi = new MidiManager();
+        freshMidi.saveSettings = () => { };
+        freshMidi.baseChannel = 14;
+        freshMidi.savedBaseChannel = undefined;
+        let migrationEvents = 0;
+        freshMidi.on('base-channel-changed', () => { migrationEvents++; });
+
+        const mm2In = { id: 'mm2-in', name: 'MicroMonsta 2', state: 'connected', addEventListener: () => { }, removeEventListener: () => { } };
+        const mm2Out = { id: 'mm2-out', name: 'MicroMonsta 2', state: 'connected', send: () => { } };
+        freshMidi.inPort = mm2In;
+        freshMidi.outPort = mm2Out;
+        freshMidi.midiAccess = {
+            inputs: new Map([['mm2-in', mm2In]]),
+            outputs: new Map([['mm2-out', mm2Out]])
+        };
+
+        freshMidi.autoSelectPorts();
+        assertEqual(freshMidi.baseChannel, 14, 'Fresh session keeps baseChannel at 14 (Channel 15)');
+        assertEqual(migrationEvents, 0, 'Fresh session on Channel 15 does not emit spurious base-channel-changed');
+
+        // 2. Leader disconnect cancels active probe and resets hardwareResponsive
+        const leaderMidi = new MidiManager();
+        leaderMidi.isLeader = true;
+        leaderMidi.inPort = mm2In;
+        leaderMidi.outPort = mm2Out;
+        leaderMidi.hardwareResponsive = true;
+        let probeResolved = 'pending';
+        leaderMidi.requestProgramDump(0, { timeoutMs: 2000 }).then((res) => { probeResolved = res; });
+        assertEqual(leaderMidi._isProbing, true, 'Leader probe active before disconnect');
+
+        leaderMidi.onStateChange({ port: { id: 'mm2-out', name: 'MicroMonsta 2', type: 'output', state: 'disconnected' } });
+        await new Promise(r => setTimeout(r, 10));
+        assertEqual(leaderMidi._isProbing, false, 'Disconnect cancels active probe on leader');
+        assertEqual(leaderMidi._probeTimeout, null, 'Disconnect clears active probe timer');
+        assertEqual(probeResolved, null, 'Pending probe promise resolves to null on disconnect');
+        assertEqual(leaderMidi.hardwareResponsive, null, 'Leader disconnect resets hardwareResponsive to null');
+
+        // 3. Follower disconnect cancels probe but preserves leader-synced hardwareResponsive
+        const followerMidi = new MidiManager();
+        followerMidi.isLeader = false;
+        followerMidi.inPort = mm2In;
+        followerMidi.outPort = mm2Out;
+        followerMidi.hardwareResponsive = true;
+        followerMidi.setRemoteProbing(true, 2000);
+        assertEqual(followerMidi._isProbing, true, 'Follower remote probing active before disconnect');
+
+        followerMidi.onStateChange({ port: { id: 'mm2-in', name: 'MicroMonsta 2', type: 'input', state: 'disconnected' } });
+        assertEqual(followerMidi._isProbing, false, 'Follower disconnect cancels remote probing state');
+        assertEqual(followerMidi._remoteProbeTimeout, null, 'Follower disconnect clears remote probe timeout');
+        assertEqual(followerMidi.hardwareResponsive, true, 'Follower disconnect preserves leader-synced hardwareResponsive');
+    });
+
 });

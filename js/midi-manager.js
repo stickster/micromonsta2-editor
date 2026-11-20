@@ -209,8 +209,8 @@ class MidiManager {
             this.setOutputPort(targetOut.id);
         }
 
-        // Auto-migrate baseChannel to 14 (Channel 15) if MM2 detected and baseChannel is unset or 0 (stale default)
-        if ((this.isMM2Port(this.inPort) || this.isMM2Port(this.outPort)) && (this.baseChannel === 0 || this.savedBaseChannel === undefined || this.savedBaseChannel === 0)) {
+        // Auto-migrate baseChannel to 14 (Channel 15) if MM2 detected and baseChannel is 0 (stale Channel 1 default)
+        if ((this.isMM2Port(this.inPort) || this.isMM2Port(this.outPort)) && (this.baseChannel === 0 || this.savedBaseChannel === 0)) {
             console.log('[MidiManager] Detected MM2 with Channel 1. Auto-migrating base channel to 14 (Channel 15).');
             this.baseChannel = 14;
             this.savedBaseChannel = 14;
@@ -582,14 +582,16 @@ class MidiManager {
                     this.inPort.removeEventListener('midimessage', this.onMidiMessage);
                 } catch (e) { }
                 this.inPort = null;
-                this.hardwareResponsive = null;
+                this.cancelProbe();
+                this.resetHardwareResponsiveness();
                 this.setDetectedFirmware(null, null);
                 this.emit('connection-lost', { port, type: 'input' });
                 this.emit('port-change', { type: 'input', port: null });
             }
             if (port.type === 'output' && this.outPort && (this.outPort.id === port.id || this.outPort === port)) {
                 this.outPort = null;
-                this.hardwareResponsive = null;
+                this.cancelProbe();
+                this.resetHardwareResponsiveness();
                 this.setDetectedFirmware(null, null);
                 this.emit('connection-lost', { port, type: 'output' });
                 this.emit('port-change', { type: 'output', port: null });
