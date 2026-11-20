@@ -28,7 +28,14 @@ class MidiManager {
         this.hardwareResponsive = null; // null: unknown/untested, true: responding, false: unresponsive
         this.detectedFirmwareVersion = null; // null: undetected (defaults to 3), 2: v2.x, 3: v3.x
         this.detectedFwId = null; // Raw OFFSET_FW byte from hardware SysEx dump
+        this.permissionError = null;
+        this.savedInPortId = '';
+        this.savedInPortName = '';
+        this.savedOutPortId = '';
+        this.savedOutPortName = '';
+        this._mm2DetectedState = false;
         this._probeTimeout = null;
+        this._remoteProbeTimeout = null;
         this._isProbing = false;
         this._probeCallback = null;
         this._periodicCheckInterval = null;
@@ -50,6 +57,11 @@ class MidiManager {
         this.loadSettings();
     }
 
+    /**
+     * Subscribes a callback to a MidiManager event.
+     * @param {string} event
+     * @param {Function} callback
+     */
     on(event, callback) {
         if (!this._listeners.has(event)) {
             this._listeners.set(event, new Set());
@@ -57,12 +69,22 @@ class MidiManager {
         this._listeners.get(event).add(callback);
     }
 
+    /**
+     * Unsubscribes a callback from a MidiManager event.
+     * @param {string} event
+     * @param {Function} callback
+     */
     off(event, callback) {
         if (this._listeners.has(event)) {
             this._listeners.get(event).delete(callback);
         }
     }
 
+    /**
+     * Emits an event to all registered listeners.
+     * @param {string} event
+     * @param {*} data
+     */
     emit(event, data) {
         if (this._listeners.has(event)) {
             for (const cb of this._listeners.get(event)) {
@@ -75,10 +97,15 @@ class MidiManager {
         }
     }
 
+    /** Whether the current environment exposes `navigator.requestMIDIAccess`. */
     get isSupported() {
         return typeof navigator !== 'undefined' && !!navigator.requestMIDIAccess;
     }
 
+    /**
+     * Requests Web MIDI API access (with SysEx) and binds available ports.
+     * @returns {Promise<boolean>}
+     */
     async init() {
         if (!this.isSupported) {
             this.permissionError = 'Web MIDI API not supported';
@@ -102,8 +129,12 @@ class MidiManager {
         }
     }
 
-    async reconnect() {
-        return await this.init();
+    /**
+     * Re-initializes Web MIDI access and port bindings.
+     * @returns {Promise<boolean>}
+     */
+    reconnect() {
+        return this.init();
     }
 
     _dedupePorts(ports, activePort) {
@@ -119,18 +150,35 @@ class MidiManager {
         return Array.from(byKey.values());
     }
 
+    /**
+     * Filters connected ports from a Web MIDI port map and deduplicates by name.
+     * @param {Map|undefined} portMap
+     * @param {Object|null} activePort
+     * @returns {Array}
+     */
+    _getConnectedPorts(portMap, activePort) {
+        if (!this.midiAccess || !portMap) return [];
+        const connected = Array.from(portMap.values()).filter(p => !p.state || p.state === 'connected');
+        return this._dedupePorts(connected, activePort);
+    }
+
+    /**
+     * Returns connected, deduplicated MIDI input ports.
+     * @returns {Array}
+     */
     getInputs() {
-        if (!this.midiAccess) return [];
-        const connected = Array.from(this.midiAccess.inputs.values()).filter(p => !p.state || p.state === 'connected');
-        return this._dedupePorts(connected, this.inPort);
+        return this._getConnectedPorts(this.midiAccess?.inputs, this.inPort);
     }
 
+    /**
+     * Returns connected, deduplicated MIDI output ports.
+     * @returns {Array}
+     */
     getOutputs() {
-        if (!this.midiAccess) return [];
-        const connected = Array.from(this.midiAccess.outputs.values()).filter(p => !p.state || p.state === 'connected');
-        return this._dedupePorts(connected, this.outPort);
+        return this._getConnectedPorts(this.midiAccess?.outputs, this.outPort);
     }
 
+    /** Auto-selects saved or MicroMonsta 2 MIDI ports when available. */
     autoSelectPorts() {
         const inputs = this.getInputs().filter(i => !this.isVirtualPort(i));
         const outputs = this.getOutputs().filter(o => !this.isVirtualPort(o));
@@ -171,54 +219,79 @@ class MidiManager {
         }
     }
 
-    setInputPort(portId) {
-        if (this.inPort && this.inPort.id === portId) return;
-        if (this.inPort) {
+    /**
+     * Binds or clears the active input/output MIDI port and persists the selection.
+     * @param {'input'|'output'} type
+     * @param {string} portId
+     */
+    _bindPort(type, portId) {
+        const isInput = type === 'input';
+        const currentPort = isInput ? this.inPort : this.outPort;
+        if (currentPort && currentPort.id === portId) return;
+
+        if (isInput && this.inPort) {
             this.inPort.removeEventListener('midimessage', this.onMidiMessage);
         }
-        const port = this.midiAccess ? this.midiAccess.inputs.get(portId) : null;
-        this.inPort = port || null;
-        if (this.inPort) {
-            this.inPort.addEventListener('midimessage', this.onMidiMessage);
-            this.savedInPortId = this.inPort.id;
-            this.savedInPortName = this.inPort.name;
+
+        const portMap = this.midiAccess ? (isInput ? this.midiAccess.inputs : this.midiAccess.outputs) : null;
+        const nextPort = portMap ? (portMap.get(portId) || null) : null;
+
+        if (isInput) {
+            this.inPort = nextPort;
+            if (nextPort) {
+                nextPort.addEventListener('midimessage', this.onMidiMessage);
+                this.savedInPortId = nextPort.id;
+                this.savedInPortName = nextPort.name;
+            } else {
+                this.savedInPortId = '';
+                this.savedInPortName = '';
+            }
         } else {
-            this.savedInPortId = '';
-            this.savedInPortName = '';
+            this.outPort = nextPort;
+            if (nextPort) {
+                this.savedOutPortId = nextPort.id;
+                this.savedOutPortName = nextPort.name;
+            } else {
+                this.savedOutPortId = '';
+                this.savedOutPortName = '';
+            }
         }
+
         this.saveSettings();
-        if (!this.inPort) {
+        if (!nextPort) {
             this.setDetectedFirmware(null, null);
         }
         this.resetHardwareResponsiveness();
-        this.emit('port-change', { type: 'input', port: this.inPort });
+        this.emit('port-change', { type, port: nextPort });
         this.checkMM2Detection();
     }
 
+    /**
+     * Selects the active MIDI input port by ID.
+     * @param {string} portId
+     */
+    setInputPort(portId) {
+        this._bindPort('input', portId);
+    }
+
+    /**
+     * Selects the active MIDI output port by ID.
+     * @param {string} portId
+     */
     setOutputPort(portId) {
-        if (this.outPort && this.outPort.id === portId) return;
-        const port = this.midiAccess ? this.midiAccess.outputs.get(portId) : null;
-        this.outPort = port || null;
-        if (this.outPort) {
-            this.savedOutPortId = this.outPort.id;
-            this.savedOutPortName = this.outPort.name;
-        } else {
-            this.savedOutPortId = '';
-            this.savedOutPortName = '';
-        }
-        this.saveSettings();
-        if (!this.outPort) {
-            this.setDetectedFirmware(null, null);
-        }
-        this.resetHardwareResponsiveness();
-        this.emit('port-change', { type: 'output', port: this.outPort });
-        this.checkMM2Detection();
+        this._bindPort('output', portId);
     }
 
+    /** Effective firmware version (`2` or `3`, defaulting to `3` before detection). */
     get effectiveFirmwareVersion() {
         return this.detectedFirmwareVersion || 3;
     }
 
+    /**
+     * Records the detected hardware firmware version and emits `'firmware-detected'` on change.
+     * @param {number|null} version
+     * @param {number|null} [fwId=null]
+     */
     setDetectedFirmware(version, fwId = null) {
         const nextVer = (version === 2 || version === 3) ? version : null;
         const nextFwId = (nextVer !== null && fwId !== null && fwId !== undefined) ? (fwId & 0x7F) : null;
@@ -234,12 +307,22 @@ class MidiManager {
         }
     }
 
+    /**
+     * Returns true if `port.name` identifies a MicroMonsta 2 hardware port.
+     * @param {Object|null} port
+     * @returns {boolean}
+     */
     isMM2Port(port) {
         if (!port || !port.name) return false;
         const n = port.name.toLowerCase();
         return n.includes('micromonsta');
     }
 
+    /**
+     * Returns true if `port.name` matches known OS virtual loopback MIDI ports.
+     * @param {Object|null} port
+     * @returns {boolean}
+     */
     isVirtualPort(port) {
         if (!port || !port.name) return false;
         const n = port.name.toLowerCase();
@@ -249,6 +332,10 @@ class MidiManager {
             n.includes('loopbe');
     }
 
+    /**
+     * Enables or disables periodic idle hardware reachability probing.
+     * @param {boolean} enabled
+     */
     setPeriodicCheck(enabled) {
         this.periodicCheck = !!enabled;
         this.saveSettings();
@@ -259,6 +346,10 @@ class MidiManager {
         }
     }
 
+    /**
+     * Starts the periodic idle probe timer if enabled and this tab is the leader.
+     * @param {number} [intervalMs=15000]
+     */
     startPeriodicCheck(intervalMs = 15000) {
         this.stopPeriodicCheck();
         if (!this.periodicCheck) return;
@@ -273,6 +364,10 @@ class MidiManager {
         }, intervalMs);
     }
 
+    /**
+     * Updates whether this tab acts as the hardware polling leader.
+     * @param {boolean} isLeader
+     */
     setLeaderStatus(isLeader) {
         this.isLeader = !!isLeader;
         if (this.isLeader) {
@@ -284,6 +379,7 @@ class MidiManager {
         }
     }
 
+    /** Stops the periodic idle probe timer if running. */
     stopPeriodicCheck() {
         if (this._periodicCheckInterval) {
             clearInterval(this._periodicCheckInterval);
@@ -291,10 +387,34 @@ class MidiManager {
         }
     }
 
+    /**
+     * Updates follower-side probe suppression triggered by leader cross-tab broadcasts.
+     * @param {boolean} isProbing
+     * @param {number} [timeoutMs=3000]
+     */
+    setRemoteProbing(isProbing, timeoutMs = 3000) {
+        if (this._remoteProbeTimeout) {
+            clearTimeout(this._remoteProbeTimeout);
+            this._remoteProbeTimeout = null;
+        }
+        this._isProbing = !!isProbing;
+        if (this._isProbing) {
+            this._remoteProbeTimeout = setTimeout(() => {
+                this._remoteProbeTimeout = null;
+                this._isProbing = false;
+            }, timeoutMs);
+        }
+    }
+
+    /** Cancels any active hardware probe or remote probe suppression timer. */
     cancelProbe() {
         if (this._probeTimeout) {
             clearTimeout(this._probeTimeout);
             this._probeTimeout = null;
+        }
+        if (this._remoteProbeTimeout) {
+            clearTimeout(this._remoteProbeTimeout);
+            this._remoteProbeTimeout = null;
         }
         this._isProbing = false;
         if (this._probeCallback) {
@@ -304,6 +424,7 @@ class MidiManager {
         }
     }
 
+    /** Clears local hardware responsiveness state (skipped on follower tabs). */
     resetHardwareResponsiveness() {
         if (!this.isLeader) {
             // In follower windows, hardware responsiveness is governed by leader sync.
@@ -315,6 +436,11 @@ class MidiManager {
         this.cancelProbe();
     }
 
+    /**
+     * Updates `hardwareResponsive` and emits `'hardware-responsiveness-changed'` on transitions.
+     * @param {boolean|null} responsive
+     * @param {boolean} [isRemote=false]
+     */
     markHardwareResponsive(responsive, isRemote = false) {
         const prev = this.hardwareResponsive;
         const changed = prev !== responsive;
@@ -328,6 +454,10 @@ class MidiManager {
         }
     }
 
+    /**
+     * Applies a hardware responsiveness update received from the leader tab.
+     * @param {boolean|null} responsive
+     */
     applyRemoteHardwareStatus(responsive) {
         this.markHardwareResponsive(responsive, true);
     }
@@ -425,6 +555,7 @@ class MidiManager {
         });
     }
 
+    /** Checks whether both active ports belong to a MicroMonsta 2 and emits `'mm2-detected'` on transition. */
     checkMM2Detection() {
         const isDetected = !!(this.inPort && this.outPort && this.isMM2Port(this.inPort) && this.isMM2Port(this.outPort));
         if (isDetected && !this._mm2DetectedState) {
@@ -436,6 +567,10 @@ class MidiManager {
         }
     }
 
+    /**
+     * Handles Web MIDI `statechange` events for port connection and disconnection.
+     * @param {MIDIConnectionEvent} event
+     */
     onStateChange(event) {
         const port = event.port;
         console.log(`[MIDI State Change] ${port.name} (${port.type}) -> ${port.state}`);
@@ -472,12 +607,13 @@ class MidiManager {
         }
     }
 
-    onMidiMessage(event) {
-        this._lastMidiActivity = Date.now();
-        const data = event.data;
-        if (!data || data.length === 0) return;
-
-        // 1. Process incoming SysEx (single packet or multi-packet chunks)
+    /**
+     * Accumulates single- or multi-packet SysEx frames from incoming MIDI data.
+     * Returns true when the packet is consumed as SysEx traffic.
+     * @param {Uint8Array} data
+     * @returns {boolean}
+     */
+    _processIncomingSysEx(data) {
         let hasSysEx = false;
         for (let i = 0; i < data.length; i++) {
             const byte = data[i];
@@ -512,14 +648,74 @@ class MidiManager {
                 }
             }
         }
-        if (hasSysEx || this._isReceivingSysEx) {
+        return hasSysEx || this._isReceivingSysEx;
+    }
+
+    /**
+     * Processes incoming NRPN and mapped CC parameter updates on a MIDI channel.
+     * Returns true when the CC message was handled as a parameter edit.
+     * @param {number} channel Zero-based MIDI channel (0-15)
+     * @param {number} ccNum Controller number
+     * @param {number} ccVal Controller value (0-127)
+     * @returns {boolean}
+     */
+    _handleControlChange(channel, ccNum, ccVal) {
+        if (ccNum === CC_NRPN_MSB) {
+            this._incomingNrpnMsb = ccVal;
+            return true;
+        }
+        if (ccNum === CC_NRPN_LSB) {
+            this._incomingNrpnLsb = ccVal;
+            return true;
+        }
+        if (ccNum === CC_DATA_MSB) {
+            this._incomingDataMsb = ccVal;
+            this._incomingDataLsb = null;
+            this.dispatchIncomingNRPN(channel);
+            return true;
+        }
+        if (ccNum === CC_DATA_LSB) {
+            this._incomingDataLsb = ccVal;
+            this.dispatchIncomingNRPN(channel);
+            return true;
+        }
+
+        const ccDef = MM2_CC_MAP.get(ccNum);
+        if (!ccDef) return false;
+
+        let val = ccVal;
+        if (ccDef.scale) {
+            val = Math.round(ccVal * ccDef.scale);
+        }
+        const slot = (channel === (this.baseChannel + 1) % 16) ? 1 : 0;
+        this.markHardwareResponsive(true);
+        this.emit('parameter-received', {
+            paramKey: ccDef.key,
+            value: val,
+            slot,
+            source: 'cc',
+            cc: ccNum
+        });
+        return true;
+    }
+
+    /**
+     * Handles incoming Web MIDI packets, routing SysEx dumps, NRPN/CC edits, and raw MIDI.
+     * @param {MIDIMessageEvent} event
+     */
+    onMidiMessage(event) {
+        this._lastMidiActivity = Date.now();
+        const data = event.data;
+        if (!data || data.length === 0) return;
+
+        if (this._processIncomingSysEx(data)) {
             return;
         }
 
         const status = data[0] & 0xF0;
         const channel = data[0] & 0x0F;
 
-        // 2. Auto-detect MM2 channel from incoming channel voice messages (CC, Note On/Off, Pitch Bend)
+        // Auto-detect MM2 channel from incoming channel voice messages (CC, Note On/Off, Pitch Bend)
         if (status === 0x80 || status === 0x90 || status === 0xB0 || status === 0xE0) {
             if (this.baseChannel !== channel && channel !== (this.baseChannel + 1) % 16) {
                 console.log(`[MIDI In] Auto-detected MM2 MIDI Channel: ${channel + 1}`);
@@ -529,47 +725,8 @@ class MidiManager {
             }
         }
 
-        // 3. Handle Control Change (CC) and NRPN Parameter Edits from MM2 Hardware
-        if (status === 0xB0 && data.length >= 3) {
-            const ccNum = data[1];
-            const ccVal = data[2];
-
-            // A. Check for NRPN controllers
-            if (ccNum === CC_NRPN_MSB) {
-                this._incomingNrpnMsb = ccVal;
-                return;
-            } else if (ccNum === CC_NRPN_LSB) {
-                this._incomingNrpnLsb = ccVal;
-                return;
-            } else if (ccNum === CC_DATA_MSB) {
-                this._incomingDataMsb = ccVal;
-                this._incomingDataLsb = null;
-                this.dispatchIncomingNRPN(channel);
-                return;
-            } else if (ccNum === CC_DATA_LSB) {
-                this._incomingDataLsb = ccVal;
-                this.dispatchIncomingNRPN(channel);
-                return;
-            }
-
-            // B. Check for Standard CC mapped parameter
-            const ccDef = MM2_CC_MAP.get(ccNum);
-            if (ccDef) {
-                let val = ccVal;
-                if (ccDef.scale) {
-                    val = Math.round(ccVal * ccDef.scale);
-                }
-                const slot = (channel === (this.baseChannel + 1) % 16) ? 1 : 0;
-                this.markHardwareResponsive(true);
-                this.emit('parameter-received', {
-                    paramKey: ccDef.key,
-                    value: val,
-                    slot,
-                    source: 'cc',
-                    cc: ccNum
-                });
-                return;
-            }
+        if (status === 0xB0 && data.length >= 3 && this._handleControlChange(channel, data[1], data[2])) {
+            return;
         }
 
         // Emit raw message for MIDI monitor
@@ -579,6 +736,10 @@ class MidiManager {
         });
     }
 
+    /**
+     * Validates, decodes, and emits a complete incoming MM2 SysEx program dump.
+     * @param {Uint8Array} data
+     */
     handleCompleteSysEx(data) {
         const version = validateSysEx(data);
         if (version > 0) {
@@ -616,6 +777,10 @@ class MidiManager {
         }
     }
 
+    /**
+     * Decodes accumulated incoming NRPN MSB/LSB + Data MSB/LSB bytes into a parameter edit.
+     * @param {number} channel Zero-based MIDI channel (0-15)
+     */
     dispatchIncomingNRPN(channel) {
         if (this._incomingNrpnMsb === null || this._incomingNrpnLsb === null || this._incomingDataMsb === null) {
             return;
@@ -644,6 +809,7 @@ class MidiManager {
         });
     }
 
+    /** Active 0-indexed MIDI channel (`baseChannel + activeSlot` wrapped to 0-15). */
     get targetChannel() {
         // Channel 0-15 (baseChannel + activeSlot)
         return (this.baseChannel + this.activeSlot) & 0x0F;
@@ -675,6 +841,24 @@ class MidiManager {
     }
 
     /**
+     * Transmits a parameter MIDI message and emits `'midi-out'`.
+     * @param {Uint8Array} msg
+     * @param {Object} eventPayload
+     * @param {string} errorLabel
+     * @returns {boolean}
+     */
+    _sendMidi(msg, eventPayload, errorLabel) {
+        try {
+            this.outPort.send(msg);
+            this.emit('midi-out', eventPayload);
+            return true;
+        } catch (err) {
+            console.error(`Failed to send ${errorLabel}:`, err);
+            return false;
+        }
+    }
+
+    /**
      * Sends a parameter value to MM2 via NRPN.
      * When liveSync is enabled, parameter tweaks stream in real-time to the MM2 edit buffer.
      * Note: NRPN parameter edits alter the live RAM buffer and are non-destructive,
@@ -690,14 +874,7 @@ class MidiManager {
         if (fwVer === 2) {
             if (paramKey === 'MORPH_KNOB') {
                 const msg = new Uint8Array([MIDI_STATUS_CC | (ch & 0x0F), 70, value & 127]);
-                try {
-                    this.outPort.send(msg);
-                    this.emit('midi-out', { type: 'cc', key: paramKey, value, cc: 70, bytes: msg });
-                    return true;
-                } catch (err) {
-                    console.error('Failed to send MIDI CC:', err);
-                    return false;
-                }
+                return this._sendMidi(msg, { type: 'cc', key: paramKey, value, cc: 70, bytes: msg }, 'MIDI CC');
             }
             if (V3_ONLY_PARAMS.has(paramKey)) return false;
         }
@@ -709,14 +886,7 @@ class MidiManager {
             ? MidiManager.buildNRPN14(ch, def.nrpn, value)
             : MidiManager.buildNRPN7(ch, def.nrpn, value);
 
-        try {
-            this.outPort.send(msg);
-            this.emit('midi-out', { type: 'nrpn', key: paramKey, value, bytes: msg });
-            return true;
-        } catch (err) {
-            console.error('Failed to send MIDI NRPN:', err);
-            return false;
-        }
+        return this._sendMidi(msg, { type: 'nrpn', key: paramKey, value, bytes: msg }, 'MIDI NRPN');
     }
 
     /**
@@ -782,6 +952,7 @@ class MidiManager {
         this.outPort.send(new Uint8Array([status, 123, 0]));
     }
 
+    /** Loads persisted MIDI port and preference settings from `localStorage`. */
     loadSettings() {
         if (typeof window === 'undefined') return;
         try {
@@ -806,6 +977,7 @@ class MidiManager {
         }
     }
 
+    /** Saves current MIDI port and preference settings to `localStorage`. */
     saveSettings() {
         if (typeof window === 'undefined') return;
         try {
