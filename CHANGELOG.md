@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **UI:** Disable Chord 2-7 dropdowns when the Chord Expand toggle is off.
+
 ---
 
 ## [0.7.0] - 2026-11-20

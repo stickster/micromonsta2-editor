@@ -1579,4 +1579,86 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
         assertEqual(rtzBadge.textContent, 'ON', 'RTZ state badge updates to ON');
     });
 
+    await runSection('\n--- [67] Chord 2-7 Inactive State When Chord Expand Is Off Tests ---', async () => {
+        const chordApp = new App();
+        chordApp.firmwareVersion = 3;
+        const makeSection = (title) => {
+            const card = document.createElement('section');
+            card.className = 'synth-card';
+            const head = document.createElement('div');
+            head.className = 'synth-card-header';
+            head.textContent = title;
+            card.appendChild(head);
+            const body = document.createElement('div');
+            body.className = 'synth-card-body';
+            card.appendChild(body);
+            return { card, body };
+        };
+
+        const fxChordCol = chordApp._buildEffectsAndChordColumn(
+            () => chordApp.activeTimbre,
+            (k, v) => chordApp.activeTimbre.setValue(k, v),
+            makeSection
+        );
+        const chordCard = fxChordCol.querySelector('.chord-scaler-card');
+        assert(chordCard !== null, 'Chord & Scaler card has .chord-scaler-card class');
+
+        const expandWrap = chordCard.querySelector('[data-param="KBD_CHORD_EXPAND"]');
+        const expandBtn = expandWrap ? expandWrap.querySelector('button.btn-param-toggle') : null;
+        assert(expandBtn !== null, 'KBD_CHORD_EXPAND toggle button exists');
+
+        const chord1Wrap = chordCard.querySelector('[data-param="CHORD_TYPE1"]');
+        const chord1Select = chord1Wrap ? chord1Wrap.querySelector('select') : null;
+        assert(chord1Wrap !== null && chord1Select !== null, 'CHORD_TYPE1 control exists');
+
+        // Default KBD_CHORD_EXPAND = 0 (Off): Chord 1 is active, Chord 2-7 are inactive
+        assert(!chord1Wrap.classList.contains('is-disabled'), 'CHORD_TYPE1 remains active when Chord Expand is Off');
+        assertEqual(!!chord1Select.disabled, false, 'CHORD_TYPE1 select is enabled when Chord Expand is Off');
+
+        for (let d = 2; d <= 7; d++) {
+            const wrap = chordCard.querySelector(`[data-param="CHORD_TYPE${d}"]`);
+            const sel = wrap ? wrap.querySelector('select') : null;
+            assert(wrap !== null && sel !== null, `CHORD_TYPE${d} control exists`);
+            assert(wrap.classList.contains('is-disabled'), `CHORD_TYPE${d} has .is-disabled when Chord Expand is Off`);
+            assertEqual(wrap.getAttribute('aria-disabled'), 'true', `CHORD_TYPE${d} has aria-disabled=true when Chord Expand is Off`);
+            assertEqual(sel.disabled, true, `CHORD_TYPE${d} select is disabled when Chord Expand is Off`);
+        }
+
+        // Disabled Chord 2 select ignores keyboard stepping
+        const chord2Wrap = chordCard.querySelector('[data-param="CHORD_TYPE2"]');
+        const chord2Select = chord2Wrap.querySelector('select');
+        chordApp.activeTimbre.setValue('CHORD_TYPE2', 0);
+        chord2Select.dispatchEvent({ type: 'keydown', key: 'ArrowDown', preventDefault: () => { } });
+        assertEqual(chordApp.activeTimbre.getValue('CHORD_TYPE2'), 0, 'Disabled CHORD_TYPE2 ignores ArrowDown');
+
+        // Clicking Chord Expand ON activates Chord 2-7
+        expandBtn.click();
+        assertEqual(chordApp.activeTimbre.getValue('KBD_CHORD_EXPAND'), 1, 'Clicking Chord Expand sets KBD_CHORD_EXPAND to 1');
+        for (let d = 2; d <= 7; d++) {
+            const wrap = chordCard.querySelector(`[data-param="CHORD_TYPE${d}"]`);
+            const sel = wrap.querySelector('select');
+            assert(!wrap.classList.contains('is-disabled'), `CHORD_TYPE${d} loses .is-disabled when Chord Expand is On`);
+            assertEqual(wrap.getAttribute('aria-disabled'), 'false', `CHORD_TYPE${d} has aria-disabled=false when Chord Expand is On`);
+            assertEqual(sel.disabled, false, `CHORD_TYPE${d} select is enabled when Chord Expand is On`);
+        }
+
+        // Clicking Chord Expand OFF deactivates Chord 2-7 again
+        expandBtn.click();
+        assertEqual(chordApp.activeTimbre.getValue('KBD_CHORD_EXPAND'), 0, 'Clicking Chord Expand again sets KBD_CHORD_EXPAND to 0');
+        for (let d = 2; d <= 7; d++) {
+            const wrap = chordCard.querySelector(`[data-param="CHORD_TYPE${d}"]`);
+            const sel = wrap.querySelector('select');
+            assert(wrap.classList.contains('is-disabled'), `CHORD_TYPE${d} regains .is-disabled when Chord Expand is Off`);
+            assertEqual(sel.disabled, true, `CHORD_TYPE${d} select is disabled again when Chord Expand is Off`);
+        }
+
+        // Refreshing card updates Chord 2-7 active state from program values
+        chordApp.activeTimbre.setValue('KBD_CHORD_EXPAND', 1);
+        chordCard.refresh();
+        assert(!chord2Wrap.classList.contains('is-disabled'), 'CHORD_TYPE2 becomes active on chordCard.refresh() when KBD_CHORD_EXPAND=1');
+        chordApp.activeTimbre.setValue('KBD_CHORD_EXPAND', 0);
+        chordCard.refresh();
+        assert(chord2Wrap.classList.contains('is-disabled'), 'CHORD_TYPE2 becomes inactive on chordCard.refresh() when KBD_CHORD_EXPAND=0');
+    });
+
 });

@@ -1744,6 +1744,9 @@ class App {
         toggleOptions('[data-param$="_SRC"] select, [data-param="LAG_SRC1"] select, [data-param^="MULT_"] select', V3_ONLY_SOURCE_INDICES);
         toggleOptions('[data-param$="_DST"] select', V3_ONLY_DEST_INDICES);
         toggleOptions('[data-param^="LAY_POT"] select, [data-param^="LAY_ENC"] select', V3_ONLY_ASSIGN_INDICES);
+
+        const chordCard = document.querySelector('.chord-scaler-card');
+        if (chordCard && chordCard.refresh) chordCard.refresh();
     }
 
     updateLiveSyncUI() {
@@ -2032,6 +2035,9 @@ class App {
 
         const envCard = document.querySelector('.env-unified-card');
         if (envCard && envCard.refresh) envCard.refresh();
+
+        const chordCard = document.querySelector('.chord-scaler-card');
+        if (chordCard && chordCard.refresh) chordCard.refresh();
 
         this.updateTimbralModeUI();
         this.updateUndoRedoUI();
@@ -3176,7 +3182,20 @@ class App {
         fxChordCol.appendChild(fxSec.card);
 
         const chordSec = makeSection('FW v3 Chorder & Scaler Engine');
+        chordSec.card.classList.add('chord-scaler-card');
         chordSec.card.setAttribute('data-fw-v3-only', 'true');
+
+        const expandedChordControls = [];
+        const updateChordExpandState = () => {
+            const prog = typeof timbre === 'function' ? timbre() : timbre;
+            const expandOn = prog ? prog.getValue('KBD_CHORD_EXPAND') === 1 : false;
+            const isV2 = this.midi ? this.midi.effectiveFirmwareVersion === 2 : false;
+            expandedChordControls.forEach(ctrl => {
+                if (ctrl && ctrl.setDisabled) {
+                    ctrl.setDisabled(isV2 || !expandOn);
+                }
+            });
+        };
 
         const chordTopRow = document.createElement('div');
         chordTopRow.className = 'chord-top-row';
@@ -3184,7 +3203,10 @@ class App {
         const chordToggleStack = document.createElement('div');
         chordToggleStack.className = 'chord-toggle-stack';
         chordToggleStack.appendChild(createSelect('KBD_MIDI_INPUT', timbre, onChange));
-        chordToggleStack.appendChild(createSelect('KBD_CHORD_EXPAND', timbre, onChange));
+        chordToggleStack.appendChild(createSelect('KBD_CHORD_EXPAND', timbre, (k, v, meta) => {
+            onChange(k, v, meta);
+            updateChordExpandState();
+        }));
         chordTopRow.appendChild(chordToggleStack);
 
         const keySelect = createSelect('KBD_KEY', timbre, onChange);
@@ -3204,14 +3226,18 @@ class App {
         const col1 = document.createElement('div');
         col1.className = 'chord-degrees-col';
         for (let d = 1; d <= 4; d++) {
-            col1.appendChild(createSelect(`CHORD_TYPE${d}`, timbre, onChange));
+            const ctrl = createSelect(`CHORD_TYPE${d}`, timbre, onChange);
+            if (d >= 2) expandedChordControls.push(ctrl);
+            col1.appendChild(ctrl);
         }
         chordCols.appendChild(col1);
 
         const col2 = document.createElement('div');
         col2.className = 'chord-degrees-col';
         for (let d = 5; d <= 7; d++) {
-            col2.appendChild(createSelect(`CHORD_TYPE${d}`, timbre, onChange));
+            const ctrl = createSelect(`CHORD_TYPE${d}`, timbre, onChange);
+            expandedChordControls.push(ctrl);
+            col2.appendChild(ctrl);
         }
         const noteEl = document.createElement('div');
         noteEl.className = 'chord-degrees-note';
@@ -3220,6 +3246,11 @@ class App {
         chordCols.appendChild(col2);
 
         chordSec.body.appendChild(chordCols);
+        chordSec.card.refresh = () => {
+            this._refreshSectionNode(chordSec.card);
+            updateChordExpandState();
+        };
+        updateChordExpandState();
         fxChordCol.appendChild(chordSec.card);
         return fxChordCol;
     }
@@ -5062,6 +5093,10 @@ class App {
             if (envNum) {
                 const envCard = document.querySelector('.env-unified-card');
                 if (envCard && envCard.refresh) envCard.refresh();
+            }
+            if (paramKey === 'KBD_CHORD_EXPAND') {
+                const chordCard = document.querySelector('.chord-scaler-card');
+                if (chordCard && chordCard.refresh) chordCard.refresh();
             }
 
             const el = (this._paramControlMap && this._paramControlMap.get(paramKey)) ||

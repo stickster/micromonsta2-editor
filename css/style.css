@@ -1559,6 +1559,17 @@ main.app-main {
     width: 100%;
 }
 
+.select-container.is-disabled {
+    opacity: 0.38;
+    cursor: not-allowed;
+}
+
+.select-container.is-disabled .control-select,
+.select-container.is-disabled .control-label {
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
 .control-label {
     font-size: 10px;
     font-weight: 600;

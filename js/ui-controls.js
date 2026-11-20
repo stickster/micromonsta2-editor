@@ -1185,6 +1185,8 @@ function createSelect(paramKey, program, onChangeCallback) {
         }
     }
 
+    let isDisabled = false;
+
     function updateVisual() {
         const prog = getProg();
         if (prog) {
@@ -1195,12 +1197,13 @@ function createSelect(paramKey, program, onChangeCallback) {
     const commitSelectValue = (val) => commitParamValue(getProg, paramKey, val, onChangeCallback);
 
     select.addEventListener('change', () => {
+        if (isDisabled) return;
         commitSelectValue(parseInt(select.value, 10));
         if (typeof select.blur === 'function') select.blur();
     });
 
     select.addEventListener('keydown', (e) => {
-        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if (isDisabled || e.metaKey || e.ctrlKey || e.altKey) return;
         let delta = 0;
         if (e.key === 'ArrowDown' || e.key === 'ArrowRight') delta = 1;
         else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') delta = -1;
@@ -1228,6 +1231,12 @@ function createSelect(paramKey, program, onChangeCallback) {
     container.appendChild(label);
     container.appendChild(select);
     container.refresh = updateVisual;
+    container.setDisabled = (disabled) => {
+        isDisabled = !!disabled;
+        container.classList.toggle('is-disabled', isDisabled);
+        container.setAttribute('aria-disabled', isDisabled ? 'true' : 'false');
+        select.disabled = isDisabled;
+    };
     updateVisual();
 
     return container;
