@@ -967,6 +967,7 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
             const entryKnob = createKnob('OSC1_SHAPE', entryProg, (k, v, meta) => entryEvents.push({ k, v, meta }));
             assert(entryKnob.title.includes('Alt/Opt-click'), 'Knob tooltip mentions Alt/Opt-click reset');
             const valEl = entryKnob.querySelector('.knob-value');
+            assert(valEl.title.includes('Double-click') && valEl.title.includes('Alt/Opt-click'), 'Knob value tooltip mentions double-click and Alt/Opt-click reset');
 
             // 1. Click value -> opens input, Enter commits and removes input
             valEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
@@ -1011,6 +1012,19 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
             valEl.dispatchEvent({ type: 'click', altKey: true, stopPropagation: () => { } });
             assertEqual(entryProg.getValue('OSC1_SHAPE'), 0, 'Alt-click on knob value resets to default (0)');
             assertEqual(valEl.querySelector('input'), null, 'Alt-click on knob value does not open entry mode');
+
+            // 4b. Double-clicking knob value closes inline editor without re-committing stale input
+            entryProg.setValue('OSC1_SHAPE', 99);
+            entryKnob.refresh();
+            valEl.dispatchEvent({ type: 'click', stopPropagation: () => { } });
+            inputEl = valEl.querySelector('input');
+            assert(inputEl !== null, 'First click of double-click opens inline value input');
+            entryKnob.dispatchEvent({ type: 'dblclick', preventDefault: () => { } });
+            assertEqual(entryProg.getValue('OSC1_SHAPE'), 0, 'Double-click resets knob to default (0)');
+            assertEqual(valEl.querySelector('input'), null, 'Double-click closes inline value input');
+            assertEqual(valEl.textContent, '0', 'Double-click updates displayed knob value to default');
+            if (inputEl) inputEl.dispatchEvent({ type: 'blur' });
+            assertEqual(entryProg.getValue('OSC1_SHAPE'), 0, 'Blur after double-click does not restore pre-reset value');
 
             // 5. Visible scale & clamping for offset (OSC1_TUNE: -24..+24, raw 40..88, offset 64)
             entryProg.setValue('OSC1_TUNE', 64); // visible 0

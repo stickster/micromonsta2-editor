@@ -178,6 +178,7 @@ function attachInlineValueEditor({
     inputType = 'text',
     shouldOpen
 }) {
+    let activeCancel = null;
     triggerEl.addEventListener('click', (e) => {
         e.stopPropagation();
         if (shouldOpen && !shouldOpen(e)) return;
@@ -203,12 +204,18 @@ function attachInlineValueEditor({
 
         let committed = false;
         const closeInput = () => {
+            activeCancel = null;
             if (input.parentNode === triggerEl && triggerEl.removeChild) {
                 triggerEl.removeChild(input);
             } else {
                 triggerEl.innerHTML = '';
             }
             refresh();
+        };
+
+        activeCancel = () => {
+            committed = true;
+            closeInput();
         };
 
         const commit = () => {
@@ -270,6 +277,9 @@ function attachInlineValueEditor({
         });
         input.addEventListener('blur', commit);
     });
+    return () => {
+        if (activeCancel) activeCancel();
+    };
 }
 
 function createToggleButtonElement({ label, title, className = 'btn-param-toggle', id, showStateBadge = true, initialOn = false }) {
@@ -857,7 +867,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
 
     const valueEl = document.createElement('div');
     valueEl.className = 'knob-value editable';
-    valueEl.title = 'Click to enter exact value';
+    valueEl.title = 'Click to enter exact value • Double-click/Right-click/Alt/Opt-click to reset';
     dialWrap.appendChild(valueEl);
 
     container.appendChild(dialWrap);
@@ -885,8 +895,10 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
 
     let isDisabled = false;
     let suppressNextClick = false;
+    let cancelInlineEdit = () => {};
 
     function resetToDefault() {
+        cancelInlineEdit();
         const defVal = def.default ?? (isBipolar ? (def.offset ?? min) : min);
         const prog = getProg();
         if (prog && prog.getValue(paramKey) !== defVal) {
@@ -924,7 +936,7 @@ function createKnob(paramKey, program, onChangeCallback, opts = {}) {
 
     bindResetActions(container, resetToDefault, () => isDisabled);
 
-    attachInlineValueEditor({
+    cancelInlineEdit = attachInlineValueEditor({
         triggerEl: valueEl,
         def,
         min,
