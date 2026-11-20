@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Tab Sync:** Transition initial fallback leadership from `null` to `false` when lease is held.
 
 ### Changed
+- **Editor:** Decompose MIDI event binding, drag-drop wiring, panels, and program bar.
 - **Editor:** Unify app state, storage, undo/redo, incoming param, and drag helpers.
 - **UI:** Decompose arp sequencer and audition keyboard, and remove dead section-card code.
 - **UI:** Extract shared SVG, parameter, and interaction primitives in UI controls.

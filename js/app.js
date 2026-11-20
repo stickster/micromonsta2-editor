@@ -2,6 +2,52 @@
  * Main Application Controller for MicroMonsta 2 HTML Editor and Patch Librarian
  */
 
+const SECTION_TO_MTX_SRC = {
+    lfo: { label: 'LFO', indices: { 1: 18, 2: 24, 3: 30 } },
+    env: { label: 'Env', indices: { 1: 12, 2: 14, 3: 16 } },
+    mult: { label: 'Mult', indices: { 1: 42, 2: 43 } }
+};
+
+const PARAM_TO_MTX_DST = {
+    OSC1_TUNE: 2,
+    OSC2_TUNE: 3,
+    OSC3_TUNE: 4,
+    OSC1_SHAPE: 5,
+    OSC2_SHAPE: 6,
+    OSC3_SHAPE: 7,
+    MIX_OSC1: 9,
+    MIX_OSC2: 10,
+    MIX_OSC3: 11,
+    MIX_NOISE: 12,
+    FILTER_FREQ: 13,
+    FILTER_RESO: 14,
+    FILTER_FM: 15,
+    DRIVE_VOICE: 16,
+    VCE_GLIDE: 17,
+    LAY_MASTER_VOLUME: 18,
+    VCE_PAN_SPREAD: 19,
+    ENV1_ATK: 20,
+    ENV2_ATK: 21,
+    ENV3_ATK: 22,
+    ENV1_DCY: 24,
+    ENV2_DCY: 25,
+    ENV3_DCY: 26,
+    ENV1_SUS: 28,
+    ENV2_SUS: 29,
+    ENV3_SUS: 30,
+    ENV1_REL: 32,
+    ENV2_REL: 33,
+    ENV3_REL: 34,
+    LFO1_SPEED: 36,
+    LFO2_SPEED: 37,
+    LFO3_SPEED: 38,
+    DLY_PARAM1: 40,
+    DLY_PARAM2: 41,
+    DLY_PARAM3: 42,
+    REV_PARAM3: 43,
+    ARP_GATE: 44
+};
+
 class App {
     static get VERSION() {
         return typeof APP_VERSION !== 'undefined' ? APP_VERSION : '0.1.0';
@@ -237,6 +283,19 @@ class App {
     }
 
     bindEvents() {
+        this._bindMidiConnectionEvents();
+        this._bindMidiDataEvents();
+
+        // Librarian Listeners
+        this.librarian.on('update', (data) => {
+            this.renderLibrarianBank();
+            if (data && data.type === 'save' && this.tabSync) {
+                this.tabSync.broadcast('LIBRARIAN_CHANGED');
+            }
+        });
+    }
+
+    _bindMidiConnectionEvents() {
         // MM2 Detection Listener
         this.midi.on('mm2-detected', ({ inPort }) => {
             // When an additional window opens, it acts as a follower.
@@ -258,69 +317,6 @@ class App {
             this.updateFirmwareUI();
             if (detectedVersion === 2) {
                 this.showNotification('Firmware v2.x detected: adapted UI, SysEx (176-byte), and v2 NRPNs.', 'info');
-            }
-        });
-
-        // MIDI Event Listeners
-        this.midi.on('program-received', ({ program, slot, isProbe }) => {
-            clearTimeout(this._fetchTimeout);
-            console.log(`Captured program from MM2: "${program.name}" for slot ${slot}${isProbe ? ' (probe response)' : ''}`);
-
-            // If this was a health check probe / periodic poll, do not overwrite editor or sync status
-            if (isProbe) {
-                return;
-            }
-
-            // In follower windows, do not process unprompted hardware dumps (e.g. from leader polls or leader fetches).
-            // State is synchronized from the leader window via TabSync.
-            if (this.isFollowerTab && this.syncStatus !== 'fetching' && !this._modeProbe) {
-                return;
-            }
-
-            let skipLoad = false;
-            if (slot === 1) {
-                // A Part B reply means the MM2 has two active layers (bitimbral); no reply means monotimbral
-                if (this.synthTimbralMode === 'monotimbral') {
-                    this.setTimbralMode('bitimbral');
-                }
-                if (this._modeProbe) {
-                    clearTimeout(this._modeProbeTimeout);
-                    skipLoad = !this._modeProbe.loadPartB;
-                    this._modeProbe = null;
-                }
-                if (this.midi) {
-                    this.midi.lastFetchedSlot = 0;
-                }
-            }
-            if (skipLoad) {
-                // Mode probe only: leave the editor's Part B untouched
-                return;
-            }
-            const partLabel = slot === 1 ? 'B' : 'A';
-            this.resetAuditionLatch();
-            this.replacePartWithRawData(slot, program.rawData, `Fetch Part ${partLabel} (${program.name})`, {
-                sendToHardware: false,
-                syncStatus: this.isConnectionGood ? 'synced' : 'offline',
-                source: 'hardware'
-            });
-            this._setOriginalSnapshot(slot);
-            // When loading Editor or working in Editor, do not add patch to Librarian!
-            // Only capture while the Librarian view is open; dumps go to the currently selected bank
-            if (this.currentView === 'librarian') {
-                this.librarian.handleIncomingProgram(program);
-            }
-            this.showNotification('Loaded MM2 hardware patch', 'success');
-            if (this._enableLiveSyncOnFetch) {
-                this._enableLiveSyncOnFetch = false;
-                this._setLiveSyncState(true);
-                this.showNotification('Live Sync ENABLED (Fetched MM2 hardware settings)', 'success');
-            }
-
-            // Part A was just read: probe Part B to find out whether the MM2 has one or two active layers
-            if (slot === 0 && this._pendingProbe) {
-                const probe = this._pendingProbe;
-                this._pendingProbe = null;
-                setTimeout(() => this.probeTimbralMode({ loadPartB: probe === 'load' }), 150);
             }
         });
 
@@ -405,14 +401,6 @@ class App {
             this.updateMidiPermissionUI();
         });
 
-        // Real-Time Hardware Parameter Tweak Listener (from physical MM2 knobs via CC or NRPN)
-        this.midi.on('parameter-received', ({ paramKey, value, slot }) => {
-            this._applyIncomingParamToUI(paramKey, value, slot, {
-                autoSwitchTab: true,
-                updateSync: true
-            });
-        });
-
         this.midi.on('connection-lost', ({ port, type }) => {
             this.resetAuditionLatch();
             const name = (port && port.name) ? port.name : 'MicroMonsta 2';
@@ -458,13 +446,78 @@ class App {
             this.showNotification(err, 'error');
             this.updateMidiPermissionUI();
         });
+    }
 
-        // Librarian Listeners
-        this.librarian.on('update', (data) => {
-            this.renderLibrarianBank();
-            if (data && data.type === 'save' && this.tabSync) {
-                this.tabSync.broadcast('LIBRARIAN_CHANGED');
+    _bindMidiDataEvents() {
+        // MIDI Event Listeners
+        this.midi.on('program-received', ({ program, slot, isProbe }) => {
+            clearTimeout(this._fetchTimeout);
+            console.log(`Captured program from MM2: "${program.name}" for slot ${slot}${isProbe ? ' (probe response)' : ''}`);
+
+            // If this was a health check probe / periodic poll, do not overwrite editor or sync status
+            if (isProbe) {
+                return;
             }
+
+            // In follower windows, do not process unprompted hardware dumps (e.g. from leader polls or leader fetches).
+            // State is synchronized from the leader window via TabSync.
+            if (this.isFollowerTab && this.syncStatus !== 'fetching' && !this._modeProbe) {
+                return;
+            }
+
+            let skipLoad = false;
+            if (slot === 1) {
+                // A Part B reply means the MM2 has two active layers (bitimbral); no reply means monotimbral
+                if (this.synthTimbralMode === 'monotimbral') {
+                    this.setTimbralMode('bitimbral');
+                }
+                if (this._modeProbe) {
+                    clearTimeout(this._modeProbeTimeout);
+                    skipLoad = !this._modeProbe.loadPartB;
+                    this._modeProbe = null;
+                }
+                if (this.midi) {
+                    this.midi.lastFetchedSlot = 0;
+                }
+            }
+            if (skipLoad) {
+                // Mode probe only: leave the editor's Part B untouched
+                return;
+            }
+            const partLabel = slot === 1 ? 'B' : 'A';
+            this.resetAuditionLatch();
+            this.replacePartWithRawData(slot, program.rawData, `Fetch Part ${partLabel} (${program.name})`, {
+                sendToHardware: false,
+                syncStatus: this.isConnectionGood ? 'synced' : 'offline',
+                source: 'hardware'
+            });
+            this._setOriginalSnapshot(slot);
+            // When loading Editor or working in Editor, do not add patch to Librarian!
+            // Only capture while the Librarian view is open; dumps go to the currently selected bank
+            if (this.currentView === 'librarian') {
+                this.librarian.handleIncomingProgram(program);
+            }
+            this.showNotification('Loaded MM2 hardware patch', 'success');
+            if (this._enableLiveSyncOnFetch) {
+                this._enableLiveSyncOnFetch = false;
+                this._setLiveSyncState(true);
+                this.showNotification('Live Sync ENABLED (Fetched MM2 hardware settings)', 'success');
+            }
+
+            // Part A was just read: probe Part B to find out whether the MM2 has one or two active layers
+            if (slot === 0 && this._pendingProbe) {
+                const probe = this._pendingProbe;
+                this._pendingProbe = null;
+                setTimeout(() => this.probeTimbralMode({ loadPartB: probe === 'load' }), 150);
+            }
+        });
+
+        // Real-Time Hardware Parameter Tweak Listener (from physical MM2 knobs via CC or NRPN)
+        this.midi.on('parameter-received', ({ paramKey, value, slot }) => {
+            this._applyIncomingParamToUI(paramKey, value, slot, {
+                autoSwitchTab: true,
+                updateSync: true
+            });
         });
     }
 
@@ -1160,6 +1213,13 @@ class App {
             });
         };
 
+        this._wireMemoryButtons(memButtons, clearHover);
+        this._wirePartButtons(partButtons, clearHover);
+        if (editorGrid) this._wireEditorGridDrop(editorGrid, clearHover);
+        if (appMain) this._wireAppMainDrop(appMain, clearHover);
+    }
+
+    _wireMemoryButtons(memButtons, clearHover) {
         memButtons.forEach((btn, idx) => {
             const memIdx = btn.dataset && btn.dataset.mem !== undefined ? parseInt(btn.dataset.mem, 10) : idx;
             btn.setAttribute('draggable', 'true');
@@ -1188,52 +1248,48 @@ class App {
                 clearHover();
             });
 
-            btn.addEventListener('dragover', (e) => {
-                const active = this._activeMemoryDrag;
-                if (!active) return;
-                const validMem = active.kind === 'memory' && active.index !== memIdx && !!this.memories[active.index];
-                const validPart = active.kind === 'part';
-                if (!validMem && !validPart) return;
-                e.preventDefault();
-                e.stopPropagation();
-                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-                btn.classList.add('slot-drop-hover');
-                if (validMem) {
-                    this._setDropTip(btn, `Drop to copy Memory M${active.index + 1} to M${memIdx + 1}`);
-                } else if (validPart) {
-                    const srcTimbre = this.getTimbre(active.slot);
-                    const srcLabel = active.slot === 0 ? 'A' : 'B';
-                    if (srcTimbre && typeof srcTimbre.isInit === 'function' && srcTimbre.isInit()) {
-                        this._setDropTip(btn, `Drop to clear Memory M${memIdx + 1}`);
-                    } else {
-                        this._setDropTip(btn, `Drop to store Part ${srcLabel} in Memory M${memIdx + 1}`);
+            this._bindDragTarget(btn, {
+                stopLeavePropagation: true,
+                onDragOver: (e) => {
+                    const active = this._activeMemoryDrag;
+                    if (!active) return;
+                    const validMem = active.kind === 'memory' && active.index !== memIdx && !!this.memories[active.index];
+                    const validPart = active.kind === 'part';
+                    if (!validMem && !validPart) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                    btn.classList.add('slot-drop-hover');
+                    if (validMem) {
+                        this._setDropTip(btn, `Drop to copy Memory M${active.index + 1} to M${memIdx + 1}`);
+                    } else if (validPart) {
+                        const srcTimbre = this.getTimbre(active.slot);
+                        const srcLabel = active.slot === 0 ? 'A' : 'B';
+                        if (srcTimbre && typeof srcTimbre.isInit === 'function' && srcTimbre.isInit()) {
+                            this._setDropTip(btn, `Drop to clear Memory M${memIdx + 1}`);
+                        } else {
+                            this._setDropTip(btn, `Drop to store Part ${srcLabel} in Memory M${memIdx + 1}`);
+                        }
                     }
+                },
+                onDrop: (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const data = this._parseDragPayload(e);
+                    if (!data) return;
+                    if (data.kind === 'memory' && data.index !== memIdx) {
+                        this.copyMemory(data.index, memIdx);
+                    } else if (data.kind === 'part' && (data.slot === 0 || data.slot === 1)) {
+                        this.storePartInMemory(data.slot, memIdx);
+                    }
+                    this._activeMemoryDrag = null;
+                    clearHover();
                 }
-            });
-
-            btn.addEventListener('dragleave', (e) => {
-                e.stopPropagation();
-                if (e.relatedTarget && typeof btn.contains === 'function' && btn.contains(e.relatedTarget)) return;
-                btn.classList.remove('slot-drop-hover');
-                this._clearDropTip(btn);
-            });
-
-            btn.addEventListener('drop', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                btn.classList.remove('slot-drop-hover');
-                const data = this._parseDragPayload(e);
-                if (!data) return;
-                if (data.kind === 'memory' && data.index !== memIdx) {
-                    this.copyMemory(data.index, memIdx);
-                } else if (data.kind === 'part' && (data.slot === 0 || data.slot === 1)) {
-                    this.storePartInMemory(data.slot, memIdx);
-                }
-                this._activeMemoryDrag = null;
-                clearHover();
             });
         });
+    }
 
+    _wirePartButtons(partButtons, clearHover) {
         partButtons.forEach((btn, idx) => {
             const slot = btn.dataset && btn.dataset.slot !== undefined ? parseInt(btn.dataset.slot, 10) : idx;
             btn.setAttribute('draggable', 'true');
@@ -1254,47 +1310,43 @@ class App {
                 clearHover();
             });
 
-            btn.addEventListener('dragover', (e) => {
-                const active = this._activeMemoryDrag;
-                if (!active || active.kind !== 'part' || active.slot === slot || this.synthTimbralMode !== 'bitimbral') {
-                    return;
+            this._bindDragTarget(btn, {
+                stopLeavePropagation: true,
+                onDragOver: (e) => {
+                    const active = this._activeMemoryDrag;
+                    if (!active || active.kind !== 'part' || active.slot === slot || this.synthTimbralMode !== 'bitimbral') {
+                        return;
+                    }
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                    btn.classList.add('slot-drop-hover');
+                    const srcLabel = active.slot === 0 ? 'A' : 'B';
+                    const dstLabel = slot === 0 ? 'A' : 'B';
+                    this._setDropTip(btn, `Drop to copy Part ${srcLabel} to Part ${dstLabel}`);
+                },
+                onDrop: (e) => {
+                    const data = this._parseDragPayload(e);
+                    if (!data || data.kind !== 'part' || data.slot === slot || this.synthTimbralMode !== 'bitimbral') {
+                        return;
+                    }
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const srcTimbre = this.getTimbre(data.slot);
+                    const srcLabel = data.slot === 0 ? 'A' : 'B';
+                    const dstLabel = slot === 0 ? 'A' : 'B';
+                    this.replacePartWithRawData(slot, srcTimbre.rawData, `Copy Part ${srcLabel} → Part ${dstLabel}`);
+                    this.showNotification(`Copied Part ${srcLabel} ("${srcTimbre.name}") to Part ${dstLabel}`, 'success');
+                    this._activeMemoryDrag = null;
+                    clearHover();
                 }
-                e.preventDefault();
-                e.stopPropagation();
-                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-                btn.classList.add('slot-drop-hover');
-                const srcLabel = active.slot === 0 ? 'A' : 'B';
-                const dstLabel = slot === 0 ? 'A' : 'B';
-                this._setDropTip(btn, `Drop to copy Part ${srcLabel} to Part ${dstLabel}`);
-            });
-
-            btn.addEventListener('dragleave', (e) => {
-                e.stopPropagation();
-                if (e.relatedTarget && typeof btn.contains === 'function' && btn.contains(e.relatedTarget)) return;
-                btn.classList.remove('slot-drop-hover');
-                this._clearDropTip(btn);
-            });
-
-            btn.addEventListener('drop', (e) => {
-                const data = this._parseDragPayload(e);
-                if (!data || data.kind !== 'part' || data.slot === slot || this.synthTimbralMode !== 'bitimbral') {
-                    return;
-                }
-                e.preventDefault();
-                e.stopPropagation();
-                btn.classList.remove('slot-drop-hover');
-                const srcTimbre = this.getTimbre(data.slot);
-                const srcLabel = data.slot === 0 ? 'A' : 'B';
-                const dstLabel = slot === 0 ? 'A' : 'B';
-                this.replacePartWithRawData(slot, srcTimbre.rawData, `Copy Part ${srcLabel} → Part ${dstLabel}`);
-                this.showNotification(`Copied Part ${srcLabel} ("${srcTimbre.name}") to Part ${dstLabel}`, 'success');
-                this._activeMemoryDrag = null;
-                clearHover();
             });
         });
+    }
 
-        if (editorGrid) {
-            editorGrid.addEventListener('dragover', (e) => {
+    _wireEditorGridDrop(editorGrid, clearHover) {
+        this._bindDragTarget(editorGrid, {
+            onDragOver: (e) => {
                 const active = this._activeMemoryDrag;
                 if (!active || active.kind !== 'part' || this.synthTimbralMode !== 'bitimbral' || this.activeSlot === active.slot) {
                     return;
@@ -1306,22 +1358,14 @@ class App {
                 const srcLabel = active.slot === 0 ? 'A' : 'B';
                 const dstLabel = this.activeSlot === 0 ? 'A' : 'B';
                 this._setDropTip(editorGrid, `Drop to copy Part ${srcLabel} to Part ${dstLabel}`);
-            });
-
-            editorGrid.addEventListener('dragleave', (e) => {
-                if (e.relatedTarget && typeof editorGrid.contains === 'function' && editorGrid.contains(e.relatedTarget)) return;
-                editorGrid.classList.remove('slot-drop-hover');
-                this._clearDropTip(editorGrid);
-            });
-
-            editorGrid.addEventListener('drop', (e) => {
+            },
+            onDrop: (e) => {
                 const data = this._parseDragPayload(e);
                 if (!data || data.kind !== 'part' || this.synthTimbralMode !== 'bitimbral' || this.activeSlot === data.slot) {
                     return;
                 }
                 e.preventDefault();
                 e.stopPropagation();
-                editorGrid.classList.remove('slot-drop-hover');
                 const srcTimbre = this.getTimbre(data.slot);
                 const srcLabel = data.slot === 0 ? 'A' : 'B';
                 const dstLabel = this.activeSlot === 0 ? 'A' : 'B';
@@ -1329,19 +1373,21 @@ class App {
                 this.showNotification(`Copied Part ${srcLabel} ("${srcTimbre.name}") to Part ${dstLabel}`, 'success');
                 this._activeMemoryDrag = null;
                 clearHover();
-            });
-        }
+            }
+        });
+    }
 
-        if (appMain) {
-            const isBelowProgList = (e) => {
-                if (typeof document === 'undefined' || !e || typeof e.clientY !== 'number') return true;
-                const progListEl = document.getElementById('librarian-prog-list');
-                if (!progListEl || typeof progListEl.getBoundingClientRect !== 'function') return true;
-                const rect = progListEl.getBoundingClientRect();
-                return !rect || e.clientY >= rect.bottom;
-            };
+    _wireAppMainDrop(appMain, clearHover) {
+        const isBelowProgList = (e) => {
+            if (typeof document === 'undefined' || !e || typeof e.clientY !== 'number') return true;
+            const progListEl = document.getElementById('librarian-prog-list');
+            if (!progListEl || typeof progListEl.getBoundingClientRect !== 'function') return true;
+            const rect = progListEl.getBoundingClientRect();
+            return !rect || e.clientY >= rect.bottom;
+        };
 
-            appMain.addEventListener('dragover', (e) => {
+        this._bindDragTarget(appMain, {
+            onDragOver: (e) => {
                 const activeLib = this._activeLibrarianDrag;
                 if (
                     this.currentView === 'librarian' &&
@@ -1390,15 +1436,8 @@ class App {
                     const bankName = this.librarian && this.librarian.activeBank ? this.librarian.activeBank.name : 'current bank';
                     this._setDropTip(appMain, `Drop to add Memory M${active.index + 1} to "${bankName}"`);
                 }
-            });
-
-            appMain.addEventListener('dragleave', (e) => {
-                if (e.relatedTarget && typeof appMain.contains === 'function' && appMain.contains(e.relatedTarget)) return;
-                appMain.classList.remove('slot-drop-hover');
-                this._clearDropTip(appMain);
-            });
-
-            appMain.addEventListener('drop', async (e) => {
+            },
+            onDrop: async (e) => {
                 const libData = this._parseDragPayload(e, this._activeLibrarianDrag);
                 if (
                     this.currentView === 'librarian' &&
@@ -1448,8 +1487,6 @@ class App {
                 }
                 e.preventDefault();
                 e.stopPropagation();
-                appMain.classList.remove('slot-drop-hover');
-                this._clearDropTip(appMain);
                 this._activeMemoryDrag = null;
                 clearHover();
                 if (this.currentView === 'editor') {
@@ -1457,8 +1494,8 @@ class App {
                 } else if (this.currentView === 'librarian') {
                     await this.addMemoryToCurrentBank(data.index);
                 }
-            });
-        }
+            }
+        });
     }
 
     updateFirmwareUI() {
@@ -1972,6 +2009,50 @@ class App {
         return null;
     }
 
+    _resolveModSource(payload) {
+        if (!payload || payload.kind !== 'section') return null;
+        const spec = SECTION_TO_MTX_SRC[payload.sectionType];
+        if (!spec) return null;
+        const srcVal = spec.indices[payload.sectionIndex];
+        if (!srcVal) return null;
+        return { srcVal, srcLabel: `${spec.label} ${payload.sectionIndex}` };
+    }
+
+    _mapModSourceToSlot(prog, modSrc, paramKey, dstVal, emptySlot, onChange, containerEl) {
+        const { srcVal, srcLabel } = modSrc;
+        const dstLabel = (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get('MTX1_DST')?.values?.[dstVal]) || paramKey;
+        if (onChange && onChange.beginGroup) {
+            onChange.beginGroup(`Map ${srcLabel} → ${dstLabel} (Slot ${emptySlot})`);
+        }
+        const prevSrc = prog.getValue(`MTX${emptySlot}_SRC`);
+        const prevDst = prog.getValue(`MTX${emptySlot}_DST`);
+        const prevAmt = prog.getValue(`MTX${emptySlot}_AMT`);
+        if (onChange) {
+            onChange(`MTX${emptySlot}_SRC`, srcVal, { isFinal: true, prevVal: prevSrc });
+            onChange(`MTX${emptySlot}_DST`, dstVal, { isFinal: true, prevVal: prevDst });
+            if (prevAmt === 128) {
+                onChange(`MTX${emptySlot}_AMT`, 160, { isFinal: true, prevVal: prevAmt });
+            }
+        } else {
+            prog.setValue(`MTX${emptySlot}_SRC`, srcVal);
+            prog.setValue(`MTX${emptySlot}_DST`, dstVal);
+            if (prevAmt === 128) {
+                prog.setValue(`MTX${emptySlot}_AMT`, 160);
+            }
+        }
+        if (onChange && onChange.endGroup) {
+            onChange.endGroup();
+        }
+
+        this._activeDragSection = null;
+        const slotRow = Array.from(containerEl.querySelectorAll('.matrix-slot-row'))
+            .find(r => String(r.getAttribute('data-slot')) === String(emptySlot));
+        if (slotRow) {
+            this._refreshSectionNode(slotRow);
+        }
+        this.showNotification(`Mapped ${srcLabel} → ${dstLabel} (Matrix Slot ${emptySlot})`, 'success');
+    }
+
     /**
      * Wires GUI controls matching mod-matrix destinations as drop targets for dragged
      * modulation sources (LFOs 1-3, Envelopes 1-3, Multipliers 1-2) whenever the mod
@@ -1980,145 +2061,234 @@ class App {
     wireModSourceToDestinationDropTargets(containerEl, timbre, onChange) {
         if (!containerEl || typeof containerEl.querySelectorAll !== 'function') return;
 
-        const SECTION_TO_MTX_SRC = {
-            lfo: { label: 'LFO', indices: { 1: 18, 2: 24, 3: 30 } },
-            env: { label: 'Env', indices: { 1: 12, 2: 14, 3: 16 } },
-            mult: { label: 'Mult', indices: { 1: 42, 2: 43 } }
-        };
-        const resolveModSource = (payload) => {
-            if (!payload || payload.kind !== 'section') return null;
-            const spec = SECTION_TO_MTX_SRC[payload.sectionType];
-            if (!spec) return null;
-            const srcVal = spec.indices[payload.sectionIndex];
-            if (!srcVal) return null;
-            return { srcVal, srcLabel: `${spec.label} ${payload.sectionIndex}` };
-        };
-
-        const PARAM_TO_MTX_DST = {
-            OSC1_TUNE: 2,
-            OSC2_TUNE: 3,
-            OSC3_TUNE: 4,
-            OSC1_SHAPE: 5,
-            OSC2_SHAPE: 6,
-            OSC3_SHAPE: 7,
-            MIX_OSC1: 9,
-            MIX_OSC2: 10,
-            MIX_OSC3: 11,
-            MIX_NOISE: 12,
-            FILTER_FREQ: 13,
-            FILTER_RESO: 14,
-            FILTER_FM: 15,
-            DRIVE_VOICE: 16,
-            VCE_GLIDE: 17,
-            LAY_MASTER_VOLUME: 18,
-            VCE_PAN_SPREAD: 19,
-            ENV1_ATK: 20,
-            ENV2_ATK: 21,
-            ENV3_ATK: 22,
-            ENV1_DCY: 24,
-            ENV2_DCY: 25,
-            ENV3_DCY: 26,
-            ENV1_SUS: 28,
-            ENV2_SUS: 29,
-            ENV3_SUS: 30,
-            ENV1_REL: 32,
-            ENV2_REL: 33,
-            ENV3_REL: 34,
-            LFO1_SPEED: 36,
-            LFO2_SPEED: 37,
-            LFO3_SPEED: 38,
-            DLY_PARAM1: 40,
-            DLY_PARAM2: 41,
-            DLY_PARAM3: 42,
-            REV_PARAM3: 43,
-            ARP_GATE: 44
-        };
-
         containerEl.querySelectorAll('[data-param]').forEach(el => {
             const paramKey = el.getAttribute('data-param');
             const dstVal = PARAM_TO_MTX_DST[paramKey];
             if (!dstVal) return;
 
-            el.addEventListener('dragover', (e) => {
-                const modSrc = resolveModSource(this._activeDragSection);
-                if (!modSrc) return;
-                const emptySlot = this._findFirstEmptyMtxSlot(timbre());
-                if (emptySlot === null) return;
-                e.preventDefault();
-                e.stopPropagation();
-                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-                if (typeof el.closest === 'function') {
-                    const parentCard = el.closest('.lfo-sub-card, .env-pane');
-                    if (parentCard) parentCard.classList.remove('slot-drop-hover');
-                } else {
-                    for (const sel of ['.lfo-sub-card', '.env-pane']) {
-                        containerEl.querySelectorAll(sel).forEach(card => {
-                            if (typeof card.contains === 'function' && card.contains(el)) {
-                                card.classList.remove('slot-drop-hover');
-                            }
-                        });
+            this._bindDragTarget(el, {
+                hoverClass: 'lfo-dst-drop-hover',
+                onDragOver: (e) => {
+                    const modSrc = this._resolveModSource(this._activeDragSection);
+                    if (!modSrc) return;
+                    const emptySlot = this._findFirstEmptyMtxSlot(timbre());
+                    if (emptySlot === null) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                    if (typeof el.closest === 'function') {
+                        const parentCard = el.closest('.lfo-sub-card, .env-pane');
+                        if (parentCard) parentCard.classList.remove('slot-drop-hover');
+                    } else {
+                        for (const sel of ['.lfo-sub-card', '.env-pane']) {
+                            containerEl.querySelectorAll(sel).forEach(card => {
+                                if (typeof card.contains === 'function' && card.contains(el)) {
+                                    card.classList.remove('slot-drop-hover');
+                                }
+                            });
+                        }
                     }
-                }
-                el.classList.add('lfo-dst-drop-hover');
-                const dstLabel = (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get('MTX1_DST')?.values?.[dstVal]) || paramKey;
-                this._setDropTip(el, `Add to mod matrix: ${modSrc.srcLabel} -> ${dstLabel}`);
-            });
+                    el.classList.add('lfo-dst-drop-hover');
+                    const dstLabel = (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get('MTX1_DST')?.values?.[dstVal]) || paramKey;
+                    this._setDropTip(el, `Add to mod matrix: ${modSrc.srcLabel} -> ${dstLabel}`);
+                },
+                onDrop: (e) => {
+                    const data = this._parseDragPayload(e, this._activeDragSection);
+                    const modSrc = this._resolveModSource(data);
+                    if (!modSrc) return;
+                    const prog = timbre();
+                    const emptySlot = this._findFirstEmptyMtxSlot(prog);
+                    if (emptySlot === null) return;
 
-            el.addEventListener('dragleave', (e) => {
-                if (e.relatedTarget && typeof el.contains === 'function' && el.contains(e.relatedTarget)) {
-                    return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this._mapModSourceToSlot(prog, modSrc, paramKey, dstVal, emptySlot, onChange, containerEl);
                 }
-                el.classList.remove('lfo-dst-drop-hover');
-                this._clearDropTip(el);
-            });
-
-            el.addEventListener('drop', (e) => {
-                const data = this._parseDragPayload(e, this._activeDragSection);
-                const modSrc = resolveModSource(data);
-                if (!modSrc) return;
-                const prog = timbre();
-                const emptySlot = this._findFirstEmptyMtxSlot(prog);
-                if (emptySlot === null) return;
-
-                e.preventDefault();
-                e.stopPropagation();
-                el.classList.remove('lfo-dst-drop-hover');
-                this._clearDropTip(el);
-
-                const { srcVal, srcLabel } = modSrc;
-                const dstLabel = (typeof PARAM_MAP !== 'undefined' && PARAM_MAP.get('MTX1_DST')?.values?.[dstVal]) || paramKey;
-                if (onChange && onChange.beginGroup) {
-                    onChange.beginGroup(`Map ${srcLabel} → ${dstLabel} (Slot ${emptySlot})`);
-                }
-                const prevSrc = prog.getValue(`MTX${emptySlot}_SRC`);
-                const prevDst = prog.getValue(`MTX${emptySlot}_DST`);
-                const prevAmt = prog.getValue(`MTX${emptySlot}_AMT`);
-                if (onChange) {
-                    onChange(`MTX${emptySlot}_SRC`, srcVal, { isFinal: true, prevVal: prevSrc });
-                    onChange(`MTX${emptySlot}_DST`, dstVal, { isFinal: true, prevVal: prevDst });
-                    if (prevAmt === 128) {
-                        onChange(`MTX${emptySlot}_AMT`, 160, { isFinal: true, prevVal: prevAmt });
-                    }
-                } else {
-                    prog.setValue(`MTX${emptySlot}_SRC`, srcVal);
-                    prog.setValue(`MTX${emptySlot}_DST`, dstVal);
-                    if (prevAmt === 128) {
-                        prog.setValue(`MTX${emptySlot}_AMT`, 160);
-                    }
-                }
-                if (onChange && onChange.endGroup) {
-                    onChange.endGroup();
-                }
-
-                this._activeDragSection = null;
-                const slotRow = Array.from(containerEl.querySelectorAll('.matrix-slot-row'))
-                    .find(r => String(r.getAttribute('data-slot')) === String(emptySlot));
-                if (slotRow) {
-                    this._refreshSectionNode(slotRow);
-                }
-                this.showNotification(`Mapped ${srcLabel} → ${dstLabel} (Matrix Slot ${emptySlot})`, 'success');
             });
         });
+    }
+
+    _createCardActionMenu(card, sectionType, { shortLabel, noun, buttonTitle }, timbre, onChange) {
+        const menuWrap = document.createElement('div');
+        menuWrap.className = 'card-menu-wrap';
+
+        const menuBtn = document.createElement('button');
+        menuBtn.type = 'button';
+        menuBtn.className = 'card-menu-btn';
+        menuBtn.textContent = '⋯';
+        menuBtn.title = buttonTitle;
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'card-dropdown-menu';
+
+        const closeMenu = () => {
+            dropdown.classList.remove('open');
+            window.removeEventListener('click', closeMenu);
+        };
+
+        const updateMenuState = () => {
+            const clip = getSectionClipboard();
+            const canPaste = clip && clip.sectionType === sectionType;
+            const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
+            dropdown.innerHTML = `
+                <div class="menu-item" data-action="copy">${ICON_COPY_SVG} <span>Copy ${shortLabel} ${curIdx}</span></div>
+                <div class="menu-item ${canPaste ? '' : 'disabled'}" data-action="paste">${ICON_PASTE_SVG} <span>Paste Section</span></div>
+                <div class="menu-item" data-action="reset">${ICON_RESET_SVG} <span>Reset to Defaults</span></div>
+                <div class="menu-item" data-action="randomize">${ICON_RANDOM_SVG} <span>Smart Randomize</span></div>
+            `;
+
+            dropdown.querySelector('[data-action="copy"]').onclick = (e) => {
+                e.stopPropagation();
+                copySectionToClipboard(sectionType, curIdx, timbre());
+                closeMenu();
+                this.showNotification(`Copied ${noun} ${curIdx} to clipboard`, 'info');
+            };
+
+            const pasteEl = dropdown.querySelector('[data-action="paste"]');
+            if (canPaste) {
+                pasteEl.onclick = (e) => {
+                    e.stopPropagation();
+                    pasteSectionFromClipboard(sectionType, curIdx, timbre(), onChange);
+                    closeMenu();
+                    card.refresh();
+                    this.showNotification(`Pasted into ${noun} ${curIdx}`, 'success');
+                };
+            }
+
+            dropdown.querySelector('[data-action="reset"]').onclick = (e) => {
+                e.stopPropagation();
+                resetSectionToInit(sectionType, curIdx, timbre(), onChange);
+                closeMenu();
+                card.refresh();
+                this.showNotification(`Reset ${noun} ${curIdx} to defaults`, 'info');
+            };
+
+            dropdown.querySelector('[data-action="randomize"]').onclick = (e) => {
+                e.stopPropagation();
+                randomizeSection(sectionType, curIdx, timbre(), onChange);
+                closeMenu();
+                card.refresh();
+                this.showNotification(`Randomized ${noun} ${curIdx}`, 'success');
+            };
+        };
+
+        menuBtn.onclick = (e) => {
+            e.stopPropagation();
+            const isOpen = dropdown.classList.contains('open');
+            document.querySelectorAll('.card-dropdown-menu.open').forEach(m => m.classList.remove('open'));
+            if (!isOpen) {
+                updateMenuState();
+                dropdown.classList.add('open');
+                window.addEventListener('click', closeMenu);
+            }
+        };
+
+        menuWrap.appendChild(menuBtn);
+        menuWrap.appendChild(dropdown);
+        return menuWrap;
+    }
+
+    _createOscPane(i, timbre, onChange, { updateOscShapeState, updateOscSelection, muteBtns, soloBtns, shapeKnobs }) {
+        const pane = document.createElement('div');
+        pane.className = `osc-pane osc-pane-${i}`;
+        pane.style.display = (this.selectedOsc === i) ? 'flex' : 'none';
+
+        const algoRow = document.createElement('div');
+        algoRow.className = 'osc-algo-row';
+        algoRow.appendChild(createSelect(`OSC${i}_ALGO`, timbre, (k, v, meta) => {
+            updateOscShapeState(i);
+            if (onChange) onChange(k, v, meta);
+        }));
+
+        const soloMuteGroup = document.createElement('div');
+        soloMuteGroup.className = 'solo-mute-group';
+
+        const muteBtn = document.createElement('button');
+        muteBtn.type = 'button';
+        muteBtn.className = 'btn-sm-badge btn-mute';
+        muteBtn.textContent = 'M';
+        muteBtn.title = `Mute Osc ${i}`;
+        muteBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.toggleSoloMute('osc' + i, 'mute');
+            updateOscSelection();
+        };
+
+        const soloBtn = document.createElement('button');
+        soloBtn.type = 'button';
+        soloBtn.className = 'btn-sm-badge btn-solo';
+        soloBtn.textContent = 'S';
+        soloBtn.title = `Solo Osc ${i}`;
+        soloBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.toggleSoloMute('osc' + i, 'solo');
+            updateOscSelection();
+        };
+
+        soloMuteGroup.appendChild(muteBtn);
+        soloMuteGroup.appendChild(soloBtn);
+        algoRow.appendChild(soloMuteGroup);
+        pane.appendChild(algoRow);
+
+        muteBtns[i] = muteBtn;
+        soloBtns[i] = soloBtn;
+
+        const knobs = document.createElement('div');
+        knobs.className = 'knob-row';
+        const shapeKnob = createKnob(`OSC${i}_SHAPE`, timbre, onChange);
+        shapeKnobs[i] = shapeKnob;
+        knobs.appendChild(shapeKnob);
+        knobs.appendChild(createKnob(`OSC${i}_TUNE`, timbre, onChange));
+        knobs.appendChild(createKnob(`OSC${i}_FINETUNE`, timbre, onChange));
+        knobs.appendChild(createKnob(`MIX_OSC${i}`, timbre, onChange));
+        pane.appendChild(knobs);
+        return pane;
+    }
+
+    _createOscNoiseFooter(timbre, onChange) {
+        const footer = document.createElement('div');
+        footer.className = 'osc-footer-strip';
+
+        const noiseGroup = document.createElement('div');
+        noiseGroup.className = 'osc-noise-group';
+        const noiseBadges = document.createElement('div');
+        noiseBadges.className = 'osc-noise-badges';
+
+        const noiseMuteBtn = document.createElement('button');
+        noiseMuteBtn.type = 'button';
+        noiseMuteBtn.className = 'btn-sm-badge btn-mute' + (this.muteState.noise ? ' active' : '');
+        noiseMuteBtn.textContent = 'M';
+        noiseMuteBtn.title = 'Mute Noise Generator';
+
+        const noiseSoloBtn = document.createElement('button');
+        noiseSoloBtn.type = 'button';
+        noiseSoloBtn.className = 'btn-sm-badge btn-solo' + (this.soloState.noise ? ' active' : '');
+        noiseSoloBtn.textContent = 'S';
+        noiseSoloBtn.title = 'Solo Noise Generator';
+
+        const syncNoiseBadges = () => {
+            noiseMuteBtn.classList.toggle('active', this.muteState.noise);
+            noiseSoloBtn.classList.toggle('active', this.soloState.noise);
+        };
+        noiseMuteBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.toggleSoloMute('noise', 'mute');
+            syncNoiseBadges();
+        };
+        noiseSoloBtn.onclick = (e) => {
+            e.stopPropagation();
+            this.toggleSoloMute('noise', 'solo');
+            syncNoiseBadges();
+        };
+
+        noiseBadges.appendChild(noiseMuteBtn);
+        noiseBadges.appendChild(noiseSoloBtn);
+        noiseGroup.appendChild(createKnob('MIX_NOISE', timbre, onChange, { small: true }));
+        noiseGroup.appendChild(noiseBadges);
+
+        footer.appendChild(noiseGroup);
+        footer.appendChild(createSelect('OSC_PHASE_RESET', timbre, onChange));
+        return footer;
     }
 
     createOscillatorPanel(timbre, onChange) {
@@ -2132,18 +2302,14 @@ class App {
         const head = document.createElement('div');
         head.className = 'synth-card-header';
 
-        // Title Group
         const titleGroup = document.createElement('div');
         titleGroup.className = 'card-title-group static';
-
         const titleText = document.createElement('span');
         titleText.className = 'card-title-text';
         titleText.textContent = 'Oscillator';
-
         titleGroup.appendChild(titleText);
         head.appendChild(titleGroup);
 
-        // Segmented Tabs: Osc 1, Osc 2, Osc 3
         const tabGroup = document.createElement('div');
         tabGroup.className = 'osc-tabs-group';
 
@@ -2155,7 +2321,6 @@ class App {
             btn.setAttribute('data-osc', i);
             btn.textContent = `Osc ${i}`;
 
-            // Indicator dots for Mute & Solo
             const muteDot = document.createElement('span');
             muteDot.className = 'tab-dot dot-mute';
             const soloDot = document.createElement('span');
@@ -2163,7 +2328,6 @@ class App {
             btn.appendChild(muteDot);
             btn.appendChild(soloDot);
 
-            // Drag-and-drop source & target to copy directly between oscillators
             btn.title = `Osc ${i} • Drag to copy to another oscillator`;
             this.wireSectionDragSource(btn, 'osc', i);
             this.wireSectionDropTarget(btn, 'osc', i, timbre, onChange, {
@@ -2183,92 +2347,13 @@ class App {
             tabButtons.push(btn);
         }
         head.appendChild(tabGroup);
-
-        // Section Menu Button (Copy, Paste, Reset, Randomize)
-        const menuWrap = document.createElement('div');
-        menuWrap.className = 'card-menu-wrap';
-
-        const menuBtn = document.createElement('button');
-        menuBtn.type = 'button';
-        menuBtn.className = 'card-menu-btn';
-        menuBtn.textContent = '⋯';
-        menuBtn.title = 'Oscillator Actions (Copy, Paste, Reset, Randomize)';
-
-        const dropdown = document.createElement('div');
-        dropdown.className = 'card-dropdown-menu';
-
-        const updateMenuState = () => {
-            const clip = getSectionClipboard();
-            const canPaste = clip && clip.sectionType === 'osc';
-            dropdown.innerHTML = `
-                <div class="menu-item" data-action="copy">${ICON_COPY_SVG} <span>Copy Osc ${card.getAttribute('data-section-index')}</span></div>
-                <div class="menu-item ${canPaste ? '' : 'disabled'}" data-action="paste">${ICON_PASTE_SVG} <span>Paste Section</span></div>
-                <div class="menu-item" data-action="reset">${ICON_RESET_SVG} <span>Reset to Defaults</span></div>
-                <div class="menu-item" data-action="randomize">${ICON_RANDOM_SVG} <span>Smart Randomize</span></div>
-            `;
-
-            dropdown.querySelector('[data-action="copy"]').onclick = (e) => {
-                e.stopPropagation();
-                const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
-                copySectionToClipboard('osc', curIdx, timbre());
-                closeMenu();
-                this.showNotification(`Copied Oscillator ${curIdx} to clipboard`, 'info');
-            };
-
-            const pasteEl = dropdown.querySelector('[data-action="paste"]');
-            if (canPaste) {
-                pasteEl.onclick = (e) => {
-                    e.stopPropagation();
-                    const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
-                    pasteSectionFromClipboard('osc', curIdx, timbre(), onChange);
-                    closeMenu();
-                    card.refresh();
-                    this.showNotification(`Pasted into Oscillator ${curIdx}`, 'success');
-                };
-            }
-
-            dropdown.querySelector('[data-action="reset"]').onclick = (e) => {
-                e.stopPropagation();
-                const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
-                resetSectionToInit('osc', curIdx, timbre(), onChange);
-                closeMenu();
-                card.refresh();
-                this.showNotification(`Reset Oscillator ${curIdx} to defaults`, 'info');
-            };
-
-            dropdown.querySelector('[data-action="randomize"]').onclick = (e) => {
-                e.stopPropagation();
-                const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
-                randomizeSection('osc', curIdx, timbre(), onChange);
-                closeMenu();
-                card.refresh();
-                this.showNotification(`Randomized Oscillator ${curIdx}`, 'success');
-            };
-        };
-
-        const closeMenu = () => {
-            dropdown.classList.remove('open');
-            window.removeEventListener('click', closeMenu);
-        };
-
-        menuBtn.onclick = (e) => {
-            e.stopPropagation();
-            const isOpen = dropdown.classList.contains('open');
-            document.querySelectorAll('.card-dropdown-menu.open').forEach(m => m.classList.remove('open'));
-            if (!isOpen) {
-                updateMenuState();
-                dropdown.classList.add('open');
-                window.addEventListener('click', closeMenu);
-            }
-        };
-
-        menuWrap.appendChild(menuBtn);
-        menuWrap.appendChild(dropdown);
-        head.appendChild(menuWrap);
-
+        head.appendChild(this._createCardActionMenu(card, 'osc', {
+            shortLabel: 'Osc',
+            noun: 'Oscillator',
+            buttonTitle: 'Oscillator Actions (Copy, Paste, Reset, Randomize)'
+        }, timbre, onChange));
         card.appendChild(head);
 
-        // Body with Panes
         const body = document.createElement('div');
         body.className = 'synth-card-body';
 
@@ -2296,112 +2381,6 @@ class App {
             shapeKnob.setDisabled(SINE_ALGOS.has(algoName));
         };
 
-        for (let i = 1; i <= 3; i++) {
-            const pane = document.createElement('div');
-            pane.className = `osc-pane osc-pane-${i}`;
-            pane.style.display = (this.selectedOsc === i) ? 'flex' : 'none';
-
-            // Algorithm select + Mute/Solo buttons
-            const algoRow = document.createElement('div');
-            algoRow.className = 'osc-algo-row';
-            algoRow.appendChild(createSelect(`OSC${i}_ALGO`, timbre, (k, v, meta) => {
-                updateOscShapeState(i);
-                if (onChange) onChange(k, v, meta);
-            }));
-
-            const soloMuteGroup = document.createElement('div');
-            soloMuteGroup.className = 'solo-mute-group';
-
-            const muteBtn = document.createElement('button');
-            muteBtn.type = 'button';
-            muteBtn.className = 'btn-sm-badge btn-mute';
-            muteBtn.textContent = 'M';
-            muteBtn.title = `Mute Osc ${i}`;
-            muteBtn.onclick = (e) => {
-                e.stopPropagation();
-                this.toggleSoloMute('osc' + i, 'mute');
-                updateOscSelection();
-            };
-
-            const soloBtn = document.createElement('button');
-            soloBtn.type = 'button';
-            soloBtn.className = 'btn-sm-badge btn-solo';
-            soloBtn.textContent = 'S';
-            soloBtn.title = `Solo Osc ${i}`;
-            soloBtn.onclick = (e) => {
-                e.stopPropagation();
-                this.toggleSoloMute('osc' + i, 'solo');
-                updateOscSelection();
-            };
-
-            soloMuteGroup.appendChild(muteBtn);
-            soloMuteGroup.appendChild(soloBtn);
-            algoRow.appendChild(soloMuteGroup);
-            pane.appendChild(algoRow);
-
-            muteBtns[i] = muteBtn;
-            soloBtns[i] = soloBtn;
-
-            // Knobs row: Shape, Tune, Fine Tune, Mix
-            const knobs = document.createElement('div');
-            knobs.className = 'knob-row';
-            const shapeKnob = createKnob(`OSC${i}_SHAPE`, timbre, onChange);
-            shapeKnobs[i] = shapeKnob;
-            knobs.appendChild(shapeKnob);
-            knobs.appendChild(createKnob(`OSC${i}_TUNE`, timbre, onChange));
-            knobs.appendChild(createKnob(`OSC${i}_FINETUNE`, timbre, onChange));
-            knobs.appendChild(createKnob(`MIX_OSC${i}`, timbre, onChange));
-            pane.appendChild(knobs);
-
-            body.appendChild(pane);
-            panes.push(pane);
-        }
-
-        // Global Oscillator Phase Reset & Noise Generator in footer
-        const footer = document.createElement('div');
-        footer.className = 'osc-footer-strip';
-
-        const noiseGroup = document.createElement('div');
-        noiseGroup.className = 'osc-noise-group';
-        const noiseBadges = document.createElement('div');
-        noiseBadges.className = 'osc-noise-badges';
-
-        const noiseMuteBtn = document.createElement('button');
-        noiseMuteBtn.type = 'button';
-        noiseMuteBtn.className = 'btn-sm-badge btn-mute' + (this.muteState.noise ? ' active' : '');
-        noiseMuteBtn.textContent = 'M';
-        noiseMuteBtn.title = 'Mute Noise Generator';
-        noiseMuteBtn.onclick = (e) => {
-            e.stopPropagation();
-            this.toggleSoloMute('noise', 'mute');
-            noiseMuteBtn.classList.toggle('active', this.muteState.noise);
-            noiseSoloBtn.classList.toggle('active', this.soloState.noise);
-        };
-
-        const noiseSoloBtn = document.createElement('button');
-        noiseSoloBtn.type = 'button';
-        noiseSoloBtn.className = 'btn-sm-badge btn-solo' + (this.soloState.noise ? ' active' : '');
-        noiseSoloBtn.textContent = 'S';
-        noiseSoloBtn.title = 'Solo Noise Generator';
-        noiseSoloBtn.onclick = (e) => {
-            e.stopPropagation();
-            this.toggleSoloMute('noise', 'solo');
-            noiseMuteBtn.classList.toggle('active', this.muteState.noise);
-            noiseSoloBtn.classList.toggle('active', this.soloState.noise);
-        };
-
-        noiseBadges.appendChild(noiseMuteBtn);
-        noiseBadges.appendChild(noiseSoloBtn);
-        noiseGroup.appendChild(createKnob('MIX_NOISE', timbre, onChange, { small: true }));
-        noiseGroup.appendChild(noiseBadges);
-
-        footer.appendChild(noiseGroup);
-        footer.appendChild(createSelect('OSC_PHASE_RESET', timbre, onChange));
-        body.appendChild(footer);
-
-        card.appendChild(body);
-
-        // Function to update which pane and tab is active
         const updateOscSelection = () => {
             const idx = this.selectedOsc;
             card.setAttribute('data-section-index', idx);
@@ -2416,11 +2395,7 @@ class App {
             panes.forEach((pane, i) => {
                 const active = (i + 1 === idx);
                 pane.style.display = active ? 'flex' : 'none';
-                if (active) {
-                    pane.querySelectorAll('[data-param]').forEach(el => {
-                        if (el.refresh) el.refresh();
-                    });
-                }
+                if (active) this._refreshSectionNode(pane);
             });
 
             for (let n = 1; n <= 3; n++) {
@@ -2430,167 +2405,33 @@ class App {
             updateOscShapeState(idx);
         };
 
-        card.refresh = () => {
-            card.querySelectorAll('[data-param]').forEach(el => {
-                if (el.refresh) el.refresh();
+        for (let i = 1; i <= 3; i++) {
+            const pane = this._createOscPane(i, timbre, onChange, {
+                updateOscShapeState,
+                updateOscSelection,
+                muteBtns,
+                soloBtns,
+                shapeKnobs
             });
+            body.appendChild(pane);
+            panes.push(pane);
+        }
+
+        body.appendChild(this._createOscNoiseFooter(timbre, onChange));
+        card.appendChild(body);
+
+        card.refresh = () => {
+            this._refreshSectionNode(card);
             [1, 2, 3].forEach(updateOscShapeState);
             updateOscSelection();
         };
 
-        // Initialize state
         [1, 2, 3].forEach(updateOscShapeState);
         updateOscSelection();
-
         return card;
     }
 
-    createEnvelopePanel(timbre, onChange) {
-        if (typeof document === 'undefined') return document.createElement('div');
-
-        const card = document.createElement('div');
-        card.className = 'synth-card env-unified-card';
-        card.setAttribute('data-section-type', 'env');
-        card.setAttribute('data-section-index', this.selectedEnv);
-
-        const head = document.createElement('div');
-        head.className = 'synth-card-header';
-
-        // Title Group
-        const titleGroup = document.createElement('div');
-        titleGroup.className = 'card-title-group static';
-
-        const titleText = document.createElement('span');
-        titleText.className = 'card-title-text';
-        titleText.textContent = 'Envelopes';
-
-        titleGroup.appendChild(titleText);
-        head.appendChild(titleGroup);
-
-        // Segmented Tabs: Env 1, Env 2, Env 3
-        const tabGroup = document.createElement('div');
-        tabGroup.className = 'env-tabs-group';
-
-        const tabButtons = [];
-        const envLabels = ['Env 1 (Amp)', 'Env 2 (Filter)', 'Env 3 (Mod)'];
-
-        for (let i = 1; i <= 3; i++) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = `btn-env-tab ${this.selectedEnv === i ? 'active' : ''}`;
-            btn.setAttribute('data-env', i);
-            btn.textContent = `Env ${i}`;
-
-            // Drag-and-drop source & target to copy directly between envelopes
-            btn.title = `Env ${i} • Drag to copy to another envelope`;
-            this.wireSectionDragSource(btn, 'env', i);
-            this.wireSectionDropTarget(btn, 'env', i, timbre, onChange, {
-                hoverClass: 'tab-drop-hover',
-                onDrop: (srcIdx, dstIdx) => {
-                    card.refresh();
-                    this.showNotification(`Copied Env ${srcIdx} to Env ${dstIdx}`, 'success');
-                }
-            });
-
-            btn.onclick = () => {
-                this.selectedEnv = i;
-                updateEnvSelection();
-            };
-
-            tabGroup.appendChild(btn);
-            tabButtons.push(btn);
-        }
-        head.appendChild(tabGroup);
-
-        // Section Menu Button (Copy, Paste, Reset, Randomize)
-        const menuWrap = document.createElement('div');
-        menuWrap.className = 'card-menu-wrap';
-
-        const menuBtn = document.createElement('button');
-        menuBtn.type = 'button';
-        menuBtn.className = 'card-menu-btn';
-        menuBtn.textContent = '⋯';
-        menuBtn.title = 'Envelope Actions (Copy, Paste, Reset, Randomize)';
-
-        const dropdown = document.createElement('div');
-        dropdown.className = 'card-dropdown-menu';
-
-        const updateMenuState = () => {
-            const clip = getSectionClipboard();
-            const canPaste = clip && clip.sectionType === 'env';
-            dropdown.innerHTML = `
-                <div class="menu-item" data-action="copy">${ICON_COPY_SVG} <span>Copy Env ${card.getAttribute('data-section-index')}</span></div>
-                <div class="menu-item ${canPaste ? '' : 'disabled'}" data-action="paste">${ICON_PASTE_SVG} <span>Paste Section</span></div>
-                <div class="menu-item" data-action="reset">${ICON_RESET_SVG} <span>Reset to Defaults</span></div>
-                <div class="menu-item" data-action="randomize">${ICON_RANDOM_SVG} <span>Smart Randomize</span></div>
-            `;
-
-            dropdown.querySelector('[data-action="copy"]').onclick = (e) => {
-                e.stopPropagation();
-                const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
-                copySectionToClipboard('env', curIdx, timbre());
-                closeMenu();
-                this.showNotification(`Copied Envelope ${curIdx} to clipboard`, 'info');
-            };
-
-            const pasteEl = dropdown.querySelector('[data-action="paste"]');
-            if (canPaste) {
-                pasteEl.onclick = (e) => {
-                    e.stopPropagation();
-                    const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
-                    pasteSectionFromClipboard('env', curIdx, timbre(), onChange);
-                    closeMenu();
-                    card.refresh();
-                    this.showNotification(`Pasted into Envelope ${curIdx}`, 'success');
-                };
-            }
-
-            dropdown.querySelector('[data-action="reset"]').onclick = (e) => {
-                e.stopPropagation();
-                const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
-                resetSectionToInit('env', curIdx, timbre(), onChange);
-                closeMenu();
-                card.refresh();
-                this.showNotification(`Reset Envelope ${curIdx} to defaults`, 'info');
-            };
-
-            dropdown.querySelector('[data-action="randomize"]').onclick = (e) => {
-                e.stopPropagation();
-                const curIdx = parseInt(card.getAttribute('data-section-index'), 10) || 1;
-                randomizeSection('env', curIdx, timbre(), onChange);
-                closeMenu();
-                card.refresh();
-                this.showNotification(`Randomized Envelope ${curIdx}`, 'success');
-            };
-        };
-
-        const closeMenu = () => {
-            dropdown.classList.remove('open');
-            window.removeEventListener('click', closeMenu);
-        };
-
-        menuBtn.onclick = (e) => {
-            e.stopPropagation();
-            const isOpen = dropdown.classList.contains('open');
-            document.querySelectorAll('.card-dropdown-menu.open').forEach(m => m.classList.remove('open'));
-            if (!isOpen) {
-                updateMenuState();
-                dropdown.classList.add('open');
-                window.addEventListener('click', closeMenu);
-            }
-        };
-
-        menuWrap.appendChild(menuBtn);
-        menuWrap.appendChild(dropdown);
-        head.appendChild(menuWrap);
-
-        card.appendChild(head);
-
-        // Body
-        const body = document.createElement('div');
-        body.className = 'synth-card-body';
-
-        // Top: Row of all 3 ADSR visualizer curves side-by-side
+    _createEnvGraphsRow(card, timbre, onChange, envLabels, onSelect) {
         const graphsRow = document.createElement('div');
         graphsRow.className = 'adsr-graphs-row';
 
@@ -2613,46 +2454,118 @@ class App {
             gLabel.className = 'adsr-graph-label';
             gLabel.textContent = envLabels[i - 1];
 
-            const viz = createADSRVisualizer(i, timbre);
             gCard.appendChild(gLabel);
-            gCard.appendChild(viz);
+            gCard.appendChild(createADSRVisualizer(i, timbre));
 
             gCard.onclick = () => {
                 this.selectedEnv = i;
-                updateEnvSelection();
+                onSelect();
             };
 
             graphsRow.appendChild(gCard);
             graphCards.push(gCard);
         }
-        body.appendChild(graphsRow);
+        return { graphsRow, graphCards };
+    }
 
-        // Bottom: Panes for selected envelope controls
-        const panes = [];
+    _createEnvPane(i, card, timbre, onChange) {
+        const pane = document.createElement('div');
+        pane.className = `env-pane env-pane-${i}`;
+        pane.style.display = (this.selectedEnv === i) ? 'flex' : 'none';
+
+        const knobs = document.createElement('div');
+        knobs.className = 'knob-row';
+        knobs.appendChild(createKnob(`ENV${i}_ATK`, timbre, onChange));
+        knobs.appendChild(createKnob(`ENV${i}_DCY`, timbre, onChange));
+        knobs.appendChild(createKnob(`ENV${i}_SUS`, timbre, onChange));
+        knobs.appendChild(createKnob(`ENV${i}_REL`, timbre, onChange));
+        if (i === 1) knobs.appendChild(createKnob('ENV1_VCA_VEL_SENS', timbre, onChange));
+        if (i === 2) knobs.appendChild(createKnob('ENV2_FLT_VEL_SENS', timbre, onChange));
+        knobs.appendChild(createToggleButton(`ENV${i}_RESET`, timbre, onChange));
+        pane.appendChild(knobs);
+
+        this.wireSectionDropTarget(pane, 'env', i, timbre, onChange, {
+            hoverClass: 'slot-drop-hover',
+            onDrop: (srcIdx, dstIdx) => {
+                card.refresh();
+                this.showNotification(`Copied Env ${srcIdx} to Env ${dstIdx}`, 'success');
+            }
+        });
+        return pane;
+    }
+
+    createEnvelopePanel(timbre, onChange) {
+        if (typeof document === 'undefined') return document.createElement('div');
+
+        const card = document.createElement('div');
+        card.className = 'synth-card env-unified-card';
+        card.setAttribute('data-section-type', 'env');
+        card.setAttribute('data-section-index', this.selectedEnv);
+
+        const head = document.createElement('div');
+        head.className = 'synth-card-header';
+
+        const titleGroup = document.createElement('div');
+        titleGroup.className = 'card-title-group static';
+        const titleText = document.createElement('span');
+        titleText.className = 'card-title-text';
+        titleText.textContent = 'Envelopes';
+        titleGroup.appendChild(titleText);
+        head.appendChild(titleGroup);
+
+        const tabGroup = document.createElement('div');
+        tabGroup.className = 'env-tabs-group';
+
+        const tabButtons = [];
+        const envLabels = ['Env 1 (Amp)', 'Env 2 (Filter)', 'Env 3 (Mod)'];
+
         for (let i = 1; i <= 3; i++) {
-            const pane = document.createElement('div');
-            pane.className = `env-pane env-pane-${i}`;
-            pane.style.display = (this.selectedEnv === i) ? 'flex' : 'none';
-
-            const knobs = document.createElement('div');
-            knobs.className = 'knob-row';
-            knobs.appendChild(createKnob(`ENV${i}_ATK`, timbre, onChange));
-            knobs.appendChild(createKnob(`ENV${i}_DCY`, timbre, onChange));
-            knobs.appendChild(createKnob(`ENV${i}_SUS`, timbre, onChange));
-            knobs.appendChild(createKnob(`ENV${i}_REL`, timbre, onChange));
-            if (i === 1) knobs.appendChild(createKnob('ENV1_VCA_VEL_SENS', timbre, onChange));
-            if (i === 2) knobs.appendChild(createKnob('ENV2_FLT_VEL_SENS', timbre, onChange));
-            knobs.appendChild(createToggleButton(`ENV${i}_RESET`, timbre, onChange));
-            pane.appendChild(knobs);
-
-            this.wireSectionDropTarget(pane, 'env', i, timbre, onChange, {
-                hoverClass: 'slot-drop-hover',
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `btn-env-tab ${this.selectedEnv === i ? 'active' : ''}`;
+            btn.setAttribute('data-env', i);
+            btn.textContent = `Env ${i}`;
+            btn.title = `Env ${i} • Drag to copy to another envelope`;
+            this.wireSectionDragSource(btn, 'env', i);
+            this.wireSectionDropTarget(btn, 'env', i, timbre, onChange, {
+                hoverClass: 'tab-drop-hover',
                 onDrop: (srcIdx, dstIdx) => {
                     card.refresh();
                     this.showNotification(`Copied Env ${srcIdx} to Env ${dstIdx}`, 'success');
                 }
             });
 
+            btn.onclick = () => {
+                this.selectedEnv = i;
+                updateEnvSelection();
+            };
+
+            tabGroup.appendChild(btn);
+            tabButtons.push(btn);
+        }
+        head.appendChild(tabGroup);
+        head.appendChild(this._createCardActionMenu(card, 'env', {
+            shortLabel: 'Env',
+            noun: 'Envelope',
+            buttonTitle: 'Envelope Actions (Copy, Paste, Reset, Randomize)'
+        }, timbre, onChange));
+        card.appendChild(head);
+
+        const body = document.createElement('div');
+        body.className = 'synth-card-body';
+
+        const { graphsRow, graphCards } = this._createEnvGraphsRow(
+            card,
+            timbre,
+            onChange,
+            envLabels,
+            () => updateEnvSelection()
+        );
+        body.appendChild(graphsRow);
+
+        const panes = [];
+        for (let i = 1; i <= 3; i++) {
+            const pane = this._createEnvPane(i, card, timbre, onChange);
             body.appendChild(pane);
             panes.push(pane);
         }
@@ -2674,18 +2587,12 @@ class App {
             panes.forEach((pane, i) => {
                 const active = (i + 1 === idx);
                 pane.style.display = active ? 'flex' : 'none';
-                if (active) {
-                    pane.querySelectorAll('[data-param]').forEach(el => {
-                        if (el.refresh) el.refresh();
-                    });
-                }
+                if (active) this._refreshSectionNode(pane);
             });
         };
 
         card.refresh = () => {
-            card.querySelectorAll('[data-param]').forEach(el => {
-                if (el.refresh) el.refresh();
-            });
+            this._refreshSectionNode(card);
             card.querySelectorAll('.adsr-visualizer').forEach(v => {
                 if (v.refresh) v.refresh();
             });
@@ -2703,43 +2610,7 @@ class App {
         return fn;
     }
 
-    buildEditorUI() {
-        if (typeof document === 'undefined') return;
-        const grid = document.getElementById('editor-grid');
-        if (!grid) return;
-        grid.innerHTML = '';
-
-        const timbre = () => this.activeTimbre;
-        const onChange = this.createOnChange();
-
-        // Helper to make a rack row container
-        const makeRow = (rowClass = '') => {
-            const row = document.createElement('div');
-            row.className = `rack-row ${rowClass}`;
-            return row;
-        };
-
-        // Helper to make a standard section card
-        const makeSection = (title, className = '') => {
-            const card = document.createElement('div');
-            card.className = `synth-card ${className}`;
-            const head = document.createElement('div');
-            head.className = 'synth-card-header';
-            head.textContent = title;
-            card.appendChild(head);
-            const body = document.createElement('div');
-            body.className = 'synth-card-body';
-            card.appendChild(body);
-            return { card, body };
-        };
-
-        // ========================================================
-        // --- ROW 1: TOP SYNTHESIS ROW (OSCILLATORS, FILTER, ENVELOPES) ---
-        // ========================================================
-        const row1 = makeRow('rack-row-1');
-        row1.appendChild(this.createOscillatorPanel(timbre, onChange));
-
-        // FILTER
+    _buildFilterCard(timbre, onChange) {
         const flt = createSectionCard('Filter', 'flt', 1, timbre, onChange);
 
         const fltHeroRow = document.createElement('div');
@@ -2761,7 +2632,6 @@ class App {
         fltSelects.appendChild(fltCharWrap);
         flt.body.appendChild(fltSelects);
 
-        // Filter Knobs: Tracking, Envelope, FM, Drive, Mix / Volume
         const fltKnobs = document.createElement('div');
         fltKnobs.className = 'knob-row flt-secondary-knobs';
         fltKnobs.appendChild(createKnob('FILTER_TRACKING', timbre, onChange));
@@ -2770,19 +2640,10 @@ class App {
         fltKnobs.appendChild(createKnob('DRIVE_VOICE', timbre, onChange));
         fltKnobs.appendChild(createKnob('LAY_MASTER_VOLUME', timbre, onChange));
         flt.body.appendChild(fltKnobs);
-        row1.appendChild(flt.card);
+        return flt.card;
+    }
 
-        // ENVELOPES (1–3 Unified)
-        row1.appendChild(this.createEnvelopePanel(timbre, onChange));
-
-        grid.appendChild(row1);
-
-        // ========================================================
-        // --- ROW 2: LFOS, VOICE PERFORMANCE & MATH OPERATORS ---
-        // ========================================================
-        const row2 = makeRow('rack-row-2');
-
-        // LFOs Group Card (with group-level Copy/Paste/Reset/Randomize in ⋯ menu)
+    _buildLfoGroupCard(timbre, onChange) {
         const lfoGroupCard = createSectionCard('Low Frequency Oscillators', 'lfo_group', 1, timbre, onChange);
         const lfoGrid = document.createElement('div');
         lfoGrid.className = 'lfo-multi-grid';
@@ -2792,7 +2653,6 @@ class App {
             subLfo.className = 'lfo-sub-card';
             subLfo.setAttribute('data-lfo', l);
 
-            // Sub-header with draggable badge and inline action buttons
             const subHeader = document.createElement('div');
             subHeader.className = 'lfo-sub-header';
 
@@ -2801,13 +2661,17 @@ class App {
             badge.textContent = `LFO ${l}`;
             badge.title = `LFO ${l} • Drag to copy to another LFO`;
 
+            const refreshLfo = () => {
+                this._refreshSectionNode(subLfo);
+                const viz = subLfo.querySelector('.lfo-visualizer');
+                if (viz && viz.refresh) viz.refresh();
+            };
+
             this.wireSectionDragSource(badge, 'lfo', l, { containerEl: subLfo });
             this.wireSectionDropTarget(subLfo, 'lfo', l, timbre, onChange, {
                 hoverClass: 'slot-drop-hover',
                 onDrop: (srcIdx, dstIdx) => {
-                    this._refreshSectionNode(subLfo);
-                    const viz = subLfo.querySelector('.lfo-visualizer');
-                    if (viz && viz.refresh) viz.refresh();
+                    refreshLfo();
                     this.showNotification(`Copied LFO ${srcIdx} to LFO ${dstIdx}`, 'success');
                 }
             });
@@ -2822,9 +2686,7 @@ class App {
             btnRandom.innerHTML = ICON_RANDOM_SVG;
             btnRandom.onclick = () => {
                 randomizeSection('lfo', l, timbre(), onChange);
-                this._refreshSectionNode(subLfo);
-                const viz = subLfo.querySelector('.lfo-visualizer');
-                if (viz && viz.refresh) viz.refresh();
+                refreshLfo();
                 this.showNotification(`Randomized LFO ${l}`, 'info');
             };
 
@@ -2835,9 +2697,7 @@ class App {
             btnClear.textContent = '✕';
             btnClear.onclick = () => {
                 resetSectionToInit('lfo', l, timbre(), onChange);
-                this._refreshSectionNode(subLfo);
-                const viz = subLfo.querySelector('.lfo-visualizer');
-                if (viz && viz.refresh) viz.refresh();
+                refreshLfo();
                 this.showNotification(`Reset LFO ${l} to defaults`, 'info');
             };
 
@@ -2849,7 +2709,6 @@ class App {
             subLfo.appendChild(subHeader);
 
             subLfo.appendChild(createLFOWaveformPreview(l, timbre));
-
             subLfo.appendChild(createSelect(`LFO${l}_WAVE`, timbre, onChange));
 
             const lfoModeSpeed = document.createElement('div');
@@ -2861,9 +2720,10 @@ class App {
             lfoGrid.appendChild(subLfo);
         }
         lfoGroupCard.body.appendChild(lfoGrid);
-        row2.appendChild(lfoGroupCard.card);
+        return lfoGroupCard.card;
+    }
 
-        // VOICE PERFORMANCE
+    _buildVoiceCard(timbre, onChange, makeSection) {
         const vceCard = makeSection('Voice Performance');
         const vceSelects = document.createElement('div');
         vceSelects.className = 'select-row';
@@ -2883,14 +2743,14 @@ class App {
         vceKnobs2.appendChild(createKnob('VCE_PBRANGE_DOWN', timbre, onChange));
         vceKnobs2.appendChild(createKnob('VCE_PBRANGE_UP', timbre, onChange));
         vceCard.body.appendChild(vceKnobs2);
-        row2.appendChild(vceCard.card);
+        return vceCard.card;
+    }
 
-        // Math Operators Card (Compact 1-column layout: Lag on top, Multipliers stacked below)
+    _buildMathCard(timbre, onChange, makeSection) {
         const mathSec = makeSection('Math Operators');
         const mathGrid = document.createElement('div');
         mathGrid.className = 'math-operators-grid';
 
-        // Lag Generator (Left column: source select and amount knob side-by-side in horizontal row)
         const lagBox = document.createElement('div');
         lagBox.className = 'math-sub-panel';
         lagBox.innerHTML = '<div class="fx-sub-title">Lag Generator (Glide)</div>';
@@ -2901,7 +2761,6 @@ class App {
         lagBox.appendChild(lagControls);
         mathGrid.appendChild(lagBox);
 
-        // Multipliers 1 & 2 (Right column: vertically stacked in .math-mult-stack)
         const multStack = document.createElement('div');
         multStack.className = 'math-mult-stack';
 
@@ -2956,34 +2815,24 @@ class App {
 
         mathGrid.appendChild(multStack);
         mathSec.body.appendChild(mathGrid);
-        row2.appendChild(mathSec.card);
+        return mathSec.card;
+    }
 
-        grid.appendChild(row2);
-
-        // ========================================================
-        // --- ROW 3: KNOBS, MOD MATRIX & EFFECTS ---
-        // ========================================================
-        const row3 = makeRow('rack-row-3');
-
-        // Left Column: Knobs + Modulation Matrix
-        const modRightCol = document.createElement('div');
-        modRightCol.className = 'mod-right-column';
-
-        // Knobs Card (Hardware Pots & Encoders F, Q, M, E1, E2, E3, E4) placed above Matrix
+    _buildKnobsAssignCard(timbre, onChange, makeSection) {
         const knobsSec = makeSection('Knobs');
         const knobsGrid = document.createElement('div');
         knobsGrid.className = 'knobs-assign-grid';
-        knobsGrid.appendChild(createSelect('LAY_POT1_ASSIGN', timbre, onChange));
-        knobsGrid.appendChild(createSelect('LAY_POT2_ASSIGN', timbre, onChange));
-        knobsGrid.appendChild(createSelect('LAY_POT3_ASSIGN', timbre, onChange));
-        knobsGrid.appendChild(createSelect('LAY_ENC1_ASSIGN', timbre, onChange));
-        knobsGrid.appendChild(createSelect('LAY_ENC2_ASSIGN', timbre, onChange));
-        knobsGrid.appendChild(createSelect('LAY_ENC3_ASSIGN', timbre, onChange));
-        knobsGrid.appendChild(createSelect('LAY_ENC4_ASSIGN', timbre, onChange));
+        for (const key of [
+            'LAY_POT1_ASSIGN', 'LAY_POT2_ASSIGN', 'LAY_POT3_ASSIGN',
+            'LAY_ENC1_ASSIGN', 'LAY_ENC2_ASSIGN', 'LAY_ENC3_ASSIGN', 'LAY_ENC4_ASSIGN'
+        ]) {
+            knobsGrid.appendChild(createSelect(key, timbre, onChange));
+        }
         knobsSec.body.appendChild(knobsGrid);
-        modRightCol.appendChild(knobsSec.card);
+        return knobsSec.card;
+    }
 
-        // Right Column: Modulation Matrix (12 single-row slots)
+    _buildMatrixCard(timbre, onChange) {
         const mtxSec = createSectionCard('Modulation Matrix', 'mtx_group', 1, timbre, onChange);
         const mtxList = document.createElement('div');
         mtxList.className = 'matrix-slots-list';
@@ -2996,7 +2845,6 @@ class App {
                 slotRow.setAttribute('data-fw-v3-only', 'true');
             }
 
-            // Drag badge
             const badge = document.createElement('div');
             badge.className = 'matrix-slot-badge';
             badge.textContent = `${m}`;
@@ -3025,7 +2873,6 @@ class App {
 
             const amtSlider = createBipolarSlider(`MTX${m}_AMT`, timbre, onChange, { label: 'Amt' });
 
-            // Action buttons: Randomize, Clear
             const actions = document.createElement('div');
             actions.className = 'matrix-slot-actions';
 
@@ -3063,19 +2910,17 @@ class App {
             mtxList.appendChild(slotRow);
         }
         mtxSec.body.appendChild(mtxList);
-        modRightCol.appendChild(mtxSec.card);
-        row3.appendChild(modRightCol);
+        return mtxSec.card;
+    }
 
-        // EFFECTS (Horizontal 2-row layout: Top = Delay & Reverb; Bottom = Chorus/EQ/Morph & Pan)
+    _buildEffectsAndChordColumn(timbre, onChange, makeSection) {
         const fxSec = createSectionCard('Effects & Space', 'fx', 1, timbre, onChange);
         const fxLayout = document.createElement('div');
         fxLayout.className = 'fx-layout-grid';
 
-        // --- Top Row (Time & Space) ---
         const fxRowTop = document.createElement('div');
         fxRowTop.className = 'fx-row-top';
 
-        // 1. Delay (Horizontal strip with DLY_TYPE on left, knobs on right)
         const dlyBox = document.createElement('div');
         dlyBox.className = 'fx-sub-panel fx-sub-delay';
         dlyBox.innerHTML = '<div class="fx-sub-title">Delay</div>';
@@ -3088,7 +2933,6 @@ class App {
         dlyBox.appendChild(dlyStrip);
         fxRowTop.appendChild(dlyBox);
 
-        // 2. Reverb (Decay, Mod/Damp, Level in a single row)
         const revBox = document.createElement('div');
         revBox.className = 'fx-sub-panel fx-sub-reverb';
         revBox.innerHTML = '<div class="fx-sub-title">Reverb</div>';
@@ -3102,11 +2946,9 @@ class App {
 
         fxLayout.appendChild(fxRowTop);
 
-        // --- Bottom Row (Modulation, Tone & Stereo) ---
         const fxRowBottom = document.createElement('div');
         fxRowBottom.className = 'fx-row-bottom';
 
-        // 3. Chorus, EQ & Morph Unified Sub-panel
         const unifiedBox = document.createElement('div');
         unifiedBox.className = 'fx-sub-panel fx-sub-unified';
         unifiedBox.innerHTML = '<div class="fx-sub-title">Chorus, EQ & Morph</div>';
@@ -3118,7 +2960,6 @@ class App {
         unifiedBox.appendChild(unifiedStrip);
         fxRowBottom.appendChild(unifiedBox);
 
-        // 4. Pan Sub-panel
         const panBox = document.createElement('div');
         panBox.className = 'fx-sub-panel fx-sub-pan';
         panBox.innerHTML = '<div class="fx-sub-title">Pan</div>';
@@ -3130,47 +2971,38 @@ class App {
         fxRowBottom.appendChild(panBox);
 
         fxLayout.appendChild(fxRowBottom);
-
         fxSec.body.appendChild(fxLayout);
 
         const fxChordCol = document.createElement('div');
         fxChordCol.className = 'fx-chord-column';
         fxChordCol.appendChild(fxSec.card);
 
-        // FW v3 Scaler & Chorder Engine (stacked under Effects & Space)
         const chordSec = makeSection('FW v3 Chorder & Scaler Engine');
         chordSec.card.setAttribute('data-fw-v3-only', 'true');
 
-        // Top Row: Single horizontal flex row
         const chordTopRow = document.createElement('div');
         chordTopRow.className = 'chord-top-row';
 
-        // 1. Stacked toggles (MIDI Input + Chord Expand)
         const chordToggleStack = document.createElement('div');
         chordToggleStack.className = 'chord-toggle-stack';
         chordToggleStack.appendChild(createSelect('KBD_MIDI_INPUT', timbre, onChange));
         chordToggleStack.appendChild(createSelect('KBD_CHORD_EXPAND', timbre, onChange));
         chordTopRow.appendChild(chordToggleStack);
 
-        // 2. Key
         const keySelect = createSelect('KBD_KEY', timbre, onChange);
         keySelect.classList.add('chord-key-select');
         chordTopRow.appendChild(keySelect);
 
-        // 3. Scale
         const scaleSelect = createSelect('KBD_SCALE', timbre, onChange);
         scaleSelect.classList.add('chord-scale-select');
         chordTopRow.appendChild(scaleSelect);
 
-        // 4. Octave
         chordTopRow.appendChild(createKnob('KBD_OCTAVE', timbre, onChange));
         chordSec.body.appendChild(chordTopRow);
 
-        // Scale Degree Section (2 columns)
         const chordCols = document.createElement('div');
         chordCols.className = 'chord-degrees-columns';
 
-        // Column 1: Chords 1–4
         const col1 = document.createElement('div');
         col1.className = 'chord-degrees-col';
         for (let d = 1; d <= 4; d++) {
@@ -3178,7 +3010,6 @@ class App {
         }
         chordCols.appendChild(col1);
 
-        // Column 2: Chords 5–7 + Note
         const col2 = document.createElement('div');
         col2.className = 'chord-degrees-col';
         for (let d = 5; d <= 7; d++) {
@@ -3192,16 +3023,10 @@ class App {
 
         chordSec.body.appendChild(chordCols);
         fxChordCol.appendChild(chordSec.card);
-        row3.appendChild(fxChordCol);
+        return fxChordCol;
+    }
 
-        grid.appendChild(row3);
-
-        // ========================================================
-        // --- ROW 4: ARPEGGIATOR ENGINE ---
-        // ========================================================
-        const row4 = makeRow('rack-row-4');
-
-        // Arpeggiator & 16-Step Pattern Sequencer
+    _buildArpCard(timbre, onChange, makeSection) {
         const arpSec = makeSection('Arpeggiator / Sequencer');
         const arpLayout = document.createElement('div');
         arpLayout.className = 'arp-main-layout';
@@ -3230,13 +3055,67 @@ class App {
         arpSeq.id = 'arp-seq-wrapper';
         arpLayout.appendChild(arpSeq);
         arpSec.body.appendChild(arpLayout);
-        row4.appendChild(arpSec.card);
+        return arpSec.card;
+    }
 
+    buildEditorUI() {
+        if (typeof document === 'undefined') return;
+        const grid = document.getElementById('editor-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+
+        const timbre = () => this.activeTimbre;
+        const onChange = this.createOnChange();
+
+        const makeRow = (rowClass = '') => {
+            const row = document.createElement('div');
+            row.className = `rack-row ${rowClass}`;
+            return row;
+        };
+
+        const makeSection = (title, className = '') => {
+            const card = document.createElement('div');
+            card.className = `synth-card ${className}`;
+            const head = document.createElement('div');
+            head.className = 'synth-card-header';
+            head.textContent = title;
+            card.appendChild(head);
+            const body = document.createElement('div');
+            body.className = 'synth-card-body';
+            card.appendChild(body);
+            return { card, body };
+        };
+
+        // Row 1: Oscillators, Filter, Envelopes
+        const row1 = makeRow('rack-row-1');
+        row1.appendChild(this.createOscillatorPanel(timbre, onChange));
+        row1.appendChild(this._buildFilterCard(timbre, onChange));
+        row1.appendChild(this.createEnvelopePanel(timbre, onChange));
+        grid.appendChild(row1);
+
+        // Row 2: LFOs, Voice Performance, Math Operators
+        const row2 = makeRow('rack-row-2');
+        row2.appendChild(this._buildLfoGroupCard(timbre, onChange));
+        row2.appendChild(this._buildVoiceCard(timbre, onChange, makeSection));
+        row2.appendChild(this._buildMathCard(timbre, onChange, makeSection));
+        grid.appendChild(row2);
+
+        // Row 3: Knobs + Modulation Matrix | Effects & Chorder
+        const row3 = makeRow('rack-row-3');
+        const modRightCol = document.createElement('div');
+        modRightCol.className = 'mod-right-column';
+        modRightCol.appendChild(this._buildKnobsAssignCard(timbre, onChange, makeSection));
+        modRightCol.appendChild(this._buildMatrixCard(timbre, onChange));
+        row3.appendChild(modRightCol);
+        row3.appendChild(this._buildEffectsAndChordColumn(timbre, onChange, makeSection));
+        grid.appendChild(row3);
+
+        // Row 4: Arpeggiator Engine
+        const row4 = makeRow('rack-row-4');
+        row4.appendChild(this._buildArpCard(timbre, onChange, makeSection));
         grid.appendChild(row4);
 
         this.wireModSourceToDestinationDropTargets(grid, timbre, onChange);
-
-        // Hook up Program Bar controls
         this.setupProgramBar();
 
         // Populate O(1) parameter control lookup cache
@@ -3252,20 +3131,54 @@ class App {
         }
     }
 
+    async _readSysExFile(inputEl, onMessages) {
+        const file = inputEl.files && inputEl.files[0];
+        if (!file) return;
+        try {
+            const buf = new Uint8Array(await file.arrayBuffer());
+            const msgs = extractSysExMessagesWithMeta(buf);
+            if (msgs.length === 0) {
+                await this._alertDialog({
+                    title: 'Invalid SysEx File',
+                    description: 'No valid MicroMonsta 2 SysEx program dump found in this file.'
+                });
+                return;
+            }
+            await onMessages(msgs, file);
+        } catch (err) {
+            await this._alertDialog({
+                title: 'Error Loading SysEx File',
+                description: err.message
+            });
+        }
+        inputEl.value = '';
+    }
+
     setupProgramBar() {
+        this._setupProgramMetaControls();
+        this._setupLiveSyncToggle();
+        this._setupProgramFileIO();
+        this._setupProgramActionButtons();
+    }
+
+    _setupProgramMetaControls() {
+        const broadcastMeta = () => {
+            if (this.tabSync) {
+                this.tabSync.broadcast('PATCH_META_CHANGE', {
+                    slot: this.activeSlot,
+                    name: this.activeTimbre.name,
+                    category: this.activeTimbre.category
+                });
+            }
+        };
+
         const nameInput = document.getElementById('prog-name-input');
         if (nameInput) {
             nameInput.value = this.activeTimbre.name;
             nameInput.onchange = () => {
                 this.activeTimbre.name = nameInput.value;
-                this.onParameterChanged('LAY_NAME_1', 0); // triggers sync
-                if (this.tabSync) {
-                    this.tabSync.broadcast('PATCH_META_CHANGE', {
-                        slot: this.activeSlot,
-                        name: this.activeTimbre.name,
-                        category: this.activeTimbre.category
-                    });
-                }
+                this.onParameterChanged('LAY_NAME_1', 0);
+                broadcastMeta();
             };
             const blockDrop = (e) => {
                 if (e && e.preventDefault) e.preventDefault();
@@ -3295,82 +3208,119 @@ class App {
             catSelect.onchange = () => {
                 this.activeTimbre.category = parseInt(catSelect.value, 10);
                 this.onParameterChanged('LAY_CATEGORY', this.activeTimbre.category);
-                if (this.tabSync) {
-                    this.tabSync.broadcast('PATCH_META_CHANGE', {
-                        slot: this.activeSlot,
-                        name: this.activeTimbre.name,
-                        category: this.activeTimbre.category
-                    });
-                }
+                broadcastMeta();
             };
         }
 
-        // Program Tempo Knob in header bar
         const tempoContainer = document.getElementById('prog-tempo-container');
         if (tempoContainer) {
             tempoContainer.innerHTML = '';
             const tempoKnob = createKnob('LAY_TEMPO', () => this.activeTimbre, (k, v, m) => this.onParameterChanged(k, v, m), { small: true });
             tempoContainer.appendChild(tempoKnob);
         }
+    }
 
-        // Live Sync toggle button on program bar
+    _setupLiveSyncToggle() {
         const btnLiveSync = document.getElementById('btn-prog-live-sync');
-        if (btnLiveSync) {
-            this.updateLiveSyncUI();
-            btnLiveSync.onclick = async () => {
-                if (!this.isConnectionGood) {
-                    this.updateLiveSyncUI();
-                    return;
-                }
-                if (!(this.midi && this.midi.liveSync)) {
-                    if (this._checkingLiveSync) return;
-                    this._checkingLiveSync = true;
-                    try {
-                        if (this.midi && typeof this.midi.requestProgramDump === 'function' && this.midi.inPort && this.midi.outPort) {
-                            const hwDump = await this.midi.requestProgramDump(this.activeSlot, { timeoutMs: 2000 });
-                            if (!this.isConnectionGood) return;
-                            if (hwDump && programsMatch(hwDump.program, this.activeTimbre)) {
-                                this._setLiveSyncState(true);
-                                this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
-                                this.showNotification('Live Sync ENABLED (Hardware and editor already match)', 'success');
-                                return;
-                            }
-                        }
-                    } finally {
-                        this._checkingLiveSync = false;
-                    }
-                    const choice = await this.promptSyncAction({
-                        title: '⚠️ Enable Live Hardware Sync?',
-                        description: 'Enabling Live Sync transmits parameter edits immediately to your MicroMonsta 2 over MIDI NRPN/CC. To avoid accidental patch overwrites or sound mismatches, choose an initial synchronization action:',
-                        fetchDetail: 'Pulls current hardware settings from your MicroMonsta 2 into this editor before enabling live sync.',
-                        pushDetail: 'Transmits this editor\'s current patch settings into the active hardware layer (A or B).'
-                    });
-                    if (choice === 'fetch') {
-                        this._enableLiveSyncOnFetch = true;
-                        this.fetchActiveProgram();
-                    } else if (choice === 'push') {
-                        if (this._sendActiveProgramToHardware()) {
+        if (!btnLiveSync) return;
+
+        this.updateLiveSyncUI();
+        btnLiveSync.onclick = async () => {
+            if (!this.isConnectionGood) {
+                this.updateLiveSyncUI();
+                return;
+            }
+            if (!(this.midi && this.midi.liveSync)) {
+                if (this._checkingLiveSync) return;
+                this._checkingLiveSync = true;
+                try {
+                    if (this.midi && typeof this.midi.requestProgramDump === 'function' && this.midi.inPort && this.midi.outPort) {
+                        const hwDump = await this.midi.requestProgramDump(this.activeSlot, { timeoutMs: 2000 });
+                        if (!this.isConnectionGood) return;
+                        if (hwDump && programsMatch(hwDump.program, this.activeTimbre)) {
                             this._setLiveSyncState(true);
-                            this.showNotification('Live Sync ENABLED (Pushed patch to MM2)', 'success');
-                        } else {
-                            this._setLiveSyncState(false, { broadcast: false });
+                            this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
+                            this.showNotification('Live Sync ENABLED (Hardware and editor already match)', 'success');
+                            return;
                         }
-                    } else if (choice === null) {
-                        // Fallback if dialog.showModal not supported
+                    }
+                } finally {
+                    this._checkingLiveSync = false;
+                }
+                const choice = await this.promptSyncAction({
+                    title: '⚠️ Enable Live Hardware Sync?',
+                    description: 'Enabling Live Sync transmits parameter edits immediately to your MicroMonsta 2 over MIDI NRPN/CC. To avoid accidental patch overwrites or sound mismatches, choose an initial synchronization action:',
+                    fetchDetail: 'Pulls current hardware settings from your MicroMonsta 2 into this editor before enabling live sync.',
+                    pushDetail: 'Transmits this editor\'s current patch settings into the active hardware layer (A or B).'
+                });
+                if (choice === 'fetch') {
+                    this._enableLiveSyncOnFetch = true;
+                    this.fetchActiveProgram();
+                } else if (choice === 'push') {
+                    if (this._sendActiveProgramToHardware()) {
                         this._setLiveSyncState(true);
-                        this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
+                        this.showNotification('Live Sync ENABLED (Pushed patch to MM2)', 'success');
                     } else {
                         this._setLiveSyncState(false, { broadcast: false });
                     }
+                } else if (choice === null) {
+                    this._setLiveSyncState(true);
+                    this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
                 } else {
-                    this._setLiveSyncState(false);
-                    this._refreshSyncStatusAfterLiveSyncDisable();
-                    this.showNotification('Live Sync DISABLED', 'info');
+                    this._setLiveSyncState(false, { broadcast: false });
                 }
+            } else {
+                this._setLiveSyncState(false);
+                this._refreshSyncStatusAfterLiveSyncDisable();
+                this.showNotification('Live Sync DISABLED', 'info');
+            }
+        };
+    }
+
+    _setupProgramFileIO() {
+        const btnSave = document.getElementById('btn-prog-save');
+        if (btnSave) {
+            btnSave.onclick = () => {
+                const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+                const fwId = this.midi && this.midi.detectedFwId !== null ? this.midi.detectedFwId : SYSEX_V2_FW_ID;
+                this.librarian.exportProgramFile(this.activeTimbre, null, fwVer, fwId);
             };
         }
 
-        // Hardware Fetch Button
+        const btnLoad = document.getElementById('btn-prog-load');
+        const fileInput = document.getElementById('prog-file-picker');
+        if (btnLoad && fileInput) {
+            btnLoad.onclick = () => fileInput.click();
+            fileInput.onchange = () => this._readSysExFile(fileInput, (msgs, file) => {
+                this.activeTimbre.rawData = msgs[0].bytes;
+                this._setOriginalSnapshot(this.activeSlot, this.activeTimbre);
+                this.undoStack = [];
+                this.redoStack = [];
+                this.updateUndoRedoUI();
+                this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
+                this.refreshEditorControls();
+                if (this.tabSync) {
+                    this.tabSync.broadcast('PATCH_LOADED', {
+                        slot: this.activeSlot,
+                        rawData: Array.from(this.activeTimbre.rawData),
+                        source: 'file'
+                    });
+                }
+                const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+                const incompat = fwVer === 2 ? detectV3Incompatibilities(this.activeTimbre) : { hasIncompatibilities: false, reasons: [] };
+                if (incompat.hasIncompatibilities) {
+                    this.showNotification(
+                        `Loaded v3 patch "${this.activeTimbre.name}" in v2.x mode. Omitted on v2.x send/export: ${incompat.reasons.join(', ')}`,
+                        'warning'
+                    );
+                } else {
+                    this.showNotification(`Loaded program "${this.activeTimbre.name}" from ${file.name}`, 'success');
+                }
+            });
+        }
+    }
+
+    _setupProgramActionButtons() {
         const btnFetch = document.getElementById('btn-prog-fetch');
         if (btnFetch) {
             btnFetch.onclick = () => {
@@ -3379,27 +3329,18 @@ class App {
             };
         }
 
-        // Undo & Redo Buttons
         const btnUndo = document.getElementById('btn-prog-undo');
-        if (btnUndo) {
-            btnUndo.onclick = () => this.undo();
-        }
+        if (btnUndo) btnUndo.onclick = () => this.undo();
 
         const btnRedo = document.getElementById('btn-prog-redo');
-        if (btnRedo) {
-            btnRedo.onclick = () => this.redo();
-        }
+        if (btnRedo) btnRedo.onclick = () => this.redo();
 
         this.wireMemoryAndPartDragDrop();
         this.updateMemoryUI();
 
-        // Compare Button
         const btnCompare = document.getElementById('btn-prog-compare');
-        if (btnCompare) {
-            btnCompare.onclick = () => this.toggleCompare();
-        }
+        if (btnCompare) btnCompare.onclick = () => this.toggleCompare();
 
-        // Program action buttons
         const btnInit = document.getElementById('btn-prog-init');
         if (btnInit) {
             btnInit.onclick = async () => {
@@ -3424,66 +3365,6 @@ class App {
                         this.showNotification(`Program initialized to defaults (${partLabel}).`, 'info');
                     }
                 }
-            };
-        }
-
-        const btnSave = document.getElementById('btn-prog-save');
-        if (btnSave) {
-            btnSave.onclick = () => {
-                const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
-                const fwId = this.midi && this.midi.detectedFwId !== null ? this.midi.detectedFwId : SYSEX_V2_FW_ID;
-                this.librarian.exportProgramFile(this.activeTimbre, null, fwVer, fwId);
-            };
-        }
-
-        const btnLoad = document.getElementById('btn-prog-load');
-        const fileInput = document.getElementById('prog-file-picker');
-        if (btnLoad && fileInput) {
-            btnLoad.onclick = () => fileInput.click();
-            fileInput.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                try {
-                    const buf = new Uint8Array(await file.arrayBuffer());
-                    const msgs = extractSysExMessagesWithMeta(buf);
-                    if (msgs.length === 0) {
-                        await this._alertDialog({
-                            title: 'Invalid SysEx File',
-                            description: 'No valid MicroMonsta 2 SysEx program dump found in this file.'
-                        });
-                        return;
-                    }
-                    this.activeTimbre.rawData = msgs[0].bytes;
-                    this._setOriginalSnapshot(this.activeSlot, this.activeTimbre);
-                    this.undoStack = [];
-                    this.redoStack = [];
-                    this.updateUndoRedoUI();
-                    this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
-                    this.refreshEditorControls();
-                    if (this.tabSync) {
-                        this.tabSync.broadcast('PATCH_LOADED', {
-                            slot: this.activeSlot,
-                            rawData: Array.from(this.activeTimbre.rawData),
-                            source: 'file'
-                        });
-                    }
-                    const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
-                    const incompat = fwVer === 2 ? detectV3Incompatibilities(this.activeTimbre) : { hasIncompatibilities: false, reasons: [] };
-                    if (incompat.hasIncompatibilities) {
-                        this.showNotification(
-                            `Loaded v3 patch "${this.activeTimbre.name}" in v2.x mode. Omitted on v2.x send/export: ${incompat.reasons.join(', ')}`,
-                            'warning'
-                        );
-                    } else {
-                        this.showNotification(`Loaded program "${this.activeTimbre.name}" from ${file.name}`, 'success');
-                    }
-                } catch (err) {
-                    await this._alertDialog({
-                        title: 'Error Loading SysEx File',
-                        description: err.message
-                    });
-                }
-                fileInput.value = '';
             };
         }
 
