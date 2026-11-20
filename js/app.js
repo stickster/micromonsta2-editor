@@ -541,6 +541,7 @@ class App {
         if (!this.isConnectionGood && (this.syncStatus === 'synced' || this.syncStatus === 'streaming')) {
             this.updateSyncStatus(this.midi && this.midi.hardwareResponsive === false ? 'failed' : 'offline');
         }
+        if (typeof document === 'undefined') return;
 
         const dot = document.getElementById('midi-status-dot');
         const text = document.getElementById('midi-status-text');
@@ -582,6 +583,7 @@ class App {
     }
 
     updateMidiPermissionUI() {
+        if (typeof document === 'undefined') return;
         const banner = document.getElementById('midi-permission-banner');
         const text = document.getElementById('midi-permission-text');
         if (!banner && !text) return;
@@ -631,6 +633,7 @@ class App {
 
     switchView(viewName) {
         this.currentView = viewName;
+        if (typeof document === 'undefined') return;
         document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
         document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
 
@@ -1001,7 +1004,10 @@ class App {
         const {
             sendToHardware = true,
             syncStatus = 'modified',
-            source = 'memory'
+            source = 'memory',
+            clearUndo = false,
+            setOriginalSnapshot = false,
+            broadcast = true
         } = options;
         if (this.isComparing) {
             this.toggleCompare(false);
@@ -1010,26 +1016,36 @@ class App {
         const prevRawData = new Uint8Array(targetTimbre.rawData);
         const nextRawData = new Uint8Array(rawData);
 
-        this.undoStack.push({
-            type: 'part-snapshot',
-            slot: targetSlot,
-            prevRawData,
-            newRawData: nextRawData,
-            label
-        });
-        if (this.undoStack.length > this.maxHistory) {
-            this.undoStack.shift();
+        if (clearUndo) {
+            this.undoStack = [];
+            this.redoStack = [];
+        } else {
+            this.undoStack.push({
+                type: 'part-snapshot',
+                slot: targetSlot,
+                prevRawData,
+                newRawData: nextRawData,
+                label
+            });
+            if (this.undoStack.length > this.maxHistory) {
+                this.undoStack.shift();
+            }
+            this.redoStack = [];
         }
-        this.redoStack = [];
 
         targetTimbre.rawData = nextRawData;
+        if (setOriginalSnapshot) {
+            this._setOriginalSnapshot(targetSlot, targetTimbre);
+        }
         if (sendToHardware && this.midi && this.midi.liveSync && this.midi.outPort) {
             this.midi.sendProgram(targetTimbre, targetSlot);
         }
         this.refreshEditorControls();
         this.updateUndoRedoUI();
-        this.updateSyncStatus(syncStatus);
-        if (this.tabSync) {
+        if (syncStatus !== null) {
+            this.updateSyncStatus(syncStatus);
+        }
+        if (broadcast && this.tabSync) {
             this.tabSync.broadcast('PATCH_LOADED', {
                 slot: targetSlot,
                 rawData: Array.from(targetTimbre.rawData),
@@ -1391,6 +1407,44 @@ class App {
         });
     }
 
+    _moveBankPrograms(bank, indices, targetIdx, mode = 'insert') {
+        const prevPrograms = bank.programs.map(p => new Uint8Array(p.rawData));
+        let undoLabel = null;
+
+        if (mode === 'group' || indices.length > 1) {
+            if (bank.moveProgramsGroup(indices, targetIdx)) {
+                undoLabel = `Move ${indices.length} patches to #${targetIdx + 1}`;
+            }
+            if (this.selectedProgIndices) this.selectedProgIndices.clear();
+            this._lastSelectedProgIndex = null;
+            this.showNotification(`Moved ${indices.length} patches to slot #${targetIdx + 1}`, 'info');
+        } else if (mode === 'swap') {
+            if (bank.swapPrograms(indices[0], targetIdx)) {
+                undoLabel = `Swap #${indices[0] + 1} and #${targetIdx + 1}`;
+            }
+            this.showNotification(`Swapped slot #${indices[0] + 1} and slot #${targetIdx + 1}`, 'info');
+        } else if (mode === 'replace') {
+            if (indices[0] !== targetIdx) {
+                const srcProg = bank.getProgram(indices[0]);
+                if (srcProg) {
+                    bank.setProgram(targetIdx, srcProg.clone());
+                    undoLabel = `Copy "${srcProg.name}" to #${targetIdx + 1}`;
+                    this.showNotification(`Copied "${srcProg.name}" to slot #${targetIdx + 1}`, 'success');
+                }
+            }
+        } else if (targetIdx !== indices[0] && bank.moveProgram(indices[0], targetIdx)) {
+            undoLabel = `Move patch to #${targetIdx + 1}`;
+        }
+
+        if (undoLabel) {
+            const newPrograms = bank.programs.map(p => new Uint8Array(p.rawData));
+            this._recordBankUndo(this.librarian.activeBankIndex, prevPrograms, newPrograms, undoLabel);
+        }
+        this._activeLibrarianDrag = null;
+        this.librarian.saveAllBanks();
+        this.renderLibrarianBank();
+    }
+
     _wireAppMainDrop(appMain, clearHover) {
         const isBelowProgList = (e) => {
             if (typeof document === 'undefined' || !e || typeof e.clientY !== 'number') return true;
@@ -1469,26 +1523,7 @@ class App {
                     const indices = Array.isArray(libData.progIndices) && libData.progIndices.length > 0
                         ? libData.progIndices
                         : [libData.progIndex];
-                    const lastIdx = bank.length - 1;
-                    const prevPrograms = bank.programs.map(p => new Uint8Array(p.rawData));
-                    let undoLabel = null;
-                    if (indices.length > 1) {
-                        if (bank.moveProgramsGroup(indices, lastIdx)) {
-                            undoLabel = `Move ${indices.length} patches to #${lastIdx + 1}`;
-                        }
-                        if (this.selectedProgIndices) this.selectedProgIndices.clear();
-                        this._lastSelectedProgIndex = null;
-                        this.showNotification(`Moved ${indices.length} patches to slot #${lastIdx + 1}`, 'info');
-                    } else if (indices[0] !== lastIdx && bank.moveProgram(indices[0], lastIdx)) {
-                        undoLabel = `Move patch to #${lastIdx + 1}`;
-                    }
-                    if (undoLabel) {
-                        const newPrograms = bank.programs.map(p => new Uint8Array(p.rawData));
-                        this._recordBankUndo(this.librarian.activeBankIndex, prevPrograms, newPrograms, undoLabel);
-                    }
-                    this._activeLibrarianDrag = null;
-                    this.librarian.saveAllBanks();
-                    this.renderLibrarianBank();
+                    this._moveBankPrograms(bank, indices, bank.length - 1, indices.length > 1 ? 'group' : 'insert');
                     return;
                 }
 
@@ -3164,8 +3199,9 @@ class App {
                 title: 'Error Loading SysEx File',
                 description: err.message
             });
+        } finally {
+            inputEl.value = '';
         }
-        inputEl.value = '';
     }
 
     setupProgramBar() {
@@ -3306,20 +3342,13 @@ class App {
         if (btnLoad && fileInput) {
             btnLoad.onclick = () => fileInput.click();
             fileInput.onchange = () => this._readSysExFile(fileInput, (msgs, file) => {
-                this.activeTimbre.rawData = msgs[0].bytes;
-                this._setOriginalSnapshot(this.activeSlot, this.activeTimbre);
-                this.undoStack = [];
-                this.redoStack = [];
-                this.updateUndoRedoUI();
-                this.updateSyncStatus(this.isConnectionGood ? 'synced' : 'offline');
-                this.refreshEditorControls();
-                if (this.tabSync) {
-                    this.tabSync.broadcast('PATCH_LOADED', {
-                        slot: this.activeSlot,
-                        rawData: Array.from(this.activeTimbre.rawData),
-                        source: 'file'
-                    });
-                }
+                this.replacePartWithRawData(this.activeSlot, msgs[0].bytes, `Load ${file.name}`, {
+                    sendToHardware: false,
+                    syncStatus: this.isConnectionGood ? 'synced' : 'offline',
+                    source: 'file',
+                    clearUndo: true,
+                    setOriginalSnapshot: true
+                });
                 const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
                 const incompat = fwVer === 2 ? detectV3Incompatibilities(this.activeTimbre) : { hasIncompatibilities: false, reasons: [] };
                 if (incompat.hasIncompatibilities) {
@@ -3411,18 +3440,13 @@ class App {
                 const targetSlot = this.activeSlot === 0 ? 1 : 0;
                 const srcLabel = this.activeSlot === 0 ? 'A' : 'B';
                 const dstLabel = targetSlot === 1 ? 'B' : 'A';
-                const targetTimbre = this.getTimbre(targetSlot);
-                targetTimbre.rawData = this.activeTimbre.rawData;
-                this._setOriginalSnapshot(targetSlot, targetTimbre);
+                this.replacePartWithRawData(targetSlot, this.activeTimbre.rawData, `Copy Part ${srcLabel} → Part ${dstLabel}`, {
+                    sendToHardware: false,
+                    syncStatus: null,
+                    source: 'copy',
+                    setOriginalSnapshot: true
+                });
                 this.showNotification(`Copied Part ${srcLabel} "${this.activeTimbre.name}" to Part ${dstLabel}`, 'success');
-                this.refreshEditorControls();
-                if (this.tabSync) {
-                    this.tabSync.broadcast('PATCH_LOADED', {
-                        slot: targetSlot,
-                        rawData: Array.from(targetTimbre.rawData),
-                        source: 'copy'
-                    });
-                }
             };
         }
     }
@@ -3662,10 +3686,16 @@ class App {
     }
 
     buildLibrarianUI() {
+        if (typeof document === 'undefined') return;
         const bankTabs = document.getElementById('bank-tabs');
         if (!bankTabs) return;
 
-        // Setup Search and Category filters
+        this._wireLibrarianFilters();
+        this._wireBankTabReorderAndDuplicate(bankTabs);
+        this._wireLibrarianToolbarActions();
+    }
+
+    _wireLibrarianFilters() {
         const searchInput = document.getElementById('lib-search-input');
         if (searchInput) {
             searchInput.oninput = () => {
@@ -3688,11 +3718,49 @@ class App {
                 this.renderLibrarianBank();
             };
         }
+    }
 
-        // Add Bank button & .bank-tabs-bar trailing area (drop target to duplicate a dragged bank)
+    _clearBankInsertMarkers() {
+        const bankTabsContainer = typeof document !== 'undefined' ? document.getElementById('bank-tabs') : null;
+        if (!bankTabsContainer || !bankTabsContainer.children) return;
+        for (let i = 0; i < bankTabsContainer.children.length; i++) {
+            const t = bankTabsContainer.children[i];
+            if (t && t.classList) t.classList.remove('bank-insert-before', 'bank-insert-after');
+        }
+    }
+
+    _updateBankInsertIndicator(fromIndex, clientX) {
+        this._clearBankInsertMarkers();
+        const bankTabsContainer = typeof document !== 'undefined' ? document.getElementById('bank-tabs') : null;
+        if (!bankTabsContainer || !bankTabsContainer.children) return fromIndex;
+        const tabs = Array.from(bankTabsContainer.children);
+        if (tabs.length === 0) return fromIndex;
+        let insertPos = tabs.length;
+        if (typeof clientX === 'number') {
+            insertPos = 0;
+            for (let i = 0; i < tabs.length; i++) {
+                const rect = typeof tabs[i].getBoundingClientRect === 'function' ? tabs[i].getBoundingClientRect() : null;
+                if (!rect || (rect.left + rect.width / 2) < clientX) {
+                    insertPos = i + 1;
+                }
+            }
+        }
+        const toIndex = fromIndex < insertPos ? insertPos - 1 : insertPos;
+        const clampedTo = Math.max(0, Math.min(tabs.length - 1, toIndex));
+        if (clampedTo !== fromIndex) {
+            if (insertPos < tabs.length && tabs[insertPos].classList) {
+                tabs[insertPos].classList.add('bank-insert-before');
+            } else if (tabs[tabs.length - 1].classList) {
+                tabs[tabs.length - 1].classList.add('bank-insert-after');
+            }
+        }
+        return clampedTo;
+    }
+
+    _wireBankTabReorderAndDuplicate(bankTabsContainer) {
         const btnAddBank = document.getElementById('btn-add-bank');
         const bankTabsBar = typeof document.querySelector === 'function' ? document.querySelector('.bank-tabs-bar') : null;
-        const bankTabsContainer = document.getElementById('bank-tabs');
+
         if (btnAddBank) {
             btnAddBank.onclick = () => {
                 const defaultName = `Bank ${this.librarian.banks.length + 1}`;
@@ -3723,79 +3791,35 @@ class App {
             }
         };
 
-        const clearBankInsertMarkers = () => {
-            if (!bankTabsContainer || !bankTabsContainer.children) return;
-            for (let i = 0; i < bankTabsContainer.children.length; i++) {
-                const t = bankTabsContainer.children[i];
-                if (t && t.classList) t.classList.remove('bank-insert-before', 'bank-insert-after');
-            }
+        bankTabsContainer.ondragover = (e) => {
+            const activeDrag = this._activeLibrarianDrag;
+            if (!activeDrag || activeDrag.type !== 'bank-reorder') return;
+            e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+            clearDuplicateHover();
+            this._updateBankInsertIndicator(activeDrag.fromIndex, e.clientX);
         };
 
-        const updateBankInsertIndicator = (fromIndex, clientX) => {
-            clearBankInsertMarkers();
-            if (!bankTabsContainer || !bankTabsContainer.children) return fromIndex;
-            const tabs = Array.from(bankTabsContainer.children);
-            if (tabs.length === 0) return fromIndex;
-            let insertPos = tabs.length;
-            if (typeof clientX === 'number') {
-                insertPos = 0;
-                for (let i = 0; i < tabs.length; i++) {
-                    const rect = typeof tabs[i].getBoundingClientRect === 'function' ? tabs[i].getBoundingClientRect() : null;
-                    if (!rect || (rect.left + rect.width / 2) < clientX) {
-                        insertPos = i + 1;
-                    }
-                }
-            }
-            const toIndex = fromIndex < insertPos ? insertPos - 1 : insertPos;
-            const clampedTo = Math.max(0, Math.min(tabs.length - 1, toIndex));
-            if (clampedTo !== fromIndex) {
-                if (insertPos < tabs.length && tabs[insertPos].classList) {
-                    tabs[insertPos].classList.add('bank-insert-before');
-                } else if (tabs[tabs.length - 1].classList) {
-                    tabs[tabs.length - 1].classList.add('bank-insert-after');
-                }
-            }
-            return clampedTo;
+        bankTabsContainer.ondragleave = (e) => {
+            if (e.relatedTarget && typeof bankTabsContainer.contains === 'function' && bankTabsContainer.contains(e.relatedTarget)) return;
+            this._clearBankInsertMarkers();
         };
 
-        this._updateBankInsertIndicator = updateBankInsertIndicator;
-        this._clearBankInsertMarkers = clearBankInsertMarkers;
-
-        if (bankTabsContainer) {
-            bankTabsContainer.ondragover = (e) => {
-                const activeDrag = this._activeLibrarianDrag;
-                if (!activeDrag || activeDrag.type !== 'bank-reorder') return;
-                e.preventDefault();
-                if (e.stopPropagation) e.stopPropagation();
-                if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-                clearDuplicateHover();
-                updateBankInsertIndicator(activeDrag.fromIndex, e.clientX);
-            };
-
-            bankTabsContainer.ondragleave = (e) => {
-                if (e.relatedTarget && typeof bankTabsContainer.contains === 'function' && bankTabsContainer.contains(e.relatedTarget)) return;
-                clearBankInsertMarkers();
-            };
-
-            bankTabsContainer.ondrop = (e) => {
-                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-                let data = null;
-                try {
-                    data = raw ? JSON.parse(raw) : this._activeLibrarianDrag;
-                } catch (err) { }
-                if (!data || data.type !== 'bank-reorder') return;
-                e.preventDefault();
-                if (e.stopPropagation) e.stopPropagation();
-                clearDuplicateHover();
-                const toIndex = updateBankInsertIndicator(data.fromIndex, e.clientX);
-                clearBankInsertMarkers();
-                this._activeLibrarianDrag = null;
-                if (toIndex !== data.fromIndex) {
-                    this.librarian.reorderBanks(data.fromIndex, toIndex);
-                    this.renderLibrarianBank();
-                }
-            };
-        }
+        bankTabsContainer.ondrop = (e) => {
+            const data = this._parseDragPayload(e, this._activeLibrarianDrag);
+            if (!data || data.type !== 'bank-reorder') return;
+            e.preventDefault();
+            if (e.stopPropagation) e.stopPropagation();
+            clearDuplicateHover();
+            const toIndex = this._updateBankInsertIndicator(data.fromIndex, e.clientX);
+            this._clearBankInsertMarkers();
+            this._activeLibrarianDrag = null;
+            if (toIndex !== data.fromIndex) {
+                this.librarian.reorderBanks(data.fromIndex, toIndex);
+                this.renderLibrarianBank();
+            }
+        };
 
         const handleDuplicateDragOver = (e) => {
             const activeDrag = this._activeLibrarianDrag;
@@ -3826,28 +3850,25 @@ class App {
             e.preventDefault();
             if (e.stopPropagation) e.stopPropagation();
             clearDuplicateHover();
-            try {
-                const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-                const data = raw ? JSON.parse(raw) : this._activeLibrarianDrag;
-                if (!data || data.type !== 'bank-reorder') return;
-                const newBank = this.librarian.duplicateBank(data.fromIndex);
-                this._activeLibrarianDrag = null;
-                if (newBank) {
-                    const newIndex = this.librarian.banks.length - 1;
-                    this.librarian.activeBankIndex = newIndex;
-                    this.selectedProgIndices.clear();
-                    this._lastSelectedProgIndex = null;
-                    this.renderLibrarianBank();
-                    this.showNotification(`Duplicated bank as "${newBank.name}"`, 'success');
+            const data = this._parseDragPayload(e, this._activeLibrarianDrag);
+            if (!data || data.type !== 'bank-reorder') return;
+            const newBank = this.librarian.duplicateBank(data.fromIndex);
+            this._activeLibrarianDrag = null;
+            if (newBank) {
+                const newIndex = this.librarian.banks.length - 1;
+                this.librarian.activeBankIndex = newIndex;
+                this.selectedProgIndices.clear();
+                this._lastSelectedProgIndex = null;
+                this.renderLibrarianBank();
+                this.showNotification(`Duplicated bank as "${newBank.name}"`, 'success');
 
-                    const bankTabs = document.getElementById('bank-tabs');
-                    const newTab = bankTabs && bankTabs.children ? bankTabs.children[newIndex] : null;
-                    const tabTitle = newTab ? newTab.querySelector('.bank-tab-title') : null;
-                    if (tabTitle) {
-                        this.startInlineBankRename(newIndex, tabTitle, newTab);
-                    }
+                const bankTabs = document.getElementById('bank-tabs');
+                const newTab = bankTabs && bankTabs.children ? bankTabs.children[newIndex] : null;
+                const tabTitle = newTab ? newTab.querySelector('.bank-tab-title') : null;
+                if (tabTitle) {
+                    this.startInlineBankRename(newIndex, tabTitle, newTab);
                 }
-            } catch (err) { }
+            }
         };
 
         if (btnAddBank) {
@@ -3860,8 +3881,9 @@ class App {
             bankTabsBar.ondragleave = (e) => handleDuplicateDragLeave(bankTabsBar, e);
             bankTabsBar.ondrop = handleDuplicateDrop;
         }
+    }
 
-        // Export Bank button
+    _wireLibrarianToolbarActions() {
         const btnExportBank = document.getElementById('btn-export-bank');
         if (btnExportBank) {
             btnExportBank.onclick = async () => {
@@ -3876,55 +3898,34 @@ class App {
             };
         }
 
-        // Import Bank button
         const btnImportBank = document.getElementById('btn-import-bank');
         const bankFileInput = document.getElementById('bank-file-picker');
         if (btnImportBank && bankFileInput) {
             btnImportBank.onclick = () => bankFileInput.click();
-            bankFileInput.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                try {
-                    const buf = new Uint8Array(await file.arrayBuffer());
-                    const msgs = extractSysExMessagesWithMeta(buf);
-                    const count = msgs.length;
-                    if (count > 0) {
-                        const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
-                        let incompatCount = 0;
-                        for (const item of msgs) {
-                            const prog = new MM2Program(item.bytes);
-                            this.librarian.activeBank.addProgram(prog);
-                            if (fwVer === 2 && item.version === 3 && detectV3Incompatibilities(prog).hasIncompatibilities) {
-                                incompatCount++;
-                            }
-                        }
-                        await this.librarian.saveAllBanks();
-                        this.renderLibrarianBank();
-                        if (incompatCount > 0) {
-                            this.showNotification(
-                                `Imported ${count} patches into "${this.librarian.activeBank.name}". Warning: ${incompatCount} patch(es) use v3-only features that will be omitted in v2.x mode.`,
-                                'warning'
-                            );
-                        } else {
-                            this.showNotification(`Imported ${count} patches into "${this.librarian.activeBank.name}"`, 'success');
-                        }
-                    } else {
-                        await this._alertDialog({
-                            title: 'Invalid SysEx File',
-                            description: 'No valid MicroMonsta 2 SysEx patches found in file.'
-                        });
+            bankFileInput.onchange = () => this._readSysExFile(bankFileInput, async (msgs) => {
+                const count = msgs.length;
+                const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+                let incompatCount = 0;
+                for (const item of msgs) {
+                    const prog = new MM2Program(item.bytes);
+                    this.librarian.activeBank.addProgram(prog);
+                    if (fwVer === 2 && item.version === 3 && detectV3Incompatibilities(prog).hasIncompatibilities) {
+                        incompatCount++;
                     }
-                } catch (err) {
-                    await this._alertDialog({
-                        title: 'Error Importing Bank',
-                        description: err.message
-                    });
                 }
-                bankFileInput.value = '';
-            };
+                await this.librarian.saveAllBanks();
+                this.renderLibrarianBank();
+                if (incompatCount > 0) {
+                    this.showNotification(
+                        `Imported ${count} patches into "${this.librarian.activeBank.name}". Warning: ${incompatCount} patch(es) use v3-only features that will be omitted in v2.x mode.`,
+                        'warning'
+                    );
+                } else {
+                    this.showNotification(`Imported ${count} patches into "${this.librarian.activeBank.name}"`, 'success');
+                }
+            });
         }
 
-        // Duplicate Management & Condenser tools
         const btnDetectDups = document.getElementById('btn-detect-duplicates');
         if (btnDetectDups) {
             btnDetectDups.onclick = () => this.showDuplicateModal();
@@ -3947,7 +3948,6 @@ class App {
             };
         }
 
-        // Delete all patches in the current bank
         const btnDeleteAll = document.getElementById('btn-delete-all-patches');
         if (btnDeleteAll) {
             btnDeleteAll.onclick = async () => {
@@ -3970,8 +3970,6 @@ class App {
                 }
             };
         }
-
-        // Dumps from MM2 are always appended to the currently selected bank (no separate target toggle)
     }
 
     startInlineBankRename(index, tabTitle, tab) {
@@ -4111,11 +4109,43 @@ class App {
         if (typeof document === 'undefined') return;
         const bankTabs = document.getElementById('bank-tabs');
         const progList = document.getElementById('librarian-prog-list');
-        const dupBadge = document.getElementById('bank-duplicates-badge');
-
         if (!bankTabs || !progList) return;
 
-        // Render Bank Tabs with Drag-and-Drop Reordering
+        this._renderBankTabs(bankTabs);
+
+        const activeBank = this.librarian.activeBank;
+        if (!activeBank) return;
+
+        const dupInfo = this._updateDuplicateBadge(activeBank);
+        const visiblePrograms = this._filterVisiblePrograms(activeBank);
+
+        progList.innerHTML = '';
+        if (visiblePrograms.length === 0) {
+            progList.innerHTML = `
+                <div class="empty-state">
+                    <p>No presets found in this bank.</p>
+                    <p class="text-subtle">Import a .syx file or trigger a dump from your MicroMonsta 2 hardware menu.</p>
+                </div>
+            `;
+            return;
+        }
+
+        if (this.selectedProgIndices && this.selectedProgIndices.size > 0) {
+            for (const idx of [...this.selectedProgIndices]) {
+                if (idx < 0 || idx >= activeBank.length) {
+                    this.selectedProgIndices.delete(idx);
+                }
+            }
+        }
+
+        const dragCtx = this._createLibrarianDragController(activeBank, progList);
+        const rowCtx = { activeBank, progList, dupInfo, visiblePrograms, dragCtx };
+        visiblePrograms.forEach(({ program, originalIndex }) => {
+            progList.appendChild(this._createProgramRow(program, originalIndex, rowCtx));
+        });
+    }
+
+    _renderBankTabs(bankTabs) {
         bankTabs.innerHTML = '';
         this.librarian.banks.forEach((bank, idx) => {
             const tab = document.createElement('div');
@@ -4153,7 +4183,6 @@ class App {
                 };
             }
 
-            // Drag to reorder banks or receive dragged patches from another bank
             tab.ondragstart = (e) => {
                 const payload = { type: 'bank-reorder', fromIndex: idx };
                 this._activeLibrarianDrag = payload;
@@ -4179,9 +4208,7 @@ class App {
                 const activeDrag = this._activeLibrarianDrag;
                 if (activeDrag && activeDrag.type === 'bank-reorder') {
                     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
-                    if (typeof this._updateBankInsertIndicator === 'function') {
-                        this._updateBankInsertIndicator(activeDrag.fromIndex, e.clientX);
-                    }
+                    this._updateBankInsertIndicator(activeDrag.fromIndex, e.clientX);
                     return;
                 }
                 if (activeDrag && activeDrag.type === 'prog-move' && activeDrag.bankIndex !== idx) {
@@ -4205,47 +4232,41 @@ class App {
                 if (e.stopPropagation) e.stopPropagation();
                 tab.classList.remove('slot-drop-hover');
                 this._clearDropTip(tab);
-                if (typeof this._clearBankInsertMarkers === 'function') {
+                this._clearBankInsertMarkers();
+                const data = this._parseDragPayload(e, this._activeLibrarianDrag);
+                if (!data) return;
+                if (data.type === 'bank-reorder') {
+                    const toIndex = typeof e.clientX === 'number'
+                        ? this._updateBankInsertIndicator(data.fromIndex, e.clientX)
+                        : idx;
                     this._clearBankInsertMarkers();
-                }
-                try {
-                    const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-                    const data = raw ? JSON.parse(raw) : this._activeLibrarianDrag;
-                    if (!data) return;
-                    if (data.type === 'bank-reorder') {
-                        const toIndex = typeof this._updateBankInsertIndicator === 'function' && typeof e.clientX === 'number'
-                            ? this._updateBankInsertIndicator(data.fromIndex, e.clientX)
-                            : idx;
-                        if (typeof this._clearBankInsertMarkers === 'function') this._clearBankInsertMarkers();
-                        this._activeLibrarianDrag = null;
-                        if (toIndex !== data.fromIndex) {
-                            this.librarian.reorderBanks(data.fromIndex, toIndex);
-                            this.renderLibrarianBank();
-                        }
-                    } else if (data.type === 'prog-move' && data.bankIndex !== idx) {
-                        const indices = Array.isArray(data.progIndices) && data.progIndices.length > 0
-                            ? data.progIndices
-                            : [data.progIndex];
-                        const movedCount = this.librarian.moveProgramsToBank(data.bankIndex, indices, idx);
-                        this._activeLibrarianDrag = null;
-                        if (movedCount > 0) {
-                            this.selectedProgIndices.clear();
-                            this._lastSelectedProgIndex = null;
-                            this.renderLibrarianBank();
-                            this.showNotification(`Moved ${movedCount} ${movedCount === 1 ? 'patch' : 'patches'} to "${bank.name}"`, 'success');
-                        }
+                    this._activeLibrarianDrag = null;
+                    if (toIndex !== data.fromIndex) {
+                        this.librarian.reorderBanks(data.fromIndex, toIndex);
+                        this.renderLibrarianBank();
                     }
-                } catch (err) { }
+                } else if (data.type === 'prog-move' && data.bankIndex !== idx) {
+                    const indices = Array.isArray(data.progIndices) && data.progIndices.length > 0
+                        ? data.progIndices
+                        : [data.progIndex];
+                    const movedCount = this.librarian.moveProgramsToBank(data.bankIndex, indices, idx);
+                    this._activeLibrarianDrag = null;
+                    if (movedCount > 0) {
+                        this.selectedProgIndices.clear();
+                        this._lastSelectedProgIndex = null;
+                        this.renderLibrarianBank();
+                        this.showNotification(`Moved ${movedCount} ${movedCount === 1 ? 'patch' : 'patches'} to "${bank.name}"`, 'success');
+                    }
+                }
             };
 
             bankTabs.appendChild(tab);
         });
+    }
 
-        const activeBank = this.librarian.activeBank;
-        if (!activeBank) return;
-
-        // Detect Duplicates for active bank
-        const dupInfo = activeBank.detectDuplicates(true);
+    _updateDuplicateBadge(bank) {
+        const dupInfo = bank.detectDuplicates(true);
+        const dupBadge = document.getElementById('bank-duplicates-badge');
         if (dupBadge) {
             if (dupInfo.duplicatesFound > 0) {
                 dupBadge.textContent = `${dupInfo.duplicatesFound} Duplicates Found`;
@@ -4255,39 +4276,23 @@ class App {
                 dupBadge.style.display = 'none';
             }
         }
+        return dupInfo;
+    }
 
-        // Filter programs
-        let visiblePrograms = [];
-        for (let i = 0; i < activeBank.programs.length; i++) {
-            const p = activeBank.programs[i];
+    _filterVisiblePrograms(bank) {
+        const visiblePrograms = [];
+        for (let i = 0; i < bank.programs.length; i++) {
+            const p = bank.programs[i];
             const matchesCat = this.activeCategoryFilter === 'all' || p.category === parseInt(this.activeCategoryFilter, 10);
             const matchesSearch = !this.searchQuery || p.name.toLowerCase().includes(this.searchQuery);
             if (matchesCat && matchesSearch) {
                 visiblePrograms.push({ program: p, originalIndex: i });
             }
         }
+        return visiblePrograms;
+    }
 
-        // Render Program Table
-        progList.innerHTML = '';
-        if (visiblePrograms.length === 0) {
-            progList.innerHTML = `
-                <div class="empty-state">
-                    <p>No presets found in this bank.</p>
-                    <p class="text-subtle">Import a .syx file or trigger a dump from your MicroMonsta 2 hardware menu.</p>
-                </div>
-            `;
-            return;
-        }
-
-        // Prune stale program selection indices
-        if (this.selectedProgIndices && this.selectedProgIndices.size > 0) {
-            for (const idx of [...this.selectedProgIndices]) {
-                if (idx < 0 || idx >= activeBank.length) {
-                    this.selectedProgIndices.delete(idx);
-                }
-            }
-        }
-
+    _createLibrarianDragController(activeBank, progList) {
         const clearProgInsertMarkers = () => {
             const rows = progList.children || [];
             for (let r = 0; r < rows.length; r++) {
@@ -4314,8 +4319,7 @@ class App {
                         return { row: rEl, index: rIdx, isAfter: false, mode: 'replace' };
                     }
                     const mid = rect.top + rect.height / 2;
-                    const isAfter = e.clientY > mid;
-                    return { row: rEl, index: rIdx, isAfter, mode: 'insert' };
+                    return { row: rEl, index: rIdx, isAfter: e.clientY > mid, mode: 'insert' };
                 }
             }
             return { row: rows[fallbackIndex] || null, index: fallbackIndex, isAfter: false, mode: 'insert' };
@@ -4360,7 +4364,6 @@ class App {
             const targetRow = target.row || fallbackRow;
             const targetIdx = target.index !== undefined ? target.index : fallbackIndex;
 
-            // Disallow no-op move or copy at the same location
             if (count === 1) {
                 const isSameReplace = target.mode === 'replace' && targetIdx === activeLib.progIndex;
                 const isSameInsert = target.mode !== 'replace' &&
@@ -4401,11 +4404,7 @@ class App {
         };
 
         const applyProgDrop = (e, fallbackIndex) => {
-            const raw = e.dataTransfer && e.dataTransfer.getData ? e.dataTransfer.getData('text/plain') : '';
-            let data = null;
-            try {
-                data = raw ? JSON.parse(raw) : this._activeLibrarianDrag;
-            } catch (err) { }
+            const data = this._parseDragPayload(e, this._activeLibrarianDrag);
             if (!data || data.type !== 'prog-move') return false;
 
             e.preventDefault();
@@ -4418,310 +4417,276 @@ class App {
             const target = computeProgTarget(e, fallbackIndex, indices.length === 1);
             const targetIndex = target.index !== undefined ? target.index : fallbackIndex;
 
-            const prevPrograms = activeBank.programs.map(p => new Uint8Array(p.rawData));
-            let undoLabel = null;
-
             if (indices.length > 1) {
-                if (activeBank.moveProgramsGroup(indices, targetIndex)) {
-                    undoLabel = `Move ${indices.length} patches to #${targetIndex + 1}`;
-                }
-                this.selectedProgIndices.clear();
-                this._lastSelectedProgIndex = null;
-                this.showNotification(`Moved ${indices.length} patches to slot #${targetIndex + 1}`, 'info');
+                this._moveBankPrograms(activeBank, indices, targetIndex, 'group');
             } else if (e.altKey || e.shiftKey) {
-                if (activeBank.swapPrograms(indices[0], targetIndex)) {
-                    undoLabel = `Swap #${indices[0] + 1} and #${targetIndex + 1}`;
-                }
-                this.showNotification(`Swapped slot #${indices[0] + 1} and slot #${targetIndex + 1}`, 'info');
+                this._moveBankPrograms(activeBank, indices, targetIndex, 'swap');
             } else if (target.mode === 'replace' && indices[0] !== targetIndex) {
-                const srcProg = activeBank.getProgram(indices[0]);
-                if (srcProg) {
-                    activeBank.setProgram(targetIndex, srcProg.clone());
-                    undoLabel = `Copy "${srcProg.name}" to #${targetIndex + 1}`;
-                    this.showNotification(`Copied "${srcProg.name}" to slot #${targetIndex + 1}`, 'success');
-                }
+                this._moveBankPrograms(activeBank, indices, targetIndex, 'replace');
             } else {
                 const destIndex = resolveSingleInsertDest(indices[0], targetIndex, target.isAfter, typeof e.clientY === 'number');
-                if (destIndex !== indices[0] && activeBank.moveProgram(indices[0], destIndex)) {
-                    undoLabel = `Move patch to #${destIndex + 1}`;
-                }
+                this._moveBankPrograms(activeBank, indices, destIndex, 'insert');
             }
-            if (undoLabel) {
-                const newPrograms = activeBank.programs.map(p => new Uint8Array(p.rawData));
-                this._recordBankUndo(this.librarian.activeBankIndex, prevPrograms, newPrograms, undoLabel);
-            }
-            this._activeLibrarianDrag = null;
-            this.librarian.saveAllBanks();
-            this.renderLibrarianBank();
             return true;
         };
 
-        progList.ondragover = (e) => {
-            applyProgDragOver(e, null, 0, '');
-        };
+        progList.ondragover = (e) => applyProgDragOver(e, null, 0, '');
         progList.ondragleave = (e) => {
             if (e.relatedTarget && typeof progList.contains === 'function' && progList.contains(e.relatedTarget)) return;
             clearProgInsertMarkers();
         };
-        progList.ondrop = (e) => {
-            applyProgDrop(e, activeBank.length - 1);
+        progList.ondrop = (e) => applyProgDrop(e, activeBank.length - 1);
+
+        return { applyProgDragOver, applyProgDrop };
+    }
+
+    _createProgramRow(program, originalIndex, { activeBank, progList, dupInfo, visiblePrograms, dragCtx }) {
+        const row = document.createElement('div');
+        const isDup = dupInfo.duplicateIndices.has(originalIndex);
+        const isSelected = this.selectedProgIndices && this.selectedProgIndices.has(originalIndex);
+        row.className = `prog-row${isDup ? ' is-duplicate' : ''}${isSelected ? ' selected' : ''}`;
+        row.setAttribute('draggable', 'true');
+        if (row.dataset) row.dataset.progIndex = String(originalIndex);
+
+        const catOptions = LOOKUPS.categories.map((cat, cIdx) =>
+            `<option value="${cIdx}" ${cIdx === program.category ? 'selected' : ''}>${cat}</option>`
+        ).join('');
+
+        row.innerHTML = `
+            <div class="prog-drag-handle" title="Drag to reorder, swap, or move to another bank">⋮⋮</div>
+            <button type="button" class="prog-select-cb${isSelected ? ' active' : ''}" aria-pressed="${isSelected ? 'true' : 'false'}" title="Select patch for multi-drag" aria-label="Select ${escapeHtml(program.name)}">
+                <svg class="prog-select-check" viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2.2 6.2 4.8 8.8 9.8 3.2"></polyline></svg>
+            </button>
+            <div class="prog-slot-num">#${(originalIndex + 1).toString().padStart(2, '0')}</div>
+            <div class="prog-name">${escapeHtml(program.name)}</div>
+            <select class="prog-cat-badge prog-cat-select" data-prog-index="${originalIndex}" title="Edit category">
+                ${catOptions}
+            </select>
+            ${isDup ? '<div class="prog-dup-badge" title="Identical sound parameters detected">Duplicate</div>' : ''}
+            <div class="prog-actions">
+                <button class="btn btn-sm btn-action" data-action="load-a" title="Load into Part A">Part A</button>
+                <button class="btn btn-sm btn-action" data-action="load-b" title="Load into Part B">Part B</button>
+                <button class="btn btn-sm btn-action" data-action="export" title="Export .syx">Export</button>
+                <button class="btn btn-sm btn-danger" data-action="delete" title="Delete">✕</button>
+            </div>
+        `;
+
+        const syncSelectionUI = () => {
+            const rows = progList.children || [];
+            for (let r = 0; r < rows.length; r++) {
+                const rEl = rows[r];
+                const rIdx = rEl.dataset && rEl.dataset.progIndex !== undefined ? parseInt(rEl.dataset.progIndex, 10) : NaN;
+                if (Number.isNaN(rIdx)) continue;
+                const sel = this.selectedProgIndices.has(rIdx);
+                if (rEl.classList) rEl.classList.toggle('selected', sel);
+                const rCb = rEl.querySelector ? rEl.querySelector('.prog-select-cb') : null;
+                if (rCb) {
+                    if (rCb.classList && typeof rCb.classList.toggle === 'function') {
+                        rCb.classList.toggle('active', sel);
+                    }
+                    if (typeof rCb.setAttribute === 'function') {
+                        rCb.setAttribute('aria-pressed', sel ? 'true' : 'false');
+                    }
+                    rCb.checked = sel;
+                }
+            }
         };
 
-        visiblePrograms.forEach(({ program, originalIndex }) => {
-            const row = document.createElement('div');
-            const isDup = dupInfo.duplicateIndices.has(originalIndex);
-            const isSelected = this.selectedProgIndices && this.selectedProgIndices.has(originalIndex);
-            row.className = `prog-row${isDup ? ' is-duplicate' : ''}${isSelected ? ' selected' : ''}`;
-            row.setAttribute('draggable', 'true');
-            if (row.dataset) row.dataset.progIndex = String(originalIndex);
-
-            const catOptions = LOOKUPS.categories.map((cat, cIdx) =>
-                `<option value="${cIdx}" ${cIdx === program.category ? 'selected' : ''}>${cat}</option>`
-            ).join('');
-
-            row.innerHTML = `
-                <div class="prog-drag-handle" title="Drag to reorder, swap, or move to another bank">⋮⋮</div>
-                <button type="button" class="prog-select-cb${isSelected ? ' active' : ''}" aria-pressed="${isSelected ? 'true' : 'false'}" title="Select patch for multi-drag" aria-label="Select ${escapeHtml(program.name)}">
-                    <svg class="prog-select-check" viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2.2 6.2 4.8 8.8 9.8 3.2"></polyline></svg>
-                </button>
-                <div class="prog-slot-num">#${(originalIndex + 1).toString().padStart(2, '0')}</div>
-                <div class="prog-name">${escapeHtml(program.name)}</div>
-                <select class="prog-cat-badge prog-cat-select" data-prog-index="${originalIndex}" title="Edit category">
-                    ${catOptions}
-                </select>
-                ${isDup ? '<div class="prog-dup-badge" title="Identical sound parameters detected">Duplicate</div>' : ''}
-                <div class="prog-actions">
-                    <button class="btn btn-sm btn-action" data-action="load-a" title="Load into Part A">Part A</button>
-                    <button class="btn btn-sm btn-action" data-action="load-b" title="Load into Part B">Part B</button>
-                    <button class="btn btn-sm btn-action" data-action="export" title="Export .syx">Export</button>
-                    <button class="btn btn-sm btn-danger" data-action="delete" title="Delete">✕</button>
-                </div>
-            `;
-
-            const syncSelectionUI = () => {
-                const rows = progList.children || [];
-                for (let r = 0; r < rows.length; r++) {
-                    const rEl = rows[r];
-                    const rIdx = rEl.dataset && rEl.dataset.progIndex !== undefined ? parseInt(rEl.dataset.progIndex, 10) : NaN;
-                    if (Number.isNaN(rIdx)) continue;
-                    const sel = this.selectedProgIndices.has(rIdx);
-                    if (rEl.classList) rEl.classList.toggle('selected', sel);
-                    const rCb = rEl.querySelector ? rEl.querySelector('.prog-select-cb') : null;
-                    if (rCb) {
-                        if (rCb.classList && typeof rCb.classList.toggle === 'function') {
-                            rCb.classList.toggle('active', sel);
-                        }
-                        if (typeof rCb.setAttribute === 'function') {
-                            rCb.setAttribute('aria-pressed', sel ? 'true' : 'false');
-                        }
-                        rCb.checked = sel;
+        const applySelection = (mode, shiftKey) => {
+            if (shiftKey && this._lastSelectedProgIndex !== null) {
+                const startPos = visiblePrograms.findIndex(v => v.originalIndex === this._lastSelectedProgIndex);
+                const endPos = visiblePrograms.findIndex(v => v.originalIndex === originalIndex);
+                if (startPos !== -1 && endPos !== -1) {
+                    const lo = Math.min(startPos, endPos);
+                    const hi = Math.max(startPos, endPos);
+                    if (mode === 'single') this.selectedProgIndices.clear();
+                    for (let p = lo; p <= hi; p++) {
+                        this.selectedProgIndices.add(visiblePrograms[p].originalIndex);
                     }
                 }
-            };
-
-            const applySelection = (mode, shiftKey) => {
-                if (shiftKey && this._lastSelectedProgIndex !== null) {
-                    const startPos = visiblePrograms.findIndex(v => v.originalIndex === this._lastSelectedProgIndex);
-                    const endPos = visiblePrograms.findIndex(v => v.originalIndex === originalIndex);
-                    if (startPos !== -1 && endPos !== -1) {
-                        const lo = Math.min(startPos, endPos);
-                        const hi = Math.max(startPos, endPos);
-                        if (mode === 'single') this.selectedProgIndices.clear();
-                        for (let p = lo; p <= hi; p++) {
-                            this.selectedProgIndices.add(visiblePrograms[p].originalIndex);
-                        }
-                    }
-                } else if (mode === 'toggle') {
-                    if (this.selectedProgIndices.has(originalIndex)) {
-                        this.selectedProgIndices.delete(originalIndex);
-                    } else {
-                        this.selectedProgIndices.add(originalIndex);
-                    }
+            } else if (mode === 'toggle') {
+                if (this.selectedProgIndices.has(originalIndex)) {
+                    this.selectedProgIndices.delete(originalIndex);
                 } else {
-                    const wasOnly = this.selectedProgIndices.size === 1 && this.selectedProgIndices.has(originalIndex);
-                    this.selectedProgIndices.clear();
-                    if (!wasOnly) this.selectedProgIndices.add(originalIndex);
+                    this.selectedProgIndices.add(originalIndex);
                 }
-                this._lastSelectedProgIndex = originalIndex;
-                syncSelectionUI();
-            };
-
-            const selectCb = row.querySelector('.prog-select-cb');
-            if (selectCb) {
-                selectCb.onclick = (e) => {
-                    if (e && e.stopPropagation) e.stopPropagation();
-                    applySelection('toggle', !!(e && e.shiftKey));
-                };
-                selectCb.onmousedown = (e) => {
-                    if (e && e.stopPropagation) e.stopPropagation();
-                };
+            } else {
+                const wasOnly = this.selectedProgIndices.size === 1 && this.selectedProgIndices.has(originalIndex);
+                this.selectedProgIndices.clear();
+                if (!wasOnly) this.selectedProgIndices.add(originalIndex);
             }
+            this._lastSelectedProgIndex = originalIndex;
+            syncSelectionUI();
+        };
 
-            row.onclick = (e) => {
-                if (e && e.target && typeof e.target.closest === 'function' && e.target.closest('button, select, input, .prog-drag-handle')) {
-                    return;
-                }
-                if (e && (e.metaKey || e.ctrlKey)) {
-                    applySelection('toggle', false);
-                } else {
-                    applySelection('single', !!(e && e.shiftKey));
-                }
+        const selectCb = row.querySelector('.prog-select-cb');
+        if (selectCb) {
+            selectCb.onclick = (e) => {
+                if (e && e.stopPropagation) e.stopPropagation();
+                applySelection('toggle', !!(e && e.shiftKey));
             };
+            selectCb.onmousedown = (e) => {
+                if (e && e.stopPropagation) e.stopPropagation();
+            };
+        }
 
-            // Category change handler
-            const catSelect = row.querySelector('.prog-cat-select');
-            if (catSelect) {
-                catSelect.onclick = (e) => e.stopPropagation();
-                catSelect.onmousedown = (e) => e.stopPropagation();
-                catSelect.onchange = (e) => {
-                    e.stopPropagation();
-                    const newCat = parseInt(e.target.value, 10);
-                    program.category = newCat;
-                    this.librarian.saveAllBanks();
+        row.onclick = (e) => {
+            if (e && e.target && typeof e.target.closest === 'function' && e.target.closest('button, select, input, .prog-drag-handle')) {
+                return;
+            }
+            if (e && (e.metaKey || e.ctrlKey)) {
+                applySelection('toggle', false);
+            } else {
+                applySelection('single', !!(e && e.shiftKey));
+            }
+        };
 
-                    // If this patch is loaded in the editor, update the editor category select
-                    if (this.timbreA && (this.timbreA.name === program.name || this.timbreA.computeSoundFingerprint() === program.computeSoundFingerprint())) {
-                        this.timbreA.category = newCat;
-                        if (this.activeSlot === 0) {
+        const catSelect = row.querySelector('.prog-cat-select');
+        if (catSelect) {
+            catSelect.onclick = (e) => e.stopPropagation();
+            catSelect.onmousedown = (e) => e.stopPropagation();
+            catSelect.onchange = (e) => {
+                e.stopPropagation();
+                const newCat = parseInt(e.target.value, 10);
+                program.category = newCat;
+                this.librarian.saveAllBanks();
+
+                [0, 1].forEach((slot) => {
+                    const timbre = this.getTimbre(slot);
+                    if (timbre && (timbre.name === program.name || timbre.computeSoundFingerprint() === program.computeSoundFingerprint())) {
+                        timbre.category = newCat;
+                        if (this.activeSlot === slot) {
                             const edCat = document.getElementById('prog-category-select');
                             if (edCat) edCat.value = newCat;
                         }
                     }
-                    if (this.timbreB && (this.timbreB.name === program.name || this.timbreB.computeSoundFingerprint() === program.computeSoundFingerprint())) {
-                        this.timbreB.category = newCat;
-                        if (this.activeSlot === 1) {
-                            const edCat = document.getElementById('prog-category-select');
-                            if (edCat) edCat.value = newCat;
-                        }
-                    }
-
-                    const catLabel = LOOKUPS.categories[newCat] || 'Misc';
-                    this.showNotification(`Updated category for "${program.name}" to ${catLabel}`, 'success');
-                };
-            }
-
-            // Action button handlers
-            row.querySelector('[data-action="load-a"]').onclick = () => {
-                this.timbreA.rawData = program.rawData;
-                this.originalSnapshotA = this.timbreA.clone();
-                this.selectPart(0);
-                this.switchView('editor');
-                this.showNotification(`Loaded "${program.name}" into Part A!`, 'info');
-            };
-
-            row.querySelector('[data-action="load-b"]').onclick = () => {
-                this.timbreB.rawData = program.rawData;
-                this.originalSnapshotB = this.timbreB.clone();
-                this.selectPart(1);
-                this.switchView('editor');
-                this.showNotification(`Loaded "${program.name}" into Part B!`, 'info');
-            };
-
-            row.querySelector('[data-action="export"]').onclick = () => {
-                const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
-                const fwId = this.midi && this.midi.detectedFwId !== null ? this.midi.detectedFwId : SYSEX_V2_FW_ID;
-                this.librarian.exportProgramFile(program, null, fwVer, fwId);
-            };
-
-            row.querySelector('[data-action="delete"]').onclick = async () => {
-                const confirmed = await this._confirmDialog({
-                    title: 'Delete Patch?',
-                    description: `Delete patch "${program.name}" from ${activeBank.name}?`,
-                    confirmLabel: 'Delete',
-                    confirmClass: 'btn-danger'
                 });
-                if (confirmed) {
-                    activeBank.removeProgram(originalIndex);
-                    this.librarian.saveAllBanks();
-                    this.renderLibrarianBank();
-                }
-            };
 
-            // Drag-and-Drop Program Reordering, Swapping & Cross-Bank Moving
-            row.ondragstart = (e) => {
-                const useGroup = this.selectedProgIndices && this.selectedProgIndices.has(originalIndex) && this.selectedProgIndices.size > 0;
-                const dragIndices = useGroup
-                    ? Array.from(this.selectedProgIndices).filter(i => i >= 0 && i < activeBank.length).sort((a, b) => a - b)
-                    : [originalIndex];
-                const payload = {
-                    type: 'prog-move',
-                    bankIndex: this.librarian.activeBankIndex,
-                    progIndex: originalIndex,
-                    progIndices: dragIndices
-                };
-                this._activeLibrarianDrag = payload;
-                if (e.dataTransfer) {
-                    e.dataTransfer.effectAllowed = 'copyMove';
-                    e.dataTransfer.setData('text/plain', JSON.stringify(payload));
-                }
-                row.classList.add('dragging');
+                const catLabel = LOOKUPS.categories[newCat] || 'Misc';
+                this.showNotification(`Updated category for "${program.name}" to ${catLabel}`, 'success');
             };
-            row.ondragend = () => {
-                this._activeLibrarianDrag = null;
-                row.classList.remove('dragging');
-                this._clearMemoryDragHover();
+        }
+
+        const loadIntoPart = (slot) => {
+            const partLabel = slot === 1 ? 'B' : 'A';
+            this.replacePartWithRawData(slot, program.rawData, `Load "${program.name}" into Part ${partLabel}`, {
+                sendToHardware: false,
+                syncStatus: null,
+                source: 'librarian',
+                clearUndo: true,
+                setOriginalSnapshot: true
+            });
+            this.selectPart(slot);
+            this.switchView('editor');
+            this.showNotification(`Loaded "${program.name}" into Part ${partLabel}!`, 'info');
+        };
+        row.querySelector('[data-action="load-a"]').onclick = () => loadIntoPart(0);
+        row.querySelector('[data-action="load-b"]').onclick = () => loadIntoPart(1);
+
+        row.querySelector('[data-action="export"]').onclick = () => {
+            const fwVer = this.midi ? this.midi.effectiveFirmwareVersion : 3;
+            const fwId = this.midi && this.midi.detectedFwId !== null ? this.midi.detectedFwId : SYSEX_V2_FW_ID;
+            this.librarian.exportProgramFile(program, null, fwVer, fwId);
+        };
+
+        row.querySelector('[data-action="delete"]').onclick = async () => {
+            const confirmed = await this._confirmDialog({
+                title: 'Delete Patch?',
+                description: `Delete patch "${program.name}" from ${activeBank.name}?`,
+                confirmLabel: 'Delete',
+                confirmClass: 'btn-danger'
+            });
+            if (confirmed) {
+                activeBank.removeProgram(originalIndex);
+                this.librarian.saveAllBanks();
+                this.renderLibrarianBank();
+            }
+        };
+
+        row.ondragstart = (e) => {
+            const useGroup = this.selectedProgIndices && this.selectedProgIndices.has(originalIndex) && this.selectedProgIndices.size > 0;
+            const dragIndices = useGroup
+                ? Array.from(this.selectedProgIndices).filter(i => i >= 0 && i < activeBank.length).sort((a, b) => a - b)
+                : [originalIndex];
+            const payload = {
+                type: 'prog-move',
+                bankIndex: this.librarian.activeBankIndex,
+                progIndex: originalIndex,
+                progIndices: dragIndices
             };
-            row.ondragover = (e) => {
-                const active = this._activeMemoryDrag;
-                if (active && active.kind === 'memory' && this.memories[active.index]) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-                    const appMain = document.querySelector('.app-main');
-                    if (appMain) {
-                        appMain.classList.remove('slot-drop-hover');
-                        this._clearDropTip(appMain);
-                    }
-                    row.classList.add('slot-drop-hover');
-                    const slotLabel = `#${(originalIndex + 1).toString().padStart(2, '0')}`;
-                    this._setDropTip(row, `Drop to replace ${slotLabel} "${program.name}" with Memory M${active.index + 1}`);
-                    return;
-                }
-                if (applyProgDragOver(e, row, originalIndex, program.name)) {
-                    return;
-                }
+            this._activeLibrarianDrag = payload;
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'copyMove';
+                e.dataTransfer.setData('text/plain', JSON.stringify(payload));
+            }
+            row.classList.add('dragging');
+        };
+        row.ondragend = () => {
+            this._activeLibrarianDrag = null;
+            row.classList.remove('dragging');
+            this._clearMemoryDragHover();
+        };
+        row.ondragover = (e) => {
+            const active = this._activeMemoryDrag;
+            if (active && active.kind === 'memory' && this.memories[active.index]) {
                 e.preventDefault();
-            };
-            row.ondragleave = (e) => {
-                if (e.relatedTarget && typeof row.contains === 'function' && row.contains(e.relatedTarget)) return;
-                if (!this._activeLibrarianDrag || this._activeLibrarianDrag.type !== 'prog-move') {
-                    row.classList.remove('slot-drop-hover', 'prog-insert-before', 'prog-insert-after');
-                    this._clearDropTip(row);
+                e.stopPropagation();
+                if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+                const appMain = document.querySelector('.app-main');
+                if (appMain) {
+                    appMain.classList.remove('slot-drop-hover');
+                    this._clearDropTip(appMain);
                 }
-            };
-            row.ondrop = async (e) => {
+                row.classList.add('slot-drop-hover');
+                const slotLabel = `#${(originalIndex + 1).toString().padStart(2, '0')}`;
+                this._setDropTip(row, `Drop to replace ${slotLabel} "${program.name}" with Memory M${active.index + 1}`);
+                return;
+            }
+            if (dragCtx.applyProgDragOver(e, row, originalIndex, program.name)) {
+                return;
+            }
+            e.preventDefault();
+        };
+        row.ondragleave = (e) => {
+            if (e.relatedTarget && typeof row.contains === 'function' && row.contains(e.relatedTarget)) return;
+            if (!this._activeLibrarianDrag || this._activeLibrarianDrag.type !== 'prog-move') {
                 row.classList.remove('slot-drop-hover', 'prog-insert-before', 'prog-insert-after');
                 this._clearDropTip(row);
-                const memData = this._parseDragPayload(e);
-                if (memData && memData.kind === 'memory' && this.memories[memData.index]) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    this._activeMemoryDrag = null;
-                    this._clearMemoryDragHover();
-                    const mem = this.memories[memData.index];
-                    const slotLabel = `#${(originalIndex + 1).toString().padStart(2, '0')}`;
-                    const confirmed = await this._confirmDialog({
-                        title: 'Replace Bank Patch?',
-                        description: `Replace ${slotLabel} "${program.name}" in "${activeBank.name}" with Memory M${memData.index + 1} ("${mem.name}")?`,
-                        confirmLabel: 'Replace',
-                        confirmClass: 'btn-warning'
-                    });
-                    if (confirmed) {
-                        activeBank.setProgram(originalIndex, new MM2Program(new Uint8Array(mem.rawData)));
-                        await this.librarian.saveAllBanks();
-                        this.renderLibrarianBank();
-                        this.showNotification(`Replaced ${slotLabel} ("${program.name}") with Memory M${memData.index + 1} ("${mem.name}")`, 'success');
-                    }
-                    return;
+            }
+        };
+        row.ondrop = async (e) => {
+            row.classList.remove('slot-drop-hover', 'prog-insert-before', 'prog-insert-after');
+            this._clearDropTip(row);
+            const memData = this._parseDragPayload(e);
+            if (memData && memData.kind === 'memory' && this.memories[memData.index]) {
+                e.preventDefault();
+                e.stopPropagation();
+                this._activeMemoryDrag = null;
+                this._clearMemoryDragHover();
+                const mem = this.memories[memData.index];
+                const slotLabel = `#${(originalIndex + 1).toString().padStart(2, '0')}`;
+                const confirmed = await this._confirmDialog({
+                    title: 'Replace Bank Patch?',
+                    description: `Replace ${slotLabel} "${program.name}" in "${activeBank.name}" with Memory M${memData.index + 1} ("${mem.name}")?`,
+                    confirmLabel: 'Replace',
+                    confirmClass: 'btn-warning'
+                });
+                if (confirmed) {
+                    activeBank.setProgram(originalIndex, new MM2Program(new Uint8Array(mem.rawData)));
+                    await this.librarian.saveAllBanks();
+                    this.renderLibrarianBank();
+                    this.showNotification(`Replaced ${slotLabel} ("${program.name}") with Memory M${memData.index + 1} ("${mem.name}")`, 'success');
                 }
-                applyProgDrop(e, originalIndex);
-            };
+                return;
+            }
+            dragCtx.applyProgDrop(e, originalIndex);
+        };
 
-            progList.appendChild(row);
-        });
+        return row;
     }
 
     showDuplicateModal() {
+        if (typeof document === 'undefined') return;
         const activeBank = this.librarian.activeBank;
         const dupInfo = activeBank.detectDuplicates(true);
 
@@ -4809,11 +4774,21 @@ class App {
         }
     }
 
+    _bindSettingsToggle(id, initial, onToggle, msgOn, msgOff) {
+        const chk = document.getElementById(id);
+        if (!chk) return;
+        chk.checked = !!initial;
+        chk.onchange = () => {
+            onToggle(chk.checked);
+            this.showNotification(chk.checked ? msgOn : msgOff, 'info');
+        };
+    }
+
     buildSettingsUI() {
+        if (typeof document === 'undefined') return;
         const selIn = document.getElementById('settings-midi-in');
         const selOut = document.getElementById('settings-midi-out');
         const selChan = document.getElementById('settings-base-channel');
-        const chkSafe = document.getElementById('settings-safe-mode');
         const btnReconnect = document.getElementById('btn-reconnect-midi');
         const btnProbe = document.getElementById('btn-probe-hardware');
 
@@ -4873,30 +4848,22 @@ class App {
             };
         }
 
-        const chkPeriodic = document.getElementById('settings-periodic-check');
-        if (chkPeriodic) {
-            chkPeriodic.checked = !!this.midi.periodicCheck;
-            chkPeriodic.onchange = () => {
-                this.midi.setPeriodicCheck(chkPeriodic.checked);
-                if (chkPeriodic.checked) {
-                    this.showNotification('Periodic connection checks enabled.', 'info');
-                } else {
-                    this.showNotification('Periodic connection checks disabled.', 'info');
-                }
-            };
-        }
+        this._bindSettingsToggle(
+            'settings-periodic-check',
+            this.midi.periodicCheck,
+            (checked) => this.midi.setPeriodicCheck(checked),
+            'Periodic connection checks enabled.',
+            'Periodic connection checks disabled.'
+        );
 
-        const chkTabSync = document.getElementById('settings-tab-sync');
-        if (chkTabSync && this.tabSync) {
-            chkTabSync.checked = !!this.tabSync.enabled;
-            chkTabSync.onchange = () => {
-                this.tabSync.setEnabled(chkTabSync.checked);
-                if (chkTabSync.checked) {
-                    this.showNotification('Cross-tab synchronization enabled.', 'info');
-                } else {
-                    this.showNotification('Cross-tab synchronization disabled.', 'info');
-                }
-            };
+        if (this.tabSync) {
+            this._bindSettingsToggle(
+                'settings-tab-sync',
+                this.tabSync.enabled,
+                (checked) => this.tabSync.setEnabled(checked),
+                'Cross-tab synchronization enabled.',
+                'Cross-tab synchronization disabled.'
+            );
         }
 
         const settingsVer = document.getElementById('settings-app-version');
@@ -5072,6 +5039,7 @@ class App {
     }
 
     updateSettingsPortLists() {
+        if (typeof document === 'undefined') return;
         const selIn = document.getElementById('settings-midi-in');
         const selOut = document.getElementById('settings-midi-out');
         if (!selIn || !selOut) return;
@@ -5108,6 +5076,7 @@ class App {
     }
 
     buildAuditionUI() {
+        if (typeof document === 'undefined') return;
         const container = document.getElementById('audition-toolbar-container');
         if (!container) return;
         container.innerHTML = '';
