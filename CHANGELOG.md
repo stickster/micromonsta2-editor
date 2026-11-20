@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [0.7.0] - 2026-11-20
+
 ### Added
 - **Editor:** Show compact history popup (up to 15 actions) on Undo/Redo click-and-hold.
 - **Editor:** Show last undo-able and redo-able action in Undo/Redo tooltips.

@@ -43,7 +43,7 @@ See [CHANGELOG.md](CHANGELOG.md) for a summary of changes.
    - Use **Fetch from MM2** / **Push to MM2** for quick transfers from/to current hardware state. Use the `Compare` toggle to hear differences quickly, OR:
    - Use **Live Sync** mode which streams changes directly to hardware over 7-bit/14-bit NRPN (great for testing modulations).
    - **Four (4) patch memories** for quick comparisons of entire patches.
-- **Full Multi-step Undo / Redo:** Uses`Cmd/Ctrl+Z`, `Cmd/Ctrl+Y` to make it easy to rewind or replay changes.
+- **Full Multi-step Undo / Redo:** Uses `Cmd/Ctrl+Z`, `Cmd/Ctrl+Y`, and a click-and-hold history popup on the Undo/Redo buttons to rewind or replay changes.
 - **Built-In Keyboard and Chorder Preview**: Always-available 3-octave bottom keyboard with QWERTY note input, octave controls, per-part latch and key/chorder highlighting, pitch/mod wheels, MIDI Panic, and voice assignment tracking.
 - **Patch Librarian and Duplicate Manager**: Organize and duplicate banks locally, drag-and-drop to reorder, copy, or move patches (including multi-select) across banks with Undo/Redo, search and filter by category, import/export `.syx` files, and detect or condense redundant duplicate patches.
 - **Privacy Respecting and Zero Setup**: Runs **100% LOCALLY** in your browser with zero dependencies, no account, and no data leaving your machine. 
