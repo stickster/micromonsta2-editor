@@ -406,4 +406,72 @@ MM2TestRunner.register('Undo/Redo & Compare Buffer', async ({ assert, assertEqua
         assertEqual(mockUndoBtn.title, 'Undo change (Ctrl+Z)', 'Undo tooltip resets to default when stack is empty');
     });
 
+    await runSection('\n--- [71] Undo/Redo Click-and-Hold History Popup Tests ---', async () => {
+        const host = document.createElement('div');
+        const btnUndo = document.createElement('button');
+        const btnRedo = document.createElement('button');
+        host.appendChild(btnUndo);
+        host.appendChild(btnRedo);
+        document.registerMockElement('btn-prog-undo', btnUndo);
+        document.registerMockElement('btn-prog-redo', btnRedo);
+
+        const histApp = new App();
+        histApp._bindClickAndHold(btnUndo, {
+            onClick: () => histApp.undo(),
+            onHold: () => histApp._showHistoryMenu(false, btnUndo),
+            holdMs: 20
+        });
+        histApp._bindClickAndHold(btnRedo, {
+            onClick: () => histApp.redo(),
+            onHold: () => histApp._showHistoryMenu(true, btnRedo),
+            holdMs: 20
+        });
+
+        // 1. Fewer than 15 items -> compact list with exact item count (no empty slots)
+        histApp.onParameterChanged('OSC1_SHAPE', 10, { isFinal: true });
+        histApp.onParameterChanged('OSC1_SHAPE', 20, { isFinal: true });
+        histApp.onParameterChanged('FILTER_FREQ', 100, { isFinal: true });
+
+        btnUndo.dispatchEvent({ type: 'pointerdown', button: 0, clientX: 10, clientY: 10 });
+        await new Promise(r => setTimeout(r, 35));
+        const compactMenu = histApp._historyMenuEl;
+        assert(compactMenu !== null, 'Hold opens undo history popup');
+        const compactItems = compactMenu.querySelectorAll('.history-popover-item');
+        assertEqual(compactItems.length, 3, 'Compact list renders only 3 items without empty slots');
+        assertEqual(compactItems[0].textContent, PARAM_MAP.get('FILTER_FREQ').label, 'Most recent action appears first');
+
+        // Normal click after hold is suppressed
+        btnUndo.onclick({});
+        assertEqual(histApp.undoStack.length, 3, 'Click immediately after hold does not double-trigger undo');
+
+        // Clicking 2nd item undoes 2 steps
+        compactItems[1].onclick({});
+        assertEqual(histApp.undoStack.length, 1, 'Clicking 2nd item undoes 2 steps');
+        assertEqual(histApp.redoStack.length, 2, '2 steps moved to redoStack');
+        assertEqual(histApp._historyMenuEl, null, 'Popup closes after selecting an item');
+
+        // 2. Drag movement cancels hold timer
+        btnRedo.dispatchEvent({ type: 'pointerdown', button: 0, clientX: 10, clientY: 10 });
+        btnRedo.dispatchEvent({ type: 'pointermove', clientX: 30, clientY: 10 });
+        await new Promise(r => setTimeout(r, 35));
+        assertEqual(histApp._historyMenuEl, null, 'Dragging pointer cancels click-and-hold popup');
+
+        // 3. Hold on Redo shows redo history
+        btnRedo.dispatchEvent({ type: 'pointerdown', button: 0, clientX: 10, clientY: 10 });
+        await new Promise(r => setTimeout(r, 35));
+        const redoMenu = histApp._historyMenuEl;
+        assert(redoMenu !== null, 'Hold on Redo opens redo history popup');
+        assertEqual(redoMenu.querySelectorAll('.history-popover-item').length, 2, 'Redo popup shows 2 compact items');
+        histApp._closeHistoryMenu();
+
+        // 4. Cap at 15 items when history has more than 15 entries
+        for (let i = 1; i <= 20; i++) {
+            histApp.onParameterChanged('OSC1_SHAPE', i, { isFinal: true });
+        }
+        histApp._showHistoryMenu(false, btnUndo);
+        const cappedMenu = histApp._historyMenuEl;
+        assertEqual(cappedMenu.querySelectorAll('.history-popover-item').length, 15, 'History popup caps list at 15 items');
+        histApp._closeHistoryMenu();
+    });
+
 });

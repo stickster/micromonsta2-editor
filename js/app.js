@@ -972,6 +972,132 @@ class App {
         this.showNotification(toastMsg, 'info');
     }
 
+    _bindClickAndHold(btn, { onClick, onHold, holdMs = 450 }) {
+        if (!btn) return;
+        let holdTimer = null;
+        let held = false;
+        let startX = 0;
+        let startY = 0;
+
+        const clearTimer = () => {
+            if (holdTimer !== null) {
+                clearTimeout(holdTimer);
+                holdTimer = null;
+            }
+        };
+
+        if (typeof btn.addEventListener === 'function') {
+            btn.addEventListener('pointerdown', (e) => {
+                if (btn.disabled || (e.button !== undefined && e.button !== 0)) return;
+                clearTimer();
+                held = false;
+                startX = e.clientX || 0;
+                startY = e.clientY || 0;
+                holdTimer = setTimeout(() => {
+                    holdTimer = null;
+                    held = true;
+                    onHold();
+                }, holdMs);
+            });
+
+            btn.addEventListener('pointermove', (e) => {
+                if (holdTimer === null) return;
+                const dx = (e.clientX || 0) - startX;
+                const dy = (e.clientY || 0) - startY;
+                if (Math.hypot(dx, dy) > 5) {
+                    clearTimer();
+                }
+            });
+
+            btn.addEventListener('pointerup', clearTimer);
+            btn.addEventListener('pointercancel', clearTimer);
+            btn.addEventListener('dragstart', clearTimer);
+        }
+
+        btn.onclick = (e) => {
+            if (held) {
+                held = false;
+                if (e && typeof e.preventDefault === 'function') e.preventDefault();
+                if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+                return;
+            }
+            onClick();
+        };
+    }
+
+    _closeHistoryMenu() {
+        if (this._historyMenuCleanup) {
+            this._historyMenuCleanup();
+            this._historyMenuCleanup = null;
+        }
+        if (this._historyMenuEl && this._historyMenuEl.parentNode) {
+            this._historyMenuEl.parentNode.removeChild(this._historyMenuEl);
+        }
+        this._historyMenuEl = null;
+    }
+
+    _showHistoryMenu(isRedo, anchorBtn) {
+        if (typeof document === 'undefined') return;
+        const stack = isRedo ? this.redoStack : this.undoStack;
+        if (!stack || stack.length === 0) return;
+
+        this._closeHistoryMenu();
+
+        const count = Math.min(stack.length, 15);
+        const menu = document.createElement('div');
+        menu.className = 'history-popover';
+        menu.setAttribute('role', 'menu');
+        menu.setAttribute('aria-label', isRedo ? 'Redo history' : 'Undo history');
+
+        const header = document.createElement('div');
+        header.className = 'history-popover-header';
+        header.textContent = isRedo ? `Redo (${count})` : `Undo (${count})`;
+        menu.appendChild(header);
+
+        for (let i = 0; i < count; i++) {
+            const action = stack[stack.length - 1 - i];
+            const steps = i + 1;
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'menu-item history-popover-item';
+            item.setAttribute('role', 'menuitem');
+            item.setAttribute('data-steps', String(steps));
+            item.textContent = this._getHistoryActionLabel(action);
+            item.title = `${isRedo ? 'Redo' : 'Undo'} ${steps} ${steps === 1 ? 'step' : 'steps'}`;
+            item.onclick = (ev) => {
+                if (ev && typeof ev.stopPropagation === 'function') ev.stopPropagation();
+                this._closeHistoryMenu();
+                for (let s = 0; s < steps; s++) {
+                    if (isRedo) this.redo();
+                    else this.undo();
+                }
+            };
+            menu.appendChild(item);
+        }
+
+        const host = (anchorBtn && (anchorBtn.parentElement || anchorBtn.parentNode)) || document.body;
+        if (host && typeof host.appendChild === 'function') {
+            host.appendChild(menu);
+        }
+        this._historyMenuEl = menu;
+
+        if (typeof document.addEventListener === 'function') {
+            const onDocPointerDown = (ev) => {
+                if (menu.contains && ev.target && menu.contains(ev.target)) return;
+                this._closeHistoryMenu();
+            };
+            const onDocKeyDown = (ev) => {
+                if (ev.key === 'Escape') this._closeHistoryMenu();
+            };
+            document.addEventListener('pointerdown', onDocPointerDown);
+            document.addEventListener('keydown', onDocKeyDown);
+            this._historyMenuCleanup = () => {
+                document.removeEventListener('pointerdown', onDocPointerDown);
+                document.removeEventListener('keydown', onDocKeyDown);
+            };
+        }
+    }
+
     updateUndoRedoUI() {
         if (typeof document === 'undefined') return;
         const btnUndo = document.getElementById('btn-prog-undo');
@@ -3396,10 +3522,20 @@ class App {
         }
 
         const btnUndo = document.getElementById('btn-prog-undo');
-        if (btnUndo) btnUndo.onclick = () => this.undo();
+        if (btnUndo) {
+            this._bindClickAndHold(btnUndo, {
+                onClick: () => this.undo(),
+                onHold: () => this._showHistoryMenu(false, btnUndo)
+            });
+        }
 
         const btnRedo = document.getElementById('btn-prog-redo');
-        if (btnRedo) btnRedo.onclick = () => this.redo();
+        if (btnRedo) {
+            this._bindClickAndHold(btnRedo, {
+                onClick: () => this.redo(),
+                onHold: () => this._showHistoryMenu(true, btnRedo)
+            });
+        }
 
         this.wireMemoryAndPartDragDrop();
         this.updateMemoryUI();
