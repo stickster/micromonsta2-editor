@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **UI:** Send MIDI Note Off when deselecting an active arp-latched note.
 - **UI:** Disable Chord 2-7 dropdowns when the Chord Expand toggle is off.
 
 ---

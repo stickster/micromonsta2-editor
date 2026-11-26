@@ -673,6 +673,20 @@ MM2TestRunner.register('Editor Panels, Controls & Visualizers', async ({ assert,
             assertEqual(vceApp.auditionKeyboard.getActiveNotes().join(','), '59,62', 'With global latch engaged, re-pressing a note toggles only that note off');
             vceApp.auditionKeyboard.resetLatchAndNotes();
 
+            // Deselecting an already-active note while arp latch is active (global latch off) sends MIDI Note Off
+            vceApp.auditionKeyboard.noteOn(60);
+            vceApp.auditionKeyboard.noteOn(64);
+            vceApp.auditionKeyboard.noteOff(64);
+            vceMidi.sentNotes = [];
+            vceApp.auditionKeyboard.noteOn(64);
+            vceApp.auditionKeyboard.noteOff(64);
+            assertEqual(vceApp.auditionKeyboard.getActiveNotes().join(','), '60', 'Deselecting arp-latched note 64 removes it while keeping held note 60');
+            assertEqual(vceMidi.sentNotes.length, 1, 'Deselecting arp-latched note emits 1 MIDI Note Off');
+            assertEqual(vceMidi.sentNotes[0].note, 64, 'MIDI Note Off targets deselected note 64');
+            assertEqual(vceMidi.sentNotes[0].on, false, 'MIDI Note Off has on=false');
+            vceApp.auditionKeyboard.noteOff(60);
+            vceApp.auditionKeyboard.resetLatchAndNotes();
+
             // Disabling ARP_LATCH resets piano/voices (even if global latch was engaged)
             vceApp.auditionKeyboard.noteOn(48);
             vceApp.auditionKeyboard.noteOff(48);
