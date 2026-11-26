@@ -2493,7 +2493,10 @@ function createKeyboardVoiceController({ midiManager, getActiveProgram, getVoice
                 releaseAllNotes();
             }
             state.physicallyHeldNotes.add(noteNumber);
-            if (state.activePressedNotes.has(noteNumber)) return;
+            if (state.activePressedNotes.has(noteNumber)) {
+                releaseNote(noteNumber);
+                return;
+            }
         } else {
             state.physicallyHeldNotes.add(noteNumber);
             if (state.activePressedNotes.has(noteNumber)) {
